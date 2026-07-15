@@ -1447,6 +1447,22 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       nx.forEach(function(x){ var t=sanitizeLabel(x.to); if(!referenced[t]) referenced[t]=(n.id||''); });
     });
     var dangling=Object.keys(referenced).filter(function(t){ return !definedLabels[t]; });
+    // 游戏阅读节奏：一个点击只推进一个短句。优先按句末断开；超长句再从逗号等自然停顿处折开，
+    // 让 16:9 画面始终保留给 CG，而非被一大段居中文字压住。
+    function splitForGameReading(text){
+      var units=String(text||'').match(/[^。！？!?；;]+[。！？!?；;]?/g)||[String(text||'')], out=[];
+      units.forEach(function(unit){
+        unit=unit.trim();
+        while(unit.length>34){
+          var cut=-1;
+          for(var ci=0;ci<34;ci++) if(/[，、：,]/.test(unit.charAt(ci))) cut=ci+1;
+          if(cut<12) cut=34;
+          out.push(unit.slice(0,cut).trim()); unit=unit.slice(cut).trim();
+        }
+        if(unit) out.push(unit);
+      });
+      return out;
+    }
     nodes.forEach(function(n,idx){
       var lab=sanitizeLabel(n.id), gameLab=(idx===0?'start':lab);
       out.push(''); out.push('@label '+gameLab);
@@ -1461,7 +1477,8 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       var sayLines=[];
       if(body){ body.split(/\n+/).forEach(function(ln){ ln=ln.trim(); if(!ln) return;
         var m=ln.match(/^([^\uff1a:]{1,12})[\uff1a:]\s*(.+)$/);
-        sayLines.push(m&&m[2] ? (m[1].trim()+'：：'+m[2].trim()) : ('：：'+ln));
+        var speaker=m&&m[2]?m[1].trim():'', content=m&&m[2]?m[2].trim():ln;
+        splitForGameReading(content).forEach(function(part){ sayLines.push((speaker?speaker+'：：':'：：')+part); });
       }); }
       if(!sayLines.length) sayLines.push('：：（本节无台词）');
       // ★ 把本节多张分镜图按台词行均匀铺开：每隔几句切下一张，让全部图都随剧情用上

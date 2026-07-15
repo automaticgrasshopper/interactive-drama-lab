@@ -182,5 +182,77 @@ Error generating stack: `+o.message+`
         document.addEventListener('DOMContentLoaded',refresh); refresh();
       })();
     </script>
+    <script>
+      /* 阅读节奏与工具栏补丁：普通脚本先于上方 module 启动，旧剧本也会自动获得短句分页。 */
+      (function(){
+        function splitReading(text){
+          var sentences=String(text||'').match(/[^。！？!?；;]+[。！？!?；;]?/g)||[String(text||'')], out=[];
+          sentences.forEach(function(sentence){
+            sentence=sentence.trim();
+            while(sentence.length>34){
+              var cut=-1;
+              for(var i=0;i<34;i++) if(/[，、：,]/.test(sentence.charAt(i))) cut=i+1;
+              if(cut<12) cut=34;
+              out.push(sentence.slice(0,cut).trim()); sentence=sentence.slice(cut).trim();
+            }
+            if(sentence) out.push(sentence);
+          });
+          return out;
+        }
+        function paceSource(source){
+          return String(source||'').replace(/\r\n?/g,'\n').split('\n').map(function(line){
+            var trimmed=line.trim();
+            if(!trimmed||trimmed.charAt(0)==='@'||trimmed.charAt(0)==='#'||trimmed.charAt(0)==='-'||trimmed.indexOf('//')===0) return line;
+            var match=line.match(/^(\s*)([^：:]*?)(：：|::|：|:)(\s*)(.+)$/);
+            if(!match) return line;
+            var prefix=match[1]+match[2]+(match[3]==='::'?'::':'：：');
+            return splitReading(match[5]).map(function(part){ return prefix+part; }).join('\n');
+          }).join('\n');
+        }
+        function upgradeSavedScripts(){
+          try{
+            var raw=localStorage.getItem('vn_script_library'), list=raw?JSON.parse(raw):[], changed=false;
+            list.forEach(function(item){ if(item&&typeof item.source==='string'){ var paced=paceSource(item.source); if(paced!==item.source){ item.source=paced; changed=true; } } });
+            if(changed) localStorage.setItem('vn_script_library',JSON.stringify(list));
+            var incoming=localStorage.getItem('vn_incoming_script');
+            if(incoming){ var payload=JSON.parse(incoming), source=payload.script||payload.source; if(typeof source==='string'){ var upgraded=paceSource(source); if(upgraded!==source){ if(typeof payload.script==='string') payload.script=upgraded; else payload.source=upgraded; localStorage.setItem('vn_incoming_script',JSON.stringify(payload)); } } }
+          }catch(e){}
+        }
+        function returnToMenu(){
+          var settings=document.querySelector('.settings-btn'); if(!settings) return;
+          settings.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+          requestAnimationFrame(function(){ requestAnimationFrame(function(){
+            var actions=document.querySelectorAll('.settings-actions .menu-btn');
+            if(actions.length>1) actions[actions.length-1].dispatchEvent(new MouseEvent('click',{bubbles:true}));
+          }); });
+        }
+        function polishTools(){
+          var labels=[['.revealall-btn','解锁全图'],['.refresh-btn','刷新'],['.graph-btn','流程图'],['.settings-btn','设置']];
+          labels.forEach(function(pair){ var button=document.querySelector(pair[0]); if(button) button.setAttribute('data-vn-label',pair[1]); });
+          var root=document.querySelector('.game-root');
+          if(root&&!root.querySelector('.vn-home-btn')){
+            var home=document.createElement('button'); home.type='button'; home.className='vn-home-btn'; home.setAttribute('aria-label','主选单');
+            home.innerHTML='<span aria-hidden="true">⌂</span><small>主选单</small>';
+            home.addEventListener('click',function(event){ event.stopPropagation(); returnToMenu(); }); root.appendChild(home);
+          }
+        }
+        upgradeSavedScripts();
+        new MutationObserver(polishTools).observe(document.documentElement,{childList:true,subtree:true});
+        document.addEventListener('DOMContentLoaded',polishTools); polishTools();
+      })();
+    </script>
+    <style>
+      /* 视觉小说阅读层：短句、低干扰、左对齐，CG 仍是画面主角。 */
+      .dialogue-box{left:54px!important;right:54px!important;bottom:44px!important;min-height:230px!important;padding:30px 52px 58px!important;background:linear-gradient(105deg,rgba(8,10,18,.88),rgba(11,14,23,.72))!important;border:1px solid rgba(255,255,255,.22)!important;border-radius:14px!important;box-shadow:0 18px 45px rgba(0,0,0,.38)!important;backdrop-filter:blur(10px)}
+      .dialogue-speaker{display:inline-block;margin:0 0 16px!important;padding-left:16px;border-left:4px solid #ffd873;letter-spacing:.08em!important}
+      .dialogue-text{max-width:1420px!important;text-align:left!important;line-height:1.72!important;letter-spacing:.035em!important}
+      .dialogue-box .next-icon{right:38px!important;bottom:22px!important;width:34px!important;height:34px!important}
+      .settings-btn,.graph-btn,.refresh-btn,.revealall-btn,.vn-home-btn{top:20px!important;width:82px!important;height:104px!important;padding:9px 5px 8px!important;border:1px solid rgba(255,255,255,.18)!important;border-radius:18px!important;background:rgba(10,12,20,.62)!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:5px!important;box-shadow:0 8px 22px rgba(0,0,0,.2)!important}
+      .settings-btn svg,.graph-btn svg,.refresh-btn svg,.revealall-btn svg{width:42px!important;height:42px!important;flex:none}
+      .settings-btn::after,.graph-btn::after,.refresh-btn::after,.revealall-btn::after{content:attr(data-vn-label);font-size:17px;line-height:1;color:#fff;white-space:nowrap;text-shadow:0 1px 3px #000}
+      .settings-btn{right:28px!important}.graph-btn{right:124px!important}.refresh-btn{right:220px!important}.revealall-btn{right:316px!important}
+      .vn-home-btn{position:absolute;right:412px;z-index:30;color:#fff;cursor:pointer;font:inherit}.vn-home-btn span{font-size:43px;line-height:38px}.vn-home-btn small{font-size:17px;line-height:1;white-space:nowrap}
+      .vn-home-btn:hover,.settings-btn:hover,.graph-btn:hover,.refresh-btn:hover,.revealall-btn:hover{background:rgba(27,33,51,.84)!important;border-color:rgba(255,216,115,.8)!important}
+    </style>
   </body>
 </html>
