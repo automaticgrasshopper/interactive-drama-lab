@@ -1465,9 +1465,25 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       });
       return out;
     }
+    // 流程图标题必须是“命名”而非正文截断：模型已给合格标题优先；老剧本则从戏核提炼一个完整短语。
+    function nodeMapTitle(n){
+      var t=String(n.node_title||'').trim();
+      function width(s){ var w=0; for(var i=0;i<s.length;i++) w+=(s.charCodeAt(i)<=127?1:2); return w; }
+      if(t&&width(t)<=12) return t; // 6 个汉字的视觉宽度；英文/数字按半角折算
+      var core=String(n.dramatic_core||n.script||n.text||'');
+      var rules=[
+        [/(暗恋|喜欢).*(招手|疏远|未说)/,'暗恋未说'],[/(姻缘|交易|红符)/,'姻缘交易'],[/(写下|许愿|仪式|水痕)/,'写符许愿'],
+        [/(愿望|得偿|示爱)/,'愿望兑现'],[/(诡异|陌生|监视|不对劲)/,'甜变诡异'],[/(撕符|反抗|门把)/,'撕符受阻'],
+        [/(开门|缠住)/,'开门遇鬼'],[/(不开门|门锁|防线)/,'门锁失效'],[/(逃不掉|逃无可逃)/,'无处可逃'],
+        [/(废墟|摊子|真相)/,'废摊真相'],[/(鬼域|了断|决战)/,'鬼域决断'],[/(解脱|自由|牺牲)/,'以命破咒']
+      ];
+      for(var ri=0;ri<rules.length;ri++) if(rules[ri][0].test(core)) return rules[ri][1];
+      return ({'对抗':'正面冲突','关系':'关系转折','交代':'秘密揭开'})[n.dialogue_intent]||'剧情推进';
+    }
     nodes.forEach(function(n,idx){
       var lab=sanitizeLabel(n.id), gameLab=(idx===0?'start':lab);
       out.push(''); out.push('@label '+gameLab);
+      out.push('# 节点标题：'+nodeMapTitle(n));
       if(n.loc) out.push('：：【'+n.loc+(n.time?' · '+n.time:'')+'】');
       // 该节点分到的分镜（按顺序均分）
       var mine=prompts.slice(idx*perNode,(idx+1)*perNode);

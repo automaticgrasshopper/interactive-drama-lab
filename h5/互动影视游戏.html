@@ -160,7 +160,7 @@ Error generating stack: `+o.message+`
           loadImages().then(function(images){ Array.prototype.forEach.call(nodes,function(node){
             var name=node.querySelector('.node-name'), thumb=node.querySelector('.node-thumb');
             if(!name||!thumb||thumb.dataset.cgReady==='1') return;
-            var label=(name.textContent||'').trim(), src=images[label]||images[label+'#2'];
+            var label=name.dataset.vnLabel||(name.textContent||'').trim(), src=images[label]||images[label+'#2'];
             if(!src) return;
             thumb.dataset.cgReady='1'; thumb.innerHTML='';
             var img=document.createElement('img'); img.src=src; img.alt=label+' 分镜预览'; img.style.cssText='width:100%;height:100%;object-fit:cover;display:block;'; thumb.appendChild(img);
@@ -232,6 +232,35 @@ Error generating stack: `+o.message+`
             if(actions.length>1) actions[actions.length-1].dispatchEvent(new MouseEvent('click',{bubbles:true}));
           }); });
         }
+        function titleFromStory(text){
+          var rules=[
+            [/(暗恋|喜欢).*(招手|疏远|未说)/,'暗恋未说'],[/(姻缘|交易|红符)/,'姻缘交易'],[/(写下|许愿|仪式|水痕)/,'写符许愿'],
+            [/(愿望|得偿|示爱)/,'愿望兑现'],[/(诡异|陌生|监视|不对劲)/,'甜变诡异'],[/(撕符|反抗|门把)/,'撕符受阻'],
+            [/(开门|缠住)/,'开门遇鬼'],[/(不开门|门锁|防线)/,'门锁失效'],[/(逃不掉|逃无可逃)/,'无处可逃'],
+            [/(废墟|摊子|真相)/,'废摊真相'],[/(鬼域|了断|决战)/,'鬼域决断'],[/(解脱|自由|牺牲)/,'以命破咒']
+          ];
+          for(var i=0;i<rules.length;i++) if(rules[i][0].test(text)) return rules[i][1];
+          return '剧情推进';
+        }
+        function graphTitles(){
+          var source='', active=''; try{ active=localStorage.getItem('vn_active_script')||''; var list=JSON.parse(localStorage.getItem('vn_script_library')||'[]'); for(var i=0;i<list.length;i++) if(list[i].id===active){ source=list[i].source||''; break; } }catch(e){}
+          var titles={}, snippets={}, label='';
+          String(source).split(/\r?\n/).forEach(function(line){
+            var lm=line.match(/^\s*@label\s+(\S+)/); if(lm){ label=lm[1]; return; }
+            if(!label) return;
+            var tm=line.match(/^\s*#\s*节点标题：\s*(.+?)\s*$/); if(tm){ titles[label]=tm[1]; return; }
+            if(!snippets[label]&&!/^\s*(#|@|-|\/\/|：：【)/.test(line)&&line.trim()) snippets[label]=line.trim();
+          });
+          Object.keys(snippets).forEach(function(key){ if(!titles[key]) titles[key]=titleFromStory(snippets[key]); });
+          return titles;
+        }
+        function decorateGraph(){
+          var titles=graphTitles(); Array.prototype.forEach.call(document.querySelectorAll('.graph-node'),function(node){
+            var name=node.querySelector('.node-name'); if(!name||name.dataset.vnDecorated==='1') return;
+            var label=(name.textContent||'').trim(), title=titles[label]||titleFromStory(label);
+            name.dataset.vnLabel=label; name.dataset.vnDecorated='1'; name.innerHTML='<span class="node-plot-title">'+title+'</span><span class="node-id">'+label+'</span>';
+          });
+        }
         function polishTools(){
           var labels=[['.revealall-btn','解锁全图'],['.refresh-btn','刷新'],['.graph-btn','流程图'],['.settings-btn','设置']];
           labels.forEach(function(pair){ var button=document.querySelector(pair[0]); if(button) button.setAttribute('data-vn-label',pair[1]); });
@@ -246,6 +275,7 @@ Error generating stack: `+o.message+`
             toggle.innerHTML='<span aria-hidden="true">◉</span><small>隐藏文本</small>';
             toggle.addEventListener('click',function(event){ event.stopPropagation(); var hidden=root.classList.toggle('vn-text-hidden'); toggle.setAttribute('aria-label',hidden?'显示文本':'隐藏文本'); toggle.innerHTML='<span aria-hidden="true">'+(hidden?'◌':'◉')+'</span><small>'+ (hidden?'显示文本':'隐藏文本') +'</small>'; }); root.appendChild(toggle);
           }
+          decorateGraph();
         }
         upgradeSavedScripts();
         new MutationObserver(polishTools).observe(document.documentElement,{childList:true,subtree:true});
@@ -268,6 +298,19 @@ Error generating stack: `+o.message+`
       .vn-home-btn{position:absolute;right:412px;z-index:30;color:#fff;cursor:pointer;font:inherit}.vn-home-btn span{font-size:43px;line-height:38px}.vn-home-btn small{font-size:17px;line-height:1;white-space:nowrap}
       .vn-text-toggle{position:absolute;left:28px;z-index:30;color:#fff;cursor:pointer;font:inherit}.vn-text-toggle span{font-size:36px;line-height:38px}.vn-text-toggle small{font-size:17px;line-height:1;white-space:nowrap}
       .vn-home-btn:hover,.vn-text-toggle:hover,.settings-btn:hover,.graph-btn:hover,.refresh-btn:hover,.revealall-btn:hover{background:rgba(27,33,51,.84)!important;border-color:rgba(255,216,115,.8)!important}
+      /* 流程图：缩略图是主体，小标题是阅读入口，编号只作轻量定位。 */
+      .graph-overlay{background:radial-gradient(circle at 50% 0,#1a2337,#090b12 64%)!important}
+      .graph-toolbar{padding:18px 32px!important;background:linear-gradient(90deg,rgba(7,10,17,.96),rgba(14,20,33,.82))!important;border-bottom:1px solid rgba(255,255,255,.1)}
+      .graph-title{font-size:34px!important;letter-spacing:.16em!important;color:#f7d46a}
+      .graph-tool-btn{font-size:22px!important;border-radius:10px!important;background:rgba(255,255,255,.09)!important}
+      .graph-node{border:2px solid rgba(153,181,225,.58)!important;border-radius:12px!important;background:#121927!important;box-shadow:0 10px 28px rgba(0,0,0,.42)!important}
+      .graph-node.current{border-color:#f7d46a!important;box-shadow:0 0 0 3px rgba(247,212,106,.26),0 12px 32px rgba(0,0,0,.5)!important}
+      .node-thumb{min-height:76px!important;background:#101725!important}
+      .node-name{min-height:47px!important;padding:7px 10px 6px!important;display:flex!important;flex-direction:column!important;align-items:flex-start!important;gap:2px!important;text-align:left!important;background:linear-gradient(90deg,rgba(5,8,14,.97),rgba(12,17,27,.93))!important}
+      .node-plot-title{font-size:21px;line-height:1.1;font-weight:700;color:#fff;letter-spacing:.045em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+      .node-id{font-size:13px;line-height:1;color:#9eacc6;letter-spacing:.08em}
+      .node-badge{top:7px!important;right:7px!important;font-size:16px!important;background:#f7d46a!important}
+      .edge-unlocked{stroke:#55729b!important;stroke-width:3px!important}.edge-current{stroke:#f7d46a!important;stroke-width:5px!important}.edge-revealed{stroke:#3b475d!important}
     </style>
   </body>
 </html>
