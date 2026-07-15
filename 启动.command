@@ -30,7 +30,7 @@ if lsof -i :$PORT >/dev/null 2>&1; then
   exit 1
 fi
 
-URL="http://localhost:$PORT/h5/index.html"
+URL="http://localhost:$PORT/h5/index.html?fresh=$(date +%s)"
 
 echo "======================================================"
 echo "  互动影视节奏工作台 · 本地前台已启动"
