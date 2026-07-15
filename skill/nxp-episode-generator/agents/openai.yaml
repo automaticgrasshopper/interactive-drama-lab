@@ -1,4 +1,0 @@
-interface:
-  display_name: "分集规划师"
-  short_description: "把游戏企划和角色、场景、道具资产展开成完整分集互动影视剧本"
-  default_prompt: "Use $nxp-episode-generator 读取游戏企划、角色资产、场景资产、道具资产、游戏体量、视角和结构信息，生成包含分集ID、分集标题、分集剧本、剧本分析、关联角色、关联场景、关联道具、是否结局和互动节点的分集列表。"

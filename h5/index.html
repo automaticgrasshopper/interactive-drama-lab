@@ -63,9 +63,6 @@
       <span class="ico">🎮</span><span class="lbl">游戏界面</span>
     </button>
     <div style="flex:1"></div>
-    <button class="tab mini" id="backupBtn" title="备份 / 恢复本机所有记录">
-      <span class="ico">💾</span><span class="lbl">备份</span>
-    </button>
   </nav>
   <main id="stage"></main>
 </div>
@@ -151,62 +148,6 @@
   var initTab = tabs.filter(function(t){ return t.dataset.key === init; })[0] || tabs[0];
   activate(initTab.dataset.key, initTab.dataset.src);
 
-  // ============ 备份 / 恢复：把本 origin 的全部记录一次性导出/导入 ============
-  // 三个工作台同源共享同一份 localStorage，所以在外壳一处即可整体备份。
-  // 用途：把以前用 file:// 或别的端口打开时存下的老记录，搬到现在固定的 localhost:8000。
-  var backupBtn = document.getElementById('backupBtn');
-  function dumpAll(){
-    var data = {};
-    try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); data[k]=localStorage.getItem(k); } }catch(e){}
-    return data;
-  }
-  function doExport(){
-    var payload = { _type:'ixdrama-backup', _ver:1, _time:new Date().toISOString(), _origin:location.origin, data:dumpAll() };
-    var blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = '互动影视节奏工作台-备份-' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + '.json';
-    document.body.appendChild(a); a.click();
-    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 100);
-  }
-  function doImport(file, mode){
-    var reader = new FileReader();
-    reader.onload = function(){
-      var obj;
-      try{ obj = JSON.parse(reader.result); }catch(e){ alert('文件解析失败：不是有效的备份 JSON。'); return; }
-      var data = obj && obj.data ? obj.data : obj; // 兼容直接的 kv 对象
-      if(!data || typeof data!=='object'){ alert('文件里没有可恢复的记录数据。'); return; }
-      var keys = Object.keys(data);
-      if(mode==='replace'){
-        if(!confirm('【覆盖恢复】将先清空当前本机记录，再写入备份里的 '+keys.length+' 项。\n确定继续？')) return;
-        try{ localStorage.clear(); }catch(e){}
-      } else {
-        if(!confirm('【合并恢复】将把备份里的 '+keys.length+' 项写入本机（同名项会被备份覆盖）。\n确定继续？')) return;
-      }
-      var n=0;
-      keys.forEach(function(k){ try{ localStorage.setItem(k, data[k]); n++; }catch(e){} });
-      alert('已恢复 '+n+' 项记录。点开各工作台的「记录」即可看到。\n\n（若已打开的页面没刷新，切一下页签或重开即可。）');
-      // 刷新已加载的 iframe，让它们重新读 localStorage
-      Object.keys(frames).forEach(function(kk){ try{ frames[kk].iframe.contentWindow.location.reload(); }catch(e){} });
-    };
-    reader.readAsText(file);
-  }
-  if(backupBtn){
-    backupBtn.addEventListener('click', function(){
-      var choice = prompt('备份 / 恢复本机记录（三台共享）：\n\n输入 1 = 导出备份到文件\n输入 2 = 从备份文件合并恢复（保留现有，同名覆盖）\n输入 3 = 从备份文件覆盖恢复（先清空再导入）\n\n把老记录搬回来选 2 或 3。', '1');
-      if(choice===null) return;
-      choice = choice.trim();
-      if(choice==='1'){ doExport(); return; }
-      if(choice==='2' || choice==='3'){
-        var inp = document.createElement('input');
-        inp.type='file'; inp.accept='.json,application/json';
-        inp.onchange = function(){ if(inp.files && inp.files[0]) doImport(inp.files[0], choice==='3'?'replace':'merge'); };
-        inp.click();
-        return;
-      }
-      alert('没识别到有效选项（请输入 1 / 2 / 3）。');
-    });
-  }
 })();
 </script>
 </body>

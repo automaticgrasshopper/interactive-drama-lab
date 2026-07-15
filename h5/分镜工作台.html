@@ -231,7 +231,7 @@
   <div class="box">
     <div style="display:flex;align-items:center;margin-bottom:10px;">
       <div style="font-size:18px;font-weight:700;">分镜生成记录 <em style="font-style:normal;font-size:12px;color:#aab0bf;font-weight:500;">（存本机浏览器，最多 50 条；标注绑定的故事剧本或用户单传）</em></div>
-      <button id="dpExport" class="hbtn" style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;background:#0b7285;color:#fff;border-color:#0b7285;" title="把本地数据包里还没有的记录（剧本+图）增量写入 datapacks/ 文件夹"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z"/><path d="M3.3 7L12 12l8.7-5M12 22V12"/></svg><span id="dpExportTxt">导出内容</span></button>
+      <button id="dpPush" class="hbtn" style="margin-left:auto;background:#16803c;color:#fff;border-color:#16803c;">☁ 推送到仓库</button>
       <button id="histclose" class="hbtn" style="margin-left:8px;">关闭</button>
     </div>
     <div id="histlist"></div>
@@ -423,7 +423,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   // 用户手动改了 JSON 输入则视为单传（解除绑定）
   var HSKEY='sb_history_v1';
   function sbHistAll(){ try{ return JSON.parse(localStorage.getItem(HSKEY)||'[]'); }catch(e){ return []; } }
-  function sbHistSave(rec){ if(!rec.id) rec.id=newRecId(); var a=sbHistAll(); a.unshift(rec); while(a.length>50){ var drop=a.pop(); idbDropRec(drop); } try{ localStorage.setItem(HSKEY,JSON.stringify(a)); }catch(e){ while(a.length>1){ var d2=a.pop(); idbDropRec(d2); try{ localStorage.setItem(HSKEY,JSON.stringify(a)); break; }catch(e2){} } } }
+  function sbHistSave(rec){ if(!rec.id) rec.id=newRecId(); var a=sbHistAll(); a.unshift(rec); while(a.length>50){ var drop=a.pop(); idbDropRec(drop); } try{ localStorage.setItem(HSKEY,JSON.stringify(a)); }catch(e){ while(a.length>1){ var d2=a.pop(); idbDropRec(d2); try{ localStorage.setItem(HSKEY,JSON.stringify(a)); break; }catch(e2){} } } setTimeout(function(){ if(typeof dpAutoSave==='function') dpAutoSave(); },0); }
 
   // ===== CG 图片存储：IndexedDB =====
   // localStorage 只有约 5–10MB，几十张 base64 CG 会爆配额（且旧代码 try/catch 静默吞错，表现为“只成功几张”）。
@@ -442,7 +442,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   function getRecImages(r){ var id=recId(r); return __imgCache[id]||(__imgCache[id]={}); }
   function recImgCount(r){ return (r.imgNos&&r.imgNos.length)||Object.keys(getRecImages(r)).length; }
   // 存一张图：写内存缓存 + IDB；localStorage 只更新 imgNos（很小）
-  function setRecImage(a,r,no,url){ var id=recId(r); var cache=getRecImages(r); cache[String(no)]=url; r.imgNos=r.imgNos||[]; if(r.imgNos.indexOf(String(no))<0) r.imgNos.push(String(no)); try{ localStorage.setItem(HSKEY,JSON.stringify(a)); }catch(e){} return idbPut(id+'|'+no,url); }
+  function setRecImage(a,r,no,url){ var id=recId(r); var cache=getRecImages(r); cache[String(no)]=url; r.imgNos=r.imgNos||[]; if(r.imgNos.indexOf(String(no))<0) r.imgNos.push(String(no)); try{ localStorage.setItem(HSKEY,JSON.stringify(a)); }catch(e){} return idbPut(id+'|'+no,url).then(function(){ if(typeof dpAutoSave==='function') dpAutoSave(); }); }
   // 从 IDB 把某记录的图预热进内存缓存（返回 Promise<images>）
   function loadRecImages(r){ var id=recId(r); if(__imgLoaded[id]) return Promise.resolve(getRecImages(r)); var cache=getRecImages(r); if(r.images){ Object.keys(r.images).forEach(function(no){ if(!cache[no]) cache[no]=r.images[no]; }); } var nos=r.imgNos||[]; return Promise.all(nos.map(function(no){ if(cache[no]) return null; return idbGet(id+'|'+no).then(function(u){ if(u) cache[no]=u; }); })).then(function(){ __imgLoaded[id]=true; return cache; }); }
   // 删除记录时清掉它在 IDB 的所有图
@@ -1636,7 +1636,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   //   台账 dp_ledger_v1：{recKey: level}，level = 'script' | 'sb:<图数>'
   //   只在 localhost(http) + Chrome 下能直写文件夹；file:// 退回逐条下载。
   // ========================================================================
-  var DP_LEDGER='dp_ledger_v1', DP_DIRKEY='dp_dirhandle';
+  var DP_LEDGER='dp_ledger_v1';
   function dpLedger(){ try{ return JSON.parse(localStorage.getItem(DP_LEDGER)||'{}'); }catch(e){ return {}; } }
   function dpLedgerSave(m){ try{ localStorage.setItem(DP_LEDGER,JSON.stringify(m)); }catch(e){} }
   function dpRecKey(r){ return r.srcId || r.boundStory || r.title || r.id; }   // 跨两台认亲：优先源ID/绑定故事名
@@ -1673,91 +1673,44 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     });
   }
 
-  // Chrome 文件夹句柄（持久化到 IndexedDB，授权一次之后免再选）
-  function dpGetDirHandle(){ return idbGet(DP_DIRKEY); }
-  function dpSaveDirHandle(h){ return idbPut(DP_DIRKEY,h); }
-  function dpCanFS(){ return (location.protocol==='http:'||location.protocol==='https:') && !!window.showDirectoryPicker; }
-  function dpEnsureDir(){
-    return dpGetDirHandle().then(function(h){
-      if(h){ return h.queryPermission({mode:'readwrite'}).then(function(p){
-        if(p==='granted') return h;
-        return h.requestPermission({mode:'readwrite'}).then(function(p2){ return p2==='granted'?h:null; });
-      }); }
-      return window.showDirectoryPicker({id:'idl-datapacks',mode:'readwrite'}).then(function(nh){ return dpSaveDirHandle(nh).then(function(){ return nh; }); });
-    });
+  // 自动存档：生成出记录、补一张图后都延迟写入仓库内的数据包。
+  // 只在启动脚本提供的 localhost 服务下运行；失败时本机记录仍完整保留。
+  var dpAutoTimer=0, dpAutoSaving=false, dpAutoQueued=false;
+  function dpBuildPacks(recs){ return Promise.all(recs.map(function(r){ return dpBuildPack(r).then(function(pack){ return {rec:r,pack:pack}; }); })); }
+  function dpWriteServer(packs){
+    if(!packs.length) return Promise.resolve([]);
+    var files=packs.map(function(it){ return {name:dpSafe(it.pack.boundStory||it.pack.title||it.rec.id)+'.sb.json',content:it.pack}; });
+    return fetch('/__save_datapack',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:files})})
+      .then(function(r){ return r.ok?r.json():null; })
+      .then(function(j){ if(!j||!j.ok) throw new Error('本地存档服务未响应'); packs.forEach(function(it){ dpMarkExported(it.rec); }); return j.written||[]; });
   }
-  function dpWriteFile(dir,name,text){
-    return dir.getFileHandle(name,{create:true}).then(function(fh){ return fh.createWritable(); }).then(function(w){ return w.write(text).then(function(){ return w.close(); }); });
+  function dpAutoSave(){
+    if(location.protocol!=='http:'&&location.protocol!=='https:') return;
+    clearTimeout(dpAutoTimer);
+    dpAutoTimer=setTimeout(dpAutoFlush,900);
+  }
+  function dpAutoFlush(){
+    if(dpAutoSaving){ dpAutoQueued=true; return; }
+    var todo=sbHistAll().filter(dpNeedExport);
+    if(!todo.length) return;
+    dpAutoSaving=true;
+    dpBuildPacks(todo).then(dpWriteServer).catch(function(e){ console.warn('[datapack] 自动存档失败',e); })
+      .then(function(){ dpAutoSaving=false; if(dpAutoQueued){ dpAutoQueued=false; dpAutoSave(); } });
   }
 
-  document.getElementById('dpExport').addEventListener('click', function(){
-    var btn=this; var a=sbHistAll();
-    var todo=a.filter(dpNeedExport);
-    if(!todo.length){ alert('✓ 本地数据包已是最新——没有需要新导出的记录。'); return; }
-    btn.disabled=true; var old=btn.textContent; btn.textContent='导出中…';
-    // 逐条构包
-    var packs=[];
-    (function build(i){
-      if(i>=todo.length){ deliver(); return; }
-      dpBuildPack(todo[i]).then(function(p){ packs.push({rec:todo[i],pack:p}); build(i+1); });
-    })(0);
-    function deliver(){
-      // 优先：本地服务器直写接口（启动.command/serve.py）——完全免选文件夹，直落 h5/datapacks/
-      dpTrySrv().then(function(ok){ if(ok) return; else dpDeliverFS(); });
-    }
-    function dpTrySrv(){
-      if(location.protocol!=='http:'&&location.protocol!=='https:') return Promise.resolve(false);
-      var files=packs.map(function(it){ return { name:dpSafe(it.pack.boundStory||it.pack.title||it.rec.id)+'.sb.json', content:it.pack }; });
-      return fetch('/__save_datapack',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:files})})
-        .then(function(r){ return r.ok?r.json():null; })
-        .then(function(j){
-          if(j&&j.ok){ packs.forEach(function(it){ dpMarkExported(it.rec); }); alert('✓ 已直写 '+j.written.length+' 个数据包到 h5/datapacks/（免选文件夹）。\n推 git 即可同步，拉下来自动在 h5/datapacks/。'); done(true); return true; }
-          return false;
-        })
-        .catch(function(){ return false; });
-    }
-    function dpDeliverFS(){
-      if(dpCanFS()){
-        dpEnsureDir().then(function(dir){
-          if(!dir){ throw new Error('未授权文件夹'); }
-          var idx=0;
-          (function wr(){
-            if(idx>=packs.length){ done(true); return; }
-            var it=packs[idx], name=dpSafe(it.pack.boundStory||it.pack.title||it.rec.id)+'.sb.json';
-            dpWriteFile(dir,name,JSON.stringify(it.pack)).then(function(){ dpMarkExported(it.rec); idx++; wr(); })
-              .catch(function(e){ alert('写入失败：'+(e&&e.message||e)); done(false); });
-          })();
-        }).catch(function(e){
-          // 授权失败或非 localhost → 退回下载
-          fallbackDownload();
-        });
-      } else { fallbackDownload(); }
-    }
-    function fallbackDownload(){
-      packs.forEach(function(it){
-        var name=dpSafe(it.pack.boundStory||it.pack.title||it.rec.id)+'.sb.json';
-        var blob=new Blob([JSON.stringify(it.pack)],{type:'application/json'});
-        var url=URL.createObjectURL(blob), aa=document.createElement('a'); aa.href=url; aa.download=name; aa.click(); URL.revokeObjectURL(url);
-        dpMarkExported(it.rec);
-      });
-      alert('已下载 '+packs.length+' 个数据包（file:// 或非 Chrome 退回下载模式）。\n请把它们移到仓库 h5/datapacks/ 目录再推 git。\n（用「启动.command」以 localhost 打开可直写文件夹、免手动移）');
-      done(true);
-    }
-    function done(ok){ btn.disabled=false; btn.textContent=old; if(ok&&dpCanFS()) { sbHistRender(); dpRefreshBtn(); } dpRefreshBtn(); }
+  // 明确的一次操作：先把当前全部记录写入数据包，再只提交/推送 h5/datapacks。
+  // 这样不会把用户正在编辑的规则、文档或其他文件带进提交。
+  var dpPush=document.getElementById('dpPush');
+  if(dpPush) dpPush.addEventListener('click',function(){
+    if(location.protocol!=='http:'&&location.protocol!=='https:'){ alert('请用“启动.command”打开 localhost 工作台后再推送到仓库。'); return; }
+    var btn=this, old=btn.textContent; btn.disabled=true; btn.textContent='同步中…';
+    dpBuildPacks(sbHistAll()).then(dpWriteServer).then(function(){
+      return fetch('/__git_sync_datapacks',{method:'POST'}).then(function(r){ return r.json().then(function(j){ if(!r.ok||!j.ok) throw new Error(j.error||'推送失败'); return j; }); });
+    }).then(function(j){
+      alert(j.message||'数据包已推送到仓库。');
+    }).catch(function(e){ alert('同步失败：'+(e&&e.message||e)); })
+      .then(function(){ btn.disabled=false; btn.textContent=old; });
   });
-
-  // 全部已导出 → 按钮置灰
-  function dpRefreshBtn(){
-    var btn=document.getElementById('dpExport'); if(!btn) return;
-    var a=sbHistAll(); var need=a.filter(dpNeedExport).length;
-    btn.disabled = (a.length>0 && need===0);
-    btn.style.opacity = btn.disabled?'.5':'1';
-    var t=document.getElementById('dpExportTxt'); if(t) t.textContent = need>0 ? ('导出内容（'+need+'）') : '导出内容';
-    btn.title = btn.disabled ? '本地数据包已是最新，无新内容可导' : ('有 '+need+' 条尚未入包，点击增量导出到 datapacks/');
-  }
-  // 打开记录弹窗时刷新按钮态
-  var _openhist=document.getElementById('openhist');
-  if(_openhist) _openhist.addEventListener('click', function(){ setTimeout(dpRefreshBtn,0); });
 
 })();
 </script>

@@ -379,8 +379,6 @@
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M6 20V4M18 20v-6"/></svg>数值版本</button>
       <button id="histexport" class="hdrbtn dark" title="导出全部力度谱/情绪校准数据（评测用）">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 12l4-2.5M12 7v0"/></svg>校准导出</button>
-      <button id="dpExport" class="hdrbtn teal" title="把本地数据包里还没有的剧本（纯文本）增量写入 datapacks/。已被分镜台升级为剧本+图的不重导">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z"/><path d="M3.3 7L12 12l8.7-5M12 22V12"/></svg><span id="dpExportTxt">导出内容</span></button>
       <button id="histclear" class="hdrbtn danger">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/></svg>一键清空</button>
       <button id="histclose" class="hdrbtn ghost">关闭</button>
@@ -1416,12 +1414,18 @@ flowchart TD
   var SYS='你是互动短剧结构生成器，遵循《互动短剧设计规则书》。⓪ 用户输入第一性：用户已写到的任何颗粒度（描述或上传原稿里的大纲/分场/人物/场景/道具/台词/镜头/分支/抉择/结局）都是最高权威，一律原样采纳、禁止改写或用你的创意顶掉，你只补空白层并叠加节奏/结构/校验层；冲突时取更细颗粒度的一方；标了「第一性/原稿」的内容优先级高于本系统提示的默认创作倾向。⚠ 第零优先：先做输入自洽检验（容量公式：主线≥15分＋每条完整情感弧光≈20分＋每名露脸角色≈5分），用户内容承诺与时长矛盾时，真实意图＝内容承诺，上调时长并重定引擎，裁决写进 consistency。核心：① 题材层：判断题材够不够成为产品；弱题材靠类型融合破局（底色＝用户点的类型，融一个供能类型当惊喜），每阶段配强敌＋可克服难关；必须有受限的金手指（金手指不限异能/强能力：历史权谋·谍战中智力、乙女纯爱中主角魅力本身也算，同须限定使用规则与场景）；需推荐或融合题材时优先取当下男频/女频热门池（男频：历史模拟器/无限流/系统文/悬疑恐怖/盗墓冒险/末日生存/修仙炼丹/游戏竞技；女频：宫斗宅斗/综艺想象/年代发家/萌宝萌娃/穿书逆袭/纯爱百合），非封闭，用户点名池外照做。② 引擎由时长定（新口径：短10–15／中15–25／长25＋）：短（10–15分）＝结局树（装置先行→一次兑现＋一记反转→抉择树→2–4结局）；中（15–25分）＝过渡（主干＋关键分支＋汇合）；长（25分以上）＝情绪弧（起承转合七拍＋PAD坐标V/A/D＋反差催化剂）。③ 前五分钟必有一个教学交互点，落在第一个情节点高潮；起段固定 1 个选错即死。④ 结局数＝三种之和(末段主结局＋中间大结局0–1＋小结局/死路)，用户输入的就是总数；先按题材定主结局(下限2，≤10min纯爱/抽象可1)、再按余量铺小结局(N≥5尽量多于主结局)，中间大结局＝隐藏结局仅0–1；分配按软区间表(见执行卡【3】)；每个结局一个鲜明的价值/情绪落点。⑤ 一句话定位须含期待/反转/钩子/情绪四要素。⑥ 大纲与节点文字必须具体可执行：写真实场景、真实事件、画面内的人，禁止“主角遇到困难”这类空话。〔INST〕⑦ 剧本层：台词口语化（默认中文，用户提及西幻/具体国家用该语种）、固定镜头为主、以台词传信息传情感、对话符合人设、人物先建置后出场；先产出人物全状态卡与场景日夜状态卡。角色分类用四类固定标签：恋爱类＝主角/男主/女主/配角/NPC，非恋爱类＝主角/主配/配角/NPC；NPC＝跨场出现但没戏、只需固定形象的功能角色也要列。道具分两级入 props：核心道具（金手指载体/世界规则物证/异性信物/反转扳机，至少一项功能）与普通道具（跨场需固定形象）；单场无功能道具不列。〔/INST〕⑧ 反俗套：装置三选一弃第一直觉（高频装置默认禁用）；反转必须连锁链≥2环、禁外部事故；每个爽点＝D轴翻盘×玩家抉择促成×反讽风险，登记进 payoffs。⑨ 单点情节题材透镜：每个关键情节先落地一件具体的事，再过题材透镜换成题材独有的反差物（融合题材从供能类型取），收口在题材逻辑内升级禁止常识性收口，钩子留下一段催化剂口子（最强＝双义钩子）；平情节只许当铺陈不许作节点落点。〔INST〕台词比重高于动作，全部script通读顺畅。〔/INST〕⑩ 力度谱：开场压制V∈[−0.6,−0.35]且D≤−0.5；首个释放点落差≥0.7；中段最强压制V≤−0.6落差≥1.0反号；高潮释放V≥+0.8落差≥1.4且D翻正；收尾V∈[+0.2,+0.5]；释放强度看落差；两个释放拍之间必有V≤−0.2回落。收到【输入】后只返回规定 JSON，不要多余文字。';
   var EXEC=(document.getElementById('execcard').textContent||'').trim();
   var RB=(document.getElementById('rulebook').textContent||'').trim();
+  // 与当前 episode-generator 对齐：保留本台既有 JSON 接口，只以这份规则裁决“剧本该怎么写”。
+  var EPISODE_WRITING_POLICY='\n\n【分集规划师·剧本质量规则（替代旧剧本拓展的写作口径，优先执行）】\n'
+    +'你交付的是能直接给演员和分镜使用的互动影视剧本，不是大纲、小说梗概、设定说明或台词合集。保持本台要求的 JSON 字段和节点跳转不变；其中每个 nodes[].script 必须是完整剧本。\n'
+    +'写作优先级固定为：①观众一遍看懂谁是谁、谁想要什么、发生了什么和为什么；②每场有戏——人物目标、阻力、交锋、信息或权力变化必须落在可见动作与原句台词里；③人物说人话——台词是接话、试探、回避、确认和反应，不是轮流发表金句或解释设定；④最后才是制片格式。低级要求不得破坏高级要求。\n'
+    +'每个 script 用制片格式连续写成：\n【场次 · 地点 · 日/夜 · 内/外】\n出场：人物\n△ 可拍的动作与环境\n人物：台词\n先把一场戏按因果写流畅，再转成这个排版；不要写表格式碎片、旁白概述、镜头术语或“角色A感到”。常规节点至少400个中文字符；极短故事可放宽至250字，但不能用描写灌水。\n'
+    +'每个节点先确定明确处境、人物欲望、推进阻力、至少一次可指认的状态变化；关键对抗要有多轮交锋和至少一次权力易手。信息靠戏内问答、动作、交易和后果长出来，禁止用△概述关键因果或让路人硬灌背景。\n'
+    +'新角色第一次开口前必须出现：可见出场动作、身份锚点、此刻来意。第一集必须在戏内交代故事前提、主角身份和关键关系；规则题材先立后用，新规则每集至多一条，必须讲清、验证并兑现，不能边演边发明规则。\n'
+    +'台词遵循真实口语：承重句一场不超过三分之一，连续三句像金句即重写；人物不能无缘无故立场突变，动机必须有前文铺垫。非结局节点以具体动作、事件或台词把下一集推出去；结局正文必须回收对应选择并给出不同结果或代价。\n'
+    +'互动选择必须是有代价的真实选择，至少造成信息、关系、风险、资源、立场、情绪或结局方向的一项差异；同组选项不得立刻汇到同一节点。写完后冷读检查：不看设定资料，仅凭正文也能答出人物、目标、因果、规则和下集悬念；答不出就返工。';
 
   // ===== 拓展能力注册表（基础框架之外的叠加层，开关存 localStorage）=====
   var EXTENSIONS=[
-    { id:'script_inst', name:'剧本实例化规则', on:true,
-      desc:'默认开。开＝生成完整可拍剧本：人物全状态卡 / 场景日夜卡 / 道具表 / 分场剧本(台词+动作) / 镜头规范，产出「场景与人物」「分场剧本」两页。关＝只做节奏与结构骨架（大纲 / 分集流程图 / 情绪对照）——执行卡与规则书里的剧本制作约束一并隐藏、JSON 不再要 script/场景/道具/人物卡、校验器跳过相关硬检查，大幅省提示词与输出 token。',
-      inject:'' },
     { id:'advanced_check', name:'高级自检', on:false,
       desc:'默认关。关＝精简自检：模型不再逐项打印长自检文字，只在 JSON 里吐一个紧凑的 selfcheck 字段（像控制台日志，四组只报✓或✗:原因），执行卡里的整段自检清单一并隐藏——大幅省执行卡与输出 token（客观项仍有前端硬校验兼底）。开＝恢复完整自检清单＋逻辑链里逐项报 ✓/✗ 的详细过程。两种都保留“有 ✗ 先回步修正再输出”。',
       inject:'' },
@@ -1443,7 +1447,8 @@ flowchart TD
   function extLoad(){ try{ var s=JSON.parse(localStorage.getItem(EXTKEY)||'{}'); EXTENSIONS.forEach(function(e){ if(s[e.id]!=null) e.on=!!s[e.id]; }); }catch(err){} }
   function extSave(){ var s={}; EXTENSIONS.forEach(function(e){ s[e.id]=e.on; }); try{ localStorage.setItem(EXTKEY,JSON.stringify(s)); }catch(err){} }
   function extInject(){ return EXTENSIONS.filter(function(e){return e.on;}).map(function(e){return e.inject;}).join(''); }
-  function extOn(id){ var e=EXTENSIONS.filter(function(x){return x.id===id;})[0]; return e&&e.on; }
+  // 编剧台始终交付完整可拍剧本，不再提供“只出骨架”的旧拓展开关。
+  function extOn(id){ if(id==='script_inst') return true; var e=EXTENSIONS.filter(function(x){return x.id===id;})[0]; return e&&e.on; }
   extLoad();
 
   // 剧本实例化规则开关：on＝去掉标记保留内容；off＝连标记带内容一起删（执行卡/SYS/规则书通用）
@@ -1456,7 +1461,7 @@ flowchart TD
     return t.replace(/〔ADV〕[\s\S]*?〔\/ADV〕/g,'').replace(/〔\/?ADV_OFF〕/g,'');
   }
   function buildSys(){
-    return applyAdv(applyInst(SYS+'\n\n'+EXEC))+extInject();
+    return applyAdv(applyInst(SYS+'\n\n'+EXEC+EPISODE_WRITING_POLICY))+extInject();
   }
 
   // 拓展弹窗（说明默认折叠，点标题行展开/收起——拓展再多也只占一列标题）
@@ -1678,7 +1683,7 @@ flowchart TD
   function histAll(){ try{ return JSON.parse(localStorage.getItem(HKEY)||'[]'); }catch(e){ return []; } }
   function histSave(rec){ var a=histAll(); a.unshift(rec); while(a.length>100) a.pop();
     viewedHist=rec&&rec.time; // 刚生成的这条即主界面正显示的内容
-    try{ localStorage.setItem(HKEY,JSON.stringify(a)); }catch(e){ while(a.length>1){ a.pop(); try{ localStorage.setItem(HKEY,JSON.stringify(a)); break; }catch(e2){} } } }
+    try{ localStorage.setItem(HKEY,JSON.stringify(a)); }catch(e){ while(a.length>1){ a.pop(); try{ localStorage.setItem(HKEY,JSON.stringify(a)); break; }catch(e2){} } } setTimeout(function(){ if(window.__idlSaveScriptRecord) window.__idlSaveScriptRecord(); },0); }
   var PAGESZ=10;
   function histRender(){
     var a=histAll(), list=document.getElementById('histlist'), view=document.getElementById('histview');
@@ -2614,18 +2619,6 @@ flowchart TD
     function led(){ try{ return JSON.parse(localStorage.getItem(DP_LEDGER)||'{}'); }catch(e){ return {}; } }
     function ledSave(m){ try{ localStorage.setItem(DP_LEDGER,JSON.stringify(m)); }catch(e){} }
     function key(r){ return r.title || (r.input&&r.input.title) || r.time; }
-    function safe(s){ return String(s||'rec').replace(/[^\w\u4e00-\u9fff\-]/g,'_').slice(0,40); }
-    function rank(lv){ if(!lv) return -1; if(lv==='script') return 0; var m=/^sb:(\d+)/.exec(lv); return m?(10+ +m[1]):0; }
-    // 本台只产纯剧本，级别恒为 script；但若台账里已是 sb:* 则无需导
-    function needExport(r){
-      var had=led()[key(r)];
-      if(!had) return true;
-      var hadLv=had.split('@')[0], hadTime=had.split('@')[1]||'';
-      if(rank('script')>rank(hadLv)) return true;         // 不会发生（script 是最低）
-      if(rank(hadLv)>=10) return false;                    // 已被分镜台升级，不重导
-      if((r.time||'')!==hadTime) return true;              // 内容重生
-      return false;
-    }
     function mark(r){ var m=led(); m[key(r)]='script@'+(r.time||''); ledSave(m); }
 
     function buildPack(r){
@@ -2634,41 +2627,24 @@ flowchart TD
         recKey:key(r), title:r.title||'', time:r.time||'', input:r.input||null, data:d, json:r.json||'' };
     }
 
-    // Chrome 文件夹句柄（本台无 IDB，临时开一个）
-    var DB=null;
-    function idb(){ return new Promise(function(res,rej){ if(DB){res(DB);return;} var q=indexedDB.open('idl_dp',1); q.onupgradeneeded=function(){ if(!q.result.objectStoreNames.contains('kv')) q.result.createObjectStore('kv'); }; q.onsuccess=function(){DB=q.result;res(DB);}; q.onerror=function(){rej(q.error);}; }); }
-    function idbGet(k){ return idb().then(function(db){ return new Promise(function(res){ var t=db.transaction('kv','readonly').objectStore('kv').get(k); t.onsuccess=function(){res(t.result==null?null:t.result);}; t.onerror=function(){res(null);}; }); }); }
-    function idbPut(k,v){ return idb().then(function(db){ return new Promise(function(res){ var t=db.transaction('kv','readwrite'); t.objectStore('kv').put(v,k); t.oncomplete=function(){res();}; t.onerror=function(){res();}; }); }); }
-    function canFS(){ return (location.protocol==='http:'||location.protocol==='https:') && !!window.showDirectoryPicker; }
-    function ensureDir(){ return idbGet('dp_dirhandle').then(function(h){ if(h){ return h.queryPermission({mode:'readwrite'}).then(function(p){ return p==='granted'?h:h.requestPermission({mode:'readwrite'}).then(function(p2){return p2==='granted'?h:null;}); }); } return window.showDirectoryPicker({id:'idl-datapacks',mode:'readwrite'}).then(function(nh){ return idbPut('dp_dirhandle',nh).then(function(){return nh;}); }); }); }
-    function writeFile(dir,name,text){ return dir.getFileHandle(name,{create:true}).then(function(fh){ return fh.createWritable(); }).then(function(w){ return w.write(text).then(function(){return w.close();}); }); }
-
-    var btn=document.getElementById('dpExport');
-    function refresh(){ if(!btn) return; var a=histAll(); var need=a.filter(needExport).length; btn.disabled=(a.length>0&&need===0); var t=document.getElementById('dpExportTxt'); if(t) t.textContent=need>0?('导出内容（'+need+'）'):'导出内容'; }
-    if(btn) btn.addEventListener('click',function(){
-      var a=histAll(), todo=a.filter(needExport);
-      if(!todo.length){ alert('✓ 本地数据包已是最新——没有需要新导出的剧本。\n（已被分镜台升级为“剧本+图”的不在此重导）'); return; }
-      var old=btn.textContent; btn.disabled=true; btn.textContent='导出中…';
-      var packs=todo.map(function(r){ return {rec:r,pack:buildPack(r),name:safe(r.title||r.time)+'.script.json'}; });
-      function fin(){ btn.disabled=false; btn.textContent=old; refresh(); }
-      // 优先：本地服务器直写接口（启动.command/serve.py），免选文件夹，直落 h5/datapacks/
-      if(location.protocol==='http:'||location.protocol==='https:'){
-        var files=packs.map(function(it){ return {name:it.name,content:it.pack}; });
-        fetch('/__save_datapack',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:files})})
-          .then(function(r){ return r.ok?r.json():null; })
-          .then(function(j){ if(j&&j.ok){ packs.forEach(function(it){ mark(it.rec); }); alert('✓ 已直写 '+j.written.length+' 个剧本包到 h5/datapacks/（免选文件夹）。\n推 git 即可同步。'); fin(); } else { fsOrDl(); } })
-          .catch(function(){ fsOrDl(); });
-        return;
-      }
-      fsOrDl();
-      function fsOrDl(){
-      if(canFS()){
-        ensureDir().then(function(dir){ if(!dir) throw new Error('未授权'); var i=0; (function wr(){ if(i>=packs.length){ fin(); return; } writeFile(dir,packs[i].name,JSON.stringify(packs[i].pack)).then(function(){ mark(packs[i].rec); i++; wr(); }).catch(function(e){ alert('写入失败：'+(e&&e.message||e)); fin(); }); })(); })
-        .catch(function(){ dl(); });
-      } else { dl(); }
-      function dl(){ packs.forEach(function(it){ var b=new Blob([JSON.stringify(it.pack)],{type:'application/json'}); var u=URL.createObjectURL(b),aa=document.createElement('a'); aa.href=u; aa.download=it.name; aa.click(); URL.revokeObjectURL(u); mark(it.rec); }); alert('已下载 '+packs.length+' 个剧本包。\n请移到 h5/datapacks/ 再推 git（用启动.command 以 localhost 打开可直写文件夹）。'); fin(); }
-      }
-    });
+    // 编剧台生成记录也自动入包；推送动作统一在分镜台的“推送到仓库”。
+    var saveTimer=0, saving=false, queued=false;
+    function needsSave(r){ var had=led()[key(r)]; return !had || had!==('script@'+(r.time||'')); }
+    function autoSave(){
+      if(location.protocol!=='http:'&&location.protocol!=='https:') return;
+      clearTimeout(saveTimer); saveTimer=setTimeout(flush,700);
+    }
+    function flush(){
+      if(saving){ queued=true; return; }
+      var todo=histAll().filter(needsSave); if(!todo.length) return;
+      saving=true;
+      var files=todo.map(function(r){ return {rec:r, name:String(key(r)||'rec').replace(/[^\w\u4e00-\u9fff\-]/g,'_').slice(0,40)+'.script.json', content:buildPack(r)}; });
+      fetch('/__save_datapack',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:files.map(function(x){ return {name:x.name,content:x.content}; })})})
+        .then(function(r){ return r.ok?r.json():null; }).then(function(j){ if(!j||!j.ok) throw new Error('本地存档服务未响应'); files.forEach(function(x){ mark(x.rec); }); })
+        .catch(function(e){ console.warn('[datapack] 编剧台自动存档失败',e); })
+        .then(function(){ saving=false; if(queued){ queued=false; autoSave(); } });
+    }
+    window.__idlSaveScriptRecord=autoSave;
 
     // 启动自动加载 datapacks/ 里的纯剧本包（仅 http）
     function autoLoad(){
@@ -2688,8 +2664,6 @@ flowchart TD
     }
     try{ autoLoad(); }catch(e){}
 
-    var oh=document.getElementById('openhist'); if(oh) oh.addEventListener('click',function(){ setTimeout(refresh,0); });
-    refresh();
   })();
 
 })();

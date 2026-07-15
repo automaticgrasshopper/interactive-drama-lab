@@ -1,3 +1,4 @@
 .DS_Store
+__pycache__/
 skill/nxp-episode-generator.bak-*/
 skill/nxp-episode-checker.bak-*/

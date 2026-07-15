@@ -7,11 +7,17 @@
   免去浏览器 showDirectoryPicker 手动选文件夹。拉下仓库后数据就在 h5/datapacks/。
 仅本机访问，关窗即停。
 """
-import json, os, re, sys
+import json, os, re, sys, subprocess
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DATAPACKS_DIR = os.path.join(ROOT, "h5", "datapacks")
+
+def run_git(*args):
+    return subprocess.run(
+        ["git", *args], cwd=ROOT, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+    )
 
 def safe_name(s):
     s = str(s or "rec")
@@ -33,7 +39,11 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        if self.path.split("?")[0] != "/__save_datapack":
+        path = self.path.split("?")[0]
+        if path == "/__git_sync_datapacks":
+            self.sync_datapacks()
+            return
+        if path != "/__save_datapack":
             self.send_error(404, "Not Found")
             return
         try:
@@ -53,8 +63,12 @@ class Handler(SimpleHTTPRequestHandler):
                 nm = safe_name(f.get("name") or "datapack.sb.json")
                 content = f.get("content")
                 text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
-                with open(os.path.join(DATAPACKS_DIR, nm), "w", encoding="utf-8") as fp:
+                # 连续补图时也不会让读取端碰到写到一半的 JSON。
+                target = os.path.join(DATAPACKS_DIR, nm)
+                temp = target + ".tmp"
+                with open(temp, "w", encoding="utf-8") as fp:
                     fp.write(text)
+                os.replace(temp, target)
                 written.append(nm)
             body = json.dumps({"ok": True, "written": written, "dir": "h5/datapacks/"}, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
@@ -71,6 +85,36 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+    def sync_datapacks(self):
+        """只提交并推送数据包，绝不带上工作区里的其他修改。"""
+        try:
+            changed = run_git("status", "--porcelain", "--", "h5/datapacks").stdout.strip()
+            if not changed:
+                result = {"ok": True, "status": "clean", "message": "数据包已经在仓库中，没有需要推送的更新。"}
+            else:
+                add = run_git("add", "--", "h5/datapacks")
+                if add.returncode:
+                    raise RuntimeError(add.stdout.strip() or "无法暂存数据包")
+                stamp = __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M")
+                # --only 会忽略用户已经暂存、但不属于数据包的任何工作。
+                commit = run_git("commit", "--only", "-m", "保存工作台数据包 " + stamp, "--", "h5/datapacks")
+                if commit.returncode:
+                    raise RuntimeError(commit.stdout.strip() or "无法提交数据包")
+                push = run_git("push", "origin", "HEAD")
+                if push.returncode:
+                    raise RuntimeError("数据包已保存在本机提交中，但推送失败：\n" + push.stdout.strip())
+                result = {"ok": True, "status": "pushed", "message": "数据包已提交并推送到 GitHub。", "commit": commit.stdout.strip()}
+            body = json.dumps(result, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+        except Exception as e:
+            body = json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False).encode("utf-8")
+            self.send_response(500)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self._cors()
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     # 降低日志噪音
     def log_message(self, fmt, *args):
