@@ -189,6 +189,8 @@ Error generating stack: `+o.message+`
           var sentences=String(text||'').match(/[^。！？!?；;]+[。！？!?；;]?/g)||[String(text||'')], out=[];
           sentences.forEach(function(sentence){
             sentence=sentence.trim();
+            // 句末引号常被正则单独捕获；并回上句，避免导出成只有一个引号的“缺省台词”。
+            if(/^[“”"‘’'（）()【】\[\]「」『』]+$/.test(sentence)){ if(out.length) out[out.length-1]+=sentence; return; }
             while(sentence.length>34){
               var cut=-1;
               for(var i=0;i<34;i++) if(/[，、：,]/.test(sentence.charAt(i))) cut=i+1;
@@ -200,14 +202,18 @@ Error generating stack: `+o.message+`
           return out;
         }
         function paceSource(source){
-          return String(source||'').replace(/\r\n?/g,'\n').split('\n').map(function(line){
+          var result=[];
+          String(source||'').replace(/\r\n?/g,'\n').split('\n').forEach(function(line){
             var trimmed=line.trim();
-            if(!trimmed||trimmed.charAt(0)==='@'||trimmed.charAt(0)==='#'||trimmed.charAt(0)==='-'||trimmed.indexOf('//')===0) return line;
+            if(!trimmed||trimmed.charAt(0)==='@'||trimmed.charAt(0)==='#'||trimmed.charAt(0)==='-'||trimmed.indexOf('//')===0){ result.push(line); return; }
             var match=line.match(/^(\s*)([^：:]*?)(：：|::|：|:)(\s*)(.+)$/);
-            if(!match) return line;
+            if(!match){ result.push(line); return; }
             var prefix=match[1]+match[2]+(match[3]==='::'?'::':'：：');
-            return splitReading(match[5]).map(function(part){ return prefix+part; }).join('\n');
-          }).join('\n');
+            // 修复已被旧版切坏的收尾引号：把独立的“阿浩：：\"”并回前一条同角色台词。
+            if(/^[“”"‘’']+$/.test(match[5].trim())&&result.length&&result[result.length-1].indexOf(prefix)===0){ result[result.length-1]+=match[5].trim(); return; }
+            splitReading(match[5]).forEach(function(part){ result.push(prefix+part); });
+          });
+          return result.join('\n');
         }
         function upgradeSavedScripts(){
           try{
@@ -235,6 +241,11 @@ Error generating stack: `+o.message+`
             home.innerHTML='<span aria-hidden="true">⌂</span><small>主选单</small>';
             home.addEventListener('click',function(event){ event.stopPropagation(); returnToMenu(); }); root.appendChild(home);
           }
+          if(root&&!root.querySelector('.vn-text-toggle')){
+            var toggle=document.createElement('button'); toggle.type='button'; toggle.className='vn-text-toggle'; toggle.setAttribute('aria-label','隐藏文本');
+            toggle.innerHTML='<span aria-hidden="true">◉</span><small>隐藏文本</small>';
+            toggle.addEventListener('click',function(event){ event.stopPropagation(); var hidden=root.classList.toggle('vn-text-hidden'); toggle.setAttribute('aria-label',hidden?'显示文本':'隐藏文本'); toggle.innerHTML='<span aria-hidden="true">'+(hidden?'◌':'◉')+'</span><small>'+ (hidden?'显示文本':'隐藏文本') +'</small>'; }); root.appendChild(toggle);
+          }
         }
         upgradeSavedScripts();
         new MutationObserver(polishTools).observe(document.documentElement,{childList:true,subtree:true});
@@ -242,17 +253,21 @@ Error generating stack: `+o.message+`
       })();
     </script>
     <style>
-      /* 视觉小说阅读层：短句、低干扰、左对齐，CG 仍是画面主角。 */
-      .dialogue-box{left:54px!important;right:54px!important;bottom:44px!important;min-height:230px!important;padding:30px 52px 58px!important;background:linear-gradient(105deg,rgba(8,10,18,.88),rgba(11,14,23,.72))!important;border:1px solid rgba(255,255,255,.22)!important;border-radius:14px!important;box-shadow:0 18px 45px rgba(0,0,0,.38)!important;backdrop-filter:blur(10px)}
-      .dialogue-speaker{display:inline-block;margin:0 0 16px!important;padding-left:16px;border-left:4px solid #ffd873;letter-spacing:.08em!important}
-      .dialogue-text{max-width:1420px!important;text-align:left!important;line-height:1.72!important;letter-spacing:.035em!important}
-      .dialogue-box .next-icon{right:38px!important;bottom:22px!important;width:34px!important;height:34px!important}
-      .settings-btn,.graph-btn,.refresh-btn,.revealall-btn,.vn-home-btn{top:20px!important;width:82px!important;height:104px!important;padding:9px 5px 8px!important;border:1px solid rgba(255,255,255,.18)!important;border-radius:18px!important;background:rgba(10,12,20,.62)!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:5px!important;box-shadow:0 8px 22px rgba(0,0,0,.2)!important}
+      /* 全屏 CG + 左对齐字幕层：画面不留黑边，文字轻量叠在画面上。 */
+      .stage{width:100%!important;height:100%!important;transform:none!important}
+      .dialogue-box,.float-box{left:58px!important;right:320px!important;top:58px!important;bottom:auto!important;transform:none!important;max-width:none!important;min-height:0!important;padding:0 0 18px!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;text-align:left!important;z-index:12}
+      .dialogue-box{position:absolute!important}.float-box{position:absolute!important}
+      .dialogue-speaker{display:inline-block;margin:0 0 14px!important;padding-left:16px;border-left:4px solid #ffd873;letter-spacing:.08em!important;text-shadow:0 2px 6px #000}
+      .dialogue-text,.float-box .dialogue-text{max-width:1320px!important;text-align:left!important;line-height:1.55!important;letter-spacing:.035em!important;color:#fff;text-shadow:-1px -1px 2px #000,1px 1px 3px #000,0 3px 10px #000!important}
+      .dialogue-box .next-icon,.float-box .next-icon{left:0!important;right:auto!important;bottom:-34px!important;transform:none!important;width:30px!important;height:30px!important}
+      .game-root.vn-text-hidden .dialogue-box,.game-root.vn-text-hidden .float-box,.game-root.vn-text-hidden .choice-wrap{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
+      .settings-btn,.graph-btn,.refresh-btn,.revealall-btn,.vn-home-btn,.vn-text-toggle{top:20px!important;width:82px!important;height:104px!important;padding:9px 5px 8px!important;border:1px solid rgba(255,255,255,.18)!important;border-radius:18px!important;background:rgba(10,12,20,.62)!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:5px!important;box-shadow:0 8px 22px rgba(0,0,0,.2)!important}
       .settings-btn svg,.graph-btn svg,.refresh-btn svg,.revealall-btn svg{width:42px!important;height:42px!important;flex:none}
       .settings-btn::after,.graph-btn::after,.refresh-btn::after,.revealall-btn::after{content:attr(data-vn-label);font-size:17px;line-height:1;color:#fff;white-space:nowrap;text-shadow:0 1px 3px #000}
       .settings-btn{right:28px!important}.graph-btn{right:124px!important}.refresh-btn{right:220px!important}.revealall-btn{right:316px!important}
       .vn-home-btn{position:absolute;right:412px;z-index:30;color:#fff;cursor:pointer;font:inherit}.vn-home-btn span{font-size:43px;line-height:38px}.vn-home-btn small{font-size:17px;line-height:1;white-space:nowrap}
-      .vn-home-btn:hover,.settings-btn:hover,.graph-btn:hover,.refresh-btn:hover,.revealall-btn:hover{background:rgba(27,33,51,.84)!important;border-color:rgba(255,216,115,.8)!important}
+      .vn-text-toggle{position:absolute;left:28px;z-index:30;color:#fff;cursor:pointer;font:inherit}.vn-text-toggle span{font-size:36px;line-height:38px}.vn-text-toggle small{font-size:17px;line-height:1;white-space:nowrap}
+      .vn-home-btn:hover,.vn-text-toggle:hover,.settings-btn:hover,.graph-btn:hover,.refresh-btn:hover,.revealall-btn:hover{background:rgba(27,33,51,.84)!important;border-color:rgba(255,216,115,.8)!important}
     </style>
   </body>
 </html>

@@ -1453,6 +1453,8 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       var units=String(text||'').match(/[^。！？!?；;]+[。！？!?；;]?/g)||[String(text||'')], out=[];
       units.forEach(function(unit){
         unit=unit.trim();
+        // 正常对白的收尾引号会被句末正则单独取出；必须并回上一句，不能变成一条“\"”空台词。
+        if(/^[“”"‘’'（）()【】\[\]「」『』]+$/.test(unit)){ if(out.length) out[out.length-1]+=unit; return; }
         while(unit.length>34){
           var cut=-1;
           for(var ci=0;ci<34;ci++) if(/[，、：,]/.test(unit.charAt(ci))) cut=ci+1;
