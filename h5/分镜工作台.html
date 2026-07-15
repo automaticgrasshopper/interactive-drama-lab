@@ -1538,6 +1538,9 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     var gameName=boundStory || ((board&&board.grammar)?'分镜：'+board.grammar:'分镜工作台剧本');
     var labels=Object.keys(bgImages);
     var nImg=labels.length;
+    // 导入硬闸：每张已生成分镜必须恰好对应一条 @bg，不能因台词切分或分支遗漏而只进部分 CG。
+    var importedCg=(text.match(/(^|\n)@bg /g)||[]).length;
+    if(importedCg!==nImg){ alert('⛔ 导入已拦截：本次有 '+nImg+' 张已生成分镜，但剧本只写入 '+importedCg+' 条 CG 切换指令。请重新打开记录后再导入，避免丢图。'); return; }
     // ★ 图片不再塞进 localStorage（会超配额）。两个 HTML 同源，IndexedDB 共享：
     //   把图写进共享库 sb_cg 的临时键 vnimg|<label>，payload 只传 label 清单（bgImageLabels），游戏侧再从 IDB 读图。
     // 文学剧本随图一起打包：逐场原文（含五个戏剧字段），供游戏侧/导出方查阅完整剧本

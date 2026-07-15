@@ -134,5 +134,41 @@ Error generating stack: `+o.message+`
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      /*
+       * 流程图缩略图：分镜台导入时把某节点的首张分镜写为同名 @bg（其余为 #2、#3…）。
+       * 游戏已经把所有 @bg 图存入 sb_cg / vn|剧本ID|节点标签；流程图打开后从这里取首张，
+       * 让节点预览和实际进入该节点时的第一张 CG 保持一致。
+       */
+      (function(){
+        var DB_NAME='sb_cg', STORE='img', ACTIVE='vn_active_script', cache=null, loading=null;
+        function openDb(){ return new Promise(function(resolve){ var q=indexedDB.open(DB_NAME,1); q.onsuccess=function(){resolve(q.result);}; q.onerror=function(){resolve(null);}; }); }
+        function loadImages(){
+          if(cache) return Promise.resolve(cache);
+          if(loading) return loading;
+          loading=openDb().then(function(db){ return new Promise(function(resolve){
+            if(!db||!db.objectStoreNames.contains(STORE)){ resolve({}); return; }
+            var scriptId=''; try{ scriptId=localStorage.getItem(ACTIVE)||''; }catch(e){}
+            var prefix='vn|'+scriptId+'|', out={}, tx=db.transaction(STORE,'readonly'), cur=tx.objectStore(STORE).openCursor();
+            cur.onsuccess=function(ev){ var c=ev.target.result; if(c){ var k=String(c.key||''); if(k.indexOf(prefix)===0) out[k.slice(prefix.length)]=c.value; c.continue(); } };
+            tx.oncomplete=function(){ cache=out; resolve(out); }; tx.onerror=function(){ resolve({}); };
+          }); });
+          return loading;
+        }
+        function hydrate(){
+          var nodes=document.querySelectorAll('.graph-node'); if(!nodes.length) return;
+          loadImages().then(function(images){ Array.prototype.forEach.call(nodes,function(node){
+            var name=node.querySelector('.node-name'), thumb=node.querySelector('.node-thumb');
+            if(!name||!thumb||thumb.dataset.cgReady==='1') return;
+            var label=(name.textContent||'').trim(), src=images[label]||images[label+'#2'];
+            if(!src) return;
+            thumb.dataset.cgReady='1'; thumb.innerHTML='';
+            var img=document.createElement('img'); img.src=src; img.alt=label+' 分镜预览'; img.style.cssText='width:100%;height:100%;object-fit:cover;display:block;'; thumb.appendChild(img);
+          }); });
+        }
+        new MutationObserver(hydrate).observe(document.documentElement,{childList:true,subtree:true});
+        document.addEventListener('DOMContentLoaded',hydrate); hydrate();
+      })();
+    </script>
   </body>
 </html>
