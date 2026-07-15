@@ -205,6 +205,8 @@ Error generating stack: `+o.message+`
           var result=[];
           String(source||'').replace(/\r\n?/g,'\n').split('\n').forEach(function(line){
             var trimmed=line.trim();
+            // 旧导入版本把场景配置写成“：【场景·日夜】”旁白；升级时直接剔除，玩家不应看到配置元数据。
+            if(/^：：【[^\n]*】$/.test(trimmed)) return;
             if(!trimmed||trimmed.charAt(0)==='@'||trimmed.charAt(0)==='#'||trimmed.charAt(0)==='-'||trimmed.indexOf('//')===0){ result.push(line); return; }
             var match=line.match(/^(\s*)([^：:]*?)(：：|::|：|:)(\s*)(.+)$/);
             if(!match){ result.push(line); return; }

@@ -1484,7 +1484,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       var lab=sanitizeLabel(n.id), gameLab=(idx===0?'start':lab);
       out.push(''); out.push('@label '+gameLab);
       out.push('# 节点标题：'+nodeMapTitle(n));
-      if(n.loc) out.push('：：【'+n.loc+(n.time?' · '+n.time:'')+'】');
+      // loc/time 只服务分镜与 CG 配置，不作为玩家可见旁白写入游戏剧本。
       // 该节点分到的分镜（按顺序均分）
       var mine=prompts.slice(idx*perNode,(idx+1)*perNode);
       // 本节已生成的图（保留镜头顺序）——全部用上，不再只取第一张
