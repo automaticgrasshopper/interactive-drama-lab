@@ -296,7 +296,8 @@ Error generating stack: `+o.message+`
       .settings-btn::after,.graph-btn::after,.refresh-btn::after,.revealall-btn::after{content:attr(data-vn-label);font-size:17px;line-height:1;color:#fff;white-space:nowrap;text-shadow:0 1px 3px #000}
       .settings-btn{right:28px!important}.graph-btn{right:124px!important}.refresh-btn{right:220px!important}.revealall-btn{right:316px!important}
       .vn-home-btn{position:absolute;right:412px;z-index:30;color:#fff;cursor:pointer;font:inherit}.vn-home-btn span{font-size:43px;line-height:38px}.vn-home-btn small{font-size:17px;line-height:1;white-space:nowrap}
-      .vn-text-toggle{position:absolute;left:28px;z-index:30;color:#fff;cursor:pointer;font:inherit}.vn-text-toggle span{font-size:36px;line-height:38px}.vn-text-toggle small{font-size:17px;line-height:1;white-space:nowrap}
+      .game-root:not(.vn-text-hidden)::after{content:"";position:absolute;inset:0;z-index:5;pointer-events:none;background:linear-gradient(90deg,rgba(3,7,13,.30),rgba(3,7,13,.13) 52%,rgba(3,7,13,.22))}
+      .vn-text-toggle{position:absolute;right:508px;left:auto;z-index:30;color:#fff;cursor:pointer;font:inherit}.vn-text-toggle span{font-size:36px;line-height:38px}.vn-text-toggle small{font-size:17px;line-height:1;white-space:nowrap}
       .vn-home-btn:hover,.vn-text-toggle:hover,.settings-btn:hover,.graph-btn:hover,.refresh-btn:hover,.revealall-btn:hover{background:rgba(27,33,51,.84)!important;border-color:rgba(255,216,115,.8)!important}
       /* 流程图：缩略图是主体，小标题是阅读入口，编号只作轻量定位。 */
       .graph-overlay{background:radial-gradient(circle at 50% 0,#1a2337,#090b12 64%)!important}
