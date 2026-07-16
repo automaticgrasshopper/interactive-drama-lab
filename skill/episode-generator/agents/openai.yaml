@@ -1,4 +1,4 @@
 interface:
   display_name: "NXP-分集规划师"
-  short_description: "在游戏企划和完整角色、场景、道具资产齐全后，生成分集互动影视剧本"
-  default_prompt: "Use $episode-generator：仅在游戏企划、完整角色描述、完整场景描述和完整道具描述均已提供时，生成严格使用固定一、二级字段的分集列表；任一资产缺失时先调用 asset-designer，不写剧本。"
+  short_description: "把游戏企划和角色、场景、道具描述展开成完整的分集互动影视剧本"
+  default_prompt: "Use $episode-generator 读取游戏企划、角色描述、场景描述和道具描述，生成严格使用固定一、二级字段的分集列表。"
