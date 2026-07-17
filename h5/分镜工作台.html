@@ -91,9 +91,6 @@
 <div class="wrap">
   <div class="head">
     <h1><span class="tico">🎬</span>场景分镜台</h1>
-    <button id="opencard" class="btn-top" style="margin-left:12px;">剧本转分镜执行卡</button>
-    <button id="opencharcard" class="btn-top" style="margin-left:8px;">三视图骨架</button>
-    <button id="openscenecard" class="btn-top" style="margin-left:8px;">场景图骨架</button>
     <button id="openhist" class="btn-top" style="margin-left:8px;">📜 记录</button>
   </div>
 
@@ -216,8 +213,7 @@
   <div class="box">
     <div style="display:flex;align-items:center;margin-bottom:10px;">
       <div style="font-size:18px;font-weight:700;">分镜生成记录 <em style="font-style:normal;font-size:12px;color:#aab0bf;font-weight:500;">（存本机浏览器，最多 50 条；标注绑定的故事剧本或用户单传）</em></div>
-      <button id="dpPush" class="hbtn" style="margin-left:auto;background:#16803c;color:#fff;border-color:#16803c;">☁ 推送到仓库</button>
-      <button id="histclose" class="hbtn" style="margin-left:8px;">关闭</button>
+      <button id="histclose" class="hbtn" style="margin-left:auto;">关闭</button>
     </div>
     <div id="histlist"></div>
   </div>
@@ -324,8 +320,8 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   var EXEC=(document.getElementById('execcard').textContent||'').trim();
   var CHARCARD=(document.getElementById('charcard').textContent||'').trim();
   var SCENECARD=(document.getElementById('scenecard').textContent||'').trim();
-  // 上游传来的场景与人物总表（供人物三视图/场景图两卡真出图）；无上游时为空数组
-  var upstreamChars=[], upstreamScenes=[];
+  // 上游传来的场景、人物总表与用户参考图；无上游时为空数组
+  var upstreamChars=[], upstreamScenes=[], upstreamRefs=[];
   // 锤点图（三视图/场景图）存 IndexedDB，键为 hammer|char|<name> / hammer|scene|<name>；localStorage 只存已生成 key 清单
   var HAMKEY='sb_hammer_v1';
   function hamAll(){ try{ return JSON.parse(localStorage.getItem(HAMKEY)||'{}'); }catch(e){ return {}; } }
@@ -454,7 +450,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       var shotCount=0; (board.beats||[]).forEach(function(bt){ shotCount+=(bt.shots||[]).length; });
       var rec={ time:nowStr, title:(boundStory||board.grammar||'分镜'), boundStory:boundStory||'', mergeKey:key,
         shots:shotCount, sceneCount:(pickedNodes||[]).length, board:board, nodes:pickedNodes||[], src:srcSnap,
-        upstreamChars:(upstreamChars&&upstreamChars.length?upstreamChars:undefined), upstreamScenes:(upstreamScenes&&upstreamScenes.length?upstreamScenes:undefined) };
+        upstreamChars:(upstreamChars&&upstreamChars.length?upstreamChars:undefined), upstreamScenes:(upstreamScenes&&upstreamScenes.length?upstreamScenes:undefined), upstreamRefs:(upstreamRefs&&upstreamRefs.length?upstreamRefs:undefined) };
       sbHistSave(rec);   // unshift 到开头
       return { rec:rec, idx:0, merged:false };
     }
@@ -496,6 +492,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     // 上游总表补充
     if(upstreamChars&&upstreamChars.length) rec.upstreamChars=upstreamChars;
     if(upstreamScenes&&upstreamScenes.length) rec.upstreamScenes=upstreamScenes;
+    if(upstreamRefs&&upstreamRefs.length) rec.upstreamRefs=upstreamRefs;
     // 把合并后的记录提到最前（保持“最近”在顶）
     a.splice(idx,1); a.unshift(rec);
     try{ localStorage.setItem(HSKEY,JSON.stringify(a)); }catch(e){}
@@ -529,7 +526,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     var i=+b.getAttribute('data-i'), a=sbHistAll(), r=a[i]; if(!r) return;
     var act=b.getAttribute('data-sbact');
     if(act==='del'){ if(!confirm('删除这条分镜记录？')) return; idbDropRec(r); a.splice(i,1); try{localStorage.setItem(HSKEY,JSON.stringify(a));}catch(e){} sbHistRender(); return; }
-    if(act==='load'){ window.__lastBoard=r.board; window.__lastNodes=r.nodes||[]; boundStory=r.boundStory||''; window.__promptRecIdx=i; if(r.upstreamChars)upstreamChars=r.upstreamChars; if(r.upstreamScenes)upstreamScenes=r.upstreamScenes;
+    if(act==='load'){ window.__lastBoard=r.board; window.__lastNodes=r.nodes||[]; boundStory=r.boundStory||''; window.__promptRecIdx=i; if(r.upstreamChars)upstreamChars=r.upstreamChars; if(r.upstreamScenes)upstreamScenes=r.upstreamScenes; if(r.upstreamRefs)upstreamRefs=r.upstreamRefs;
       // 回填左侧输入区（免再从上游重点）：优先用记录里存的 src 快照，老记录降级用 nodes 反推 JSON
       try{
         if(r.src && r.src.mode==='text'){ setSrc('text'); document.getElementById('textin').value=r.src.text||''; document.getElementById('moodin').value=r.src.mood||''; }
@@ -773,14 +770,6 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     try{ st.value=localStorage.getItem('sb_style')||''; }catch(e){}
     st.addEventListener('input',function(){ try{ if(this.value.trim())localStorage.setItem('sb_style',this.value.trim()); else localStorage.removeItem('sb_style'); }catch(e){} });
   })();
-
-  // ---- 执行卡弹窗 ----
-  document.getElementById('opencard').addEventListener('click',function(){ document.getElementById('cardbody').textContent=EXEC; document.getElementById('cardlen').textContent=EXEC.length; document.getElementById('cardtok').textContent='~'+Math.round(EXEC.length/1.6); document.getElementById('cardlen').style.color=EXEC.length>4000?'#dc2626':''; document.getElementById('cardmask').style.display='flex'; });
-  document.getElementById('cardclose').addEventListener('click',function(){ document.getElementById('cardmask').style.display='none'; });
-  document.getElementById('cardmask').addEventListener('click',function(e){ if(e.target===this)this.style.display='none'; });
-  function showCard(txt){ document.getElementById('cardbody').textContent=txt; document.getElementById('cardlen').textContent=txt.length; document.getElementById('cardtok').textContent='~'+Math.round(txt.length/1.6); document.getElementById('cardlen').style.color=txt.length>4000?'#dc2626':''; document.getElementById('cardmask').style.display='flex'; }
-  document.getElementById('opencharcard').addEventListener('click',function(){ showCard(CHARCARD); });
-  document.getElementById('openscenecard').addEventListener('click',function(){ showCard(SCENECARD); });
 
   // ---- 结果页签 ----
   var RTABS=['char','scene','board','prompt','storyboard','script'];
@@ -1207,12 +1196,13 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     btns.forEach(function(b){ b.disabled=true; b.textContent='生成中…'; b.classList.remove('done'); });
     if(bar) bar.style.display='block'; var prog=8; if(barI)barI.style.width='8%';
     var timer=setInterval(function(){ prog=Math.min(90,prog+Math.random()*12); if(barI)barI.style.width=prog+'%'; },300);
+    var sourceRefs=(upstreamRefs||[]).map(function(x){return typeof x==='string'?x:x&&x.dataUrl;}).filter(Boolean).slice(0,4);
     sbGenImage(prompt,function(err,url){
       clearInterval(timer);
       if(err){ if(barI)barI.style.width='0%'; if(bar)bar.style.display='none'; alert('生成失败：'+err.message); if(paneId)renderHammerRefresh(paneId); if(cb)cb(err); return; }
       if(barI)barI.style.width='100%';
       hamSet(kind,name,url).then(function(){ setTimeout(function(){ if(paneId)renderHammerRefresh(paneId); if(cb)cb(null); },200); });
-    });
+    },sourceRefs);
   }
   function hamGenAll(kind,items,promptFn,labelFn,paneId){
     var q=items.map(labelFn); var btn=document.getElementById('ham_all_'+kind); if(btn){ btn.disabled=true; btn.textContent='生成中…'; }
@@ -1605,7 +1595,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
           var key=p.recKey||p.boundStory||p.title;
           if(existed[key]) return;   // 已有同条→跳过（只增不覆）
           var rec={ id:newRecId(), title:p.title||key, boundStory:p.boundStory||'', time:p.time||'', srcId:p.recKey||'',
-            board:p.board||null, nodes:p.nodes||[], upstreamChars:p.upstreamChars||[], upstreamScenes:p.upstreamScenes||[],
+            board:p.board||null, nodes:p.nodes||[], upstreamChars:p.upstreamChars||[], upstreamScenes:p.upstreamScenes||[], upstreamRefs:p.upstreamRefs||[],
             shots:(p.board&&p.board.beats)?p.board.beats.reduce(function(a,b){return a+((b.shots||[]).length);},0):0,
             sceneCount:(p.nodes||[]).length, imgNos:p.imgNos||Object.keys(p.images||{}) };
           var a=sbHistAll(); a.push(rec); try{ localStorage.setItem(HSKEY,JSON.stringify(a)); }catch(e){}
@@ -1632,6 +1622,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         boundStory=pay.from||'';   // 绑定的故事剧本标题（空=用户单传）
         upstreamChars=Array.isArray(pay.characters)?pay.characters:[];   // 人物总表（供三视图卡）
         upstreamScenes=Array.isArray(pay.scenes)?pay.scenes:[];          // 场景总表（供场景图卡）
+        upstreamRefs=Array.isArray(pay.referenceImages)?pay.referenceImages:[]; // 用户上传的视觉参考（供图生图锁身份/画风）
         setSrc('json');
         document.getElementById('jsonin').value=JSON.stringify({nodes:pay.nodes}, null, 0);
         document.getElementById('jsonin').dispatchEvent(new Event('input'));
@@ -1683,7 +1674,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         kind:'storyboard', version:1, exportedAt:new Date().toISOString(),
         recKey:dpRecKey(r),
         title:r.title||'', boundStory:r.boundStory||'', time:r.time||'',
-        board:r.board||null, nodes:r.nodes||[], upstreamChars:r.upstreamChars||[], upstreamScenes:r.upstreamScenes||[],
+        board:r.board||null, nodes:r.nodes||[], upstreamChars:r.upstreamChars||[], upstreamScenes:r.upstreamScenes||[], upstreamRefs:r.upstreamRefs||[],
         imgNos:r.imgNos||Object.keys(images), images:images
       };
     });
@@ -1713,20 +1704,6 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     dpBuildPacks(todo).then(dpWriteServer).catch(function(e){ console.warn('[datapack] 自动存档失败',e); })
       .then(function(){ dpAutoSaving=false; if(dpAutoQueued){ dpAutoQueued=false; dpAutoSave(); } });
   }
-
-  // 明确的一次操作：先把当前全部记录写入数据包，再只提交/推送 h5/datapacks。
-  // 这样不会把用户正在编辑的规则、文档或其他文件带进提交。
-  var dpPush=document.getElementById('dpPush');
-  if(dpPush) dpPush.addEventListener('click',function(){
-    if(location.protocol!=='http:'&&location.protocol!=='https:'){ alert('请用“启动.command”打开 localhost 工作台后再推送到仓库。'); return; }
-    var btn=this, old=btn.textContent; btn.disabled=true; btn.textContent='同步中…';
-    dpBuildPacks(sbHistAll()).then(dpWriteServer).then(function(){
-      return fetch('/__git_sync_datapacks',{method:'POST'}).then(function(r){ return r.json().then(function(j){ if(!r.ok||!j.ok) throw new Error(j.error||'推送失败'); return j; }); });
-    }).then(function(j){
-      alert(j.message||'数据包已推送到仓库。');
-    }).catch(function(e){ alert('同步失败：'+(e&&e.message||e)); })
-      .then(function(){ btn.disabled=false; btn.textContent=old; });
-  });
 
 })();
 </script>

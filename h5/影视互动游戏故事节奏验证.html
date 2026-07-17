@@ -129,8 +129,6 @@
 <div class="wrap">
   <div class="head">
     <h1><span class="tico">📝</span>大纲编剧台</h1>
-    <button id="openrules" style="height:34px;padding:0 14px;border:1px solid #dfe2ea;border-radius:10px;background:#fff;color:#3a4255;font-size:13px;font-weight:600;cursor:pointer;margin-left:12px;">规则书</button>
-    <button id="opencard" style="height:34px;padding:0 14px;border:1px solid #dfe2ea;border-radius:10px;background:#fff;color:#3a4255;font-size:13px;font-weight:600;cursor:pointer;margin-left:8px;">执行卡</button>
     <button id="openext" style="height:34px;padding:0 14px;border:1px solid #dfe2ea;border-radius:10px;background:#fff;color:#3a4255;font-size:13px;font-weight:600;cursor:pointer;margin-left:8px;">➕ 拓展</button>
     <button id="openhist" style="height:34px;padding:0 14px;border:1px solid #dfe2ea;border-radius:10px;background:#fff;color:#3a4255;font-size:13px;font-weight:600;cursor:pointer;margin-left:8px;">📜 记录</button>
   </div>
@@ -143,11 +141,11 @@
         <textarea id="brief" maxlength="5000" placeholder="可长可短：一句话想法，或详细到人设、场景、镜头设计均可。" style="width:100%;height:118px;border:1px solid #dfe2ea;border-radius:12px;background:#fafbfc;padding:12px;font-size:13px;line-height:1.6;color:#1f2430;resize:vertical;"></textarea>
       </div>
       <div class="field">
-        <label>上传文稿 <em>（可选 · 你写多细就以你的为准）</em></label>
-        <input id="docfile" type="file" accept=".txt,.md,.markdown,.text,text/plain,text/markdown" multiple style="display:none;">
+        <label>上传素材</label>
+        <input id="docfile" type="file" accept=".txt,.md,.markdown,.text,text/plain,text/markdown,image/png,image/jpeg,image/webp" multiple style="display:none;">
         <div class="addrow" style="align-items:center;">
-          <button id="docbtn" type="button">＋ 上传文稿</button>
-          <span id="dochint" class="hint" style="margin:0;flex:1;">支持 .txt / .md（Word 请先导出成 .md 或 .txt）。上传后即为本次生成的最高权威输入。</span>
+          <button id="docbtn" type="button">＋ 上传文稿 / 图片</button>
+          <span id="dochint" class="hint" style="margin:0;flex:1;">支持 .txt / .md / PNG / JPG / WebP，暂不支持视频。</span>
         </div>
         <div id="doclist" style="display:none;margin-top:8px;"></div>
       </div>
@@ -389,7 +387,7 @@
 - **节奏** 决定"在时间轴上如何摆布情绪与选择"，让体验全程不无聊。
 - **生成顺序** 决定"上面三层按什么先后落地成一个可生成的剧本和流程"。
 
-> **第一性原则（凌驾全书）：用户输入优先于规则。** 用户已经写到的任何颗粒度——一句灵感、一段大纲、完整分场台词、镜头——都是最高权威，一律原样采纳，本书其余规则只用来**补足用户没写的空白层**、并**叠加节奏/结构/校验**，绝不改写、替换或"优化"用户已给的内容。冲突时取更细颗粒度的一方。当用户上传的是一部**已完成的完整剧本**、只想把它盘成互动结构（画流程图、抽人物场景、画情绪坐标）时，进入**忠实导入**口径：不发明互动、有几处抉择几个结局就照原样，情绪坐标按剧本真实走势如实标注——**哪怕偏离标准线也只提示、不回改**（详见第六部分第 10 条）。
+> **第一性原则（凌驾全书）：用户输入优先于规则。** 系统自动按输入颗粒度分级：一句灵感允许开放创作；详细描述锁定已指定的人物、因果和结果；上传文稿或图片时，素材明确给出的事实与视觉身份高于默认规则；自动识别为完整分场剧本时，只做结构化、素材抽取和下游对接，不发明互动、不改写原台词与情节。冲突时按“用户明确要求 > 上传素材 > 详细描述 > 标签 > 默认规则”裁决，同层取更细颗粒度（详见第六部分第 10 条）。
 
 书中凡是形象化的说法（如"情绪脊""编织带"），都紧跟一句直白解释和一句操作定义或量化口径。凡涉及数值，一律给精确区间、公式或阈值，区间都含两端。时间一律以分钟计，它是全书唯一的自由变量：以 60 分钟为核心基准，向下收缩就减少节点，向上扩张就增加节点。
 
@@ -1002,7 +1000,7 @@ flowchart TD
 7. **引擎由时长先定**：≤ 约 30 分钟走结局树（3.1.3），≥ 约 45 分钟走情绪弧（3.1、3.1.1），30–45 分钟过渡。**3.1 七拍、3.4 四段分配、3.6 阶梯放置只对长片**；短片一律以结局树为准。三层结局定义与计数则长短片通用。
 8. **时长：指定 > 推荐**。用户 / 产品给了目标时长就用它；没给、或写完做节奏自检，才用 3.1.4 的推荐区间。
 9. **类型融合：底色 > 供能**。用户点名的类型是底色，核心承诺必须兑现；融进来的供能类型只增益，不喧宾夺主（见 1.4）。
-10. **用户输入第一性 & 忠实导入**（呼应阅读说明的第一性原则）：用户已写到的颗粒度一律原样采纳，本书规则只补空白、叠加节奏与校验，不改写用户已给内容。当输入是一部**已完成的完整剧本**、目标是忠实还原时，以下互动生成硬规则**全部降为参考、不得据以增删或改写剧本**：结局数＝设定值、抉择数分档（3.1.3 / 3.2）、每抉择 2–4 出口、空合流禁令（3.5）、反套路装置与连锁反转（2.5）、力度谱阈值（2.9）、爽点 payoffs 必填（2.8）。此时：① 剧本有几处抉择、几个结局就照原样，线性剧本即输出线性节点链；② 台词/分场/情节原样落进分场剧本，人物与场景据剧本抽取；③ 情绪坐标（PAD/beats）按剧本真实走势打点，**偏离标准线只在分析里提示、绝不回改剧本**；④ 只有剧本自身前后矛盾才登记 consistency，剧本与本工具规则不一致不算矛盾。校验器对上述项相应降级为软提示、且不触发自动重跑。
+10. **用户输入梯度 & 自动还原**（呼应阅读说明的第一性原则）：系统在每次生成前自动识别创意种子、详细需求、素材约束和完整剧本四档输入，不要求用户手动切换模式。文稿已给出的事实与台词不改，图片已给出的身份、外形、服装、场景布局和画风作为视觉锁点。自动识别为**完整分场剧本**时，互动生成规则全部降为参考：剧本有几处抉择、几个结局就照原样，线性剧本输出线性节点链；台词/分场/情节原样落进分场剧本；PAD/beats 按真实走势打点，偏离只提示不回改；只登记剧本自身矛盾。校验器对上述项降级为软提示且不自动重跑。
 
 
 〔INST〕---
@@ -1067,7 +1065,7 @@ flowchart TD
 <script type="text/plain" id="execcard">【符号】（下文用到即引用、不再解释）：T=主线时长(分,唯一自由变量)；E=总结局数(三种结局之和)；P=(V,A,D)∈[−1,1]³=情绪坐标(效价/唤醒/支配)；Δ=相邻拍之差；落差=一段内 max−min；翻盘拍≡D 由−→+；跌落≡V 由+→−；拐点≡某轴 sign 翻转；∝T≡按 T/60 同比缩放；round=四舍五入；所有数值区间含两端。
 
 【0 全局】
-- ⓪ 第一性：用户已写到的任何颗粒度（灵感/大纲/分场/台词/镜头/上传原稿）＝最高权威，原样采纳，本执行卡只补空白＋叠加节奏/结构/校验，不改写用户已给内容；冲突取更细颗粒度方。忠实导入模式（上传完整剧本、只求还原）下：不发明互动、抉择/结局数照剧本原样、情绪坐标按剧本真实走势打点（偏离只提示不回改），本卡内"结局数=E/抉择数档/2–4出口/空合流/反俗套/力度谱/payoffs必填"全部降为参考；只有剧本自身前后矛盾才登记 consistency。
+- ⓪ 输入梯度：每次先自动识别创意种子 / 详细需求 / 素材约束 / 完整剧本四档，不设手动还原开关。一句灵感只锁定点名元素；详细描述不擅自替换；文稿和图片明确给出的内容高于默认规则；完整分场剧本只做结构化和下游对接，不发明互动、不改写台词情节，所有生成型硬规则降为分析提示。
 - 唯一自由变量：时长 T（分钟），基准 60 分，数量按 T/60 同比缩放。时长：用户指定＞推荐，但受下条自洽检验约束。
 - 输入自洽检验（第0步开头强制执行）：先用容量公式反查用户输入——内容承诺所需时长＝主线骨架≥15 分＋每条完整情感弧光≈20 分＋每名仅露脸角色≈5 分。若用户给定时长＜所需时长，判定为自相矛盾：真实意图＝内容承诺（角色都要在、弧光要完整）＞时长数字，必须上调时长到容量公式给出的最小值并重定引擎分档；若用户明确说时长不可动，则反向裁剪内容（减角色/减弧光，依次登场只写透 2 条）。两种裁决都必须在 consistency 字段与逻辑链第0步里写明：矛盾是什么、真实意图判断、怎么裁、裁完的新参数。
 - 结局数 E＝三种结局之和：末段主结局＋中间大结局(0–1)＋小结局/死路，全部计入（用户输入 1–10 或 AI 推荐＝总数）。先按题材定主结局集合、再按余量铺小结局；分配软区间见【3】。”小结局”一词只指死路。
@@ -1178,42 +1176,61 @@ flowchart TD
 
   // ===== 对接模型：打包请求 + 渲染返回 =====
   function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[m];}); }
-  // ===== 用户上传文稿（第一性 · 本次会话内有效，不写进记录）=====
+  // ===== 用户上传素材：文稿 + 图片（视频暂不支持）=====
   var DOCS=[];               // [{name, text}]
+  var IMAGES=[];             // [{name, type, dataUrl}]，压缩后传给多模态文本模型和下游分镜台
   var DOC_INJECT_CAP=50000;  // 注入模型的字数上限，防止撑爆 max_tokens
+  var IMAGE_LIMIT=3, IMAGE_MAX_SIDE=1280, IMAGE_QUALITY=0.78;
   function docText(){ return DOCS.map(function(d){ return d.text; }).join('\n\n───────\n\n').trim(); }
   function docChars(){ return docText().length; }
+  function imageUrls(){ return IMAGES.map(function(x){return x.dataUrl;}).filter(Boolean); }
+  function escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
   function renderDocs(){
     var wrap=document.getElementById('doclist');
-    if(!DOCS.length){ wrap.style.display='none'; wrap.innerHTML=''; return; }
+    if(!DOCS.length&&!IMAGES.length){ wrap.style.display='none'; wrap.innerHTML=''; return; }
     wrap.style.display='block';
     var total=docChars();
     var over=total>DOC_INJECT_CAP;
-    wrap.innerHTML='<div class="hint" style="margin:0 0 6px;'+(over?'color:#d97706;':'color:#16a34a;')+'">已载入 '+DOCS.length+' 份，共 '+total+' 字，作为本次生成的最高权威输入。'+(over?('（超过 '+DOC_INJECT_CAP+' 字，注入模型时将截断，建议精简）'):'')+'</div>'
+    var policy=inputPolicy();
+    wrap.innerHTML='<div class="hint" style="margin:0 0 6px;'+(over?'color:#d97706;':'color:#16a34a;')+'">已载入 '+DOCS.length+' 份文稿（'+total+' 字）、'+IMAGES.length+' 张图片。自动识别：<b>'+policy.label+'</b>。'+(over?('（超过 '+DOC_INJECT_CAP+' 字，注入模型时将截断）'):'')+'</div>'
       + DOCS.map(function(d,i){ return '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#1f2430;padding:4px 0;"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 '+d.name.replace(/</g,'&lt;')+' <em style="color:#8a92a6;">（'+d.text.length+' 字）</em></span><button type="button" class="hbtn" data-doci="'+i+'">移除</button></div>'; }).join('');
+    wrap.innerHTML+=IMAGES.map(function(im,i){ return '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#1f2430;padding:5px 0;"><img src="'+escAttr(im.dataUrl)+'" alt="" style="width:54px;height:38px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🖼️ '+escAttr(im.name)+' <em style="color:#8a92a6;">（视觉参考）</em></span><button type="button" class="hbtn" data-imgi="'+i+'">移除</button></div>'; }).join('');
     Array.prototype.forEach.call(wrap.querySelectorAll('[data-doci]'), function(b){ b.addEventListener('click', function(){ DOCS.splice(parseInt(this.getAttribute('data-doci'),10),1); renderDocs(); }); });
+    Array.prototype.forEach.call(wrap.querySelectorAll('[data-imgi]'), function(b){ b.addEventListener('click', function(){ IMAGES.splice(parseInt(this.getAttribute('data-imgi'),10),1); renderDocs(); }); });
   }
+  function compressInputImage(dataUrl){ return new Promise(function(resolve,reject){ var img=new Image(); img.onload=function(){ try{ var w=img.naturalWidth||img.width,h=img.naturalHeight||img.height,scale=Math.min(1,IMAGE_MAX_SIDE/w,IMAGE_MAX_SIDE/h); var cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(w*scale)); cv.height=Math.max(1,Math.round(h*scale)); cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); resolve(cv.toDataURL('image/webp',IMAGE_QUALITY)); }catch(e){reject(e);} }; img.onerror=function(){reject(new Error('图片解码失败'));}; img.src=dataUrl; }); }
+  function readTextFile(f){ return new Promise(function(resolve,reject){ var r=new FileReader(); r.onload=function(){resolve({name:f.name,text:(r.result||'').toString().trim()});}; r.onerror=function(){reject(new Error('读取失败：'+f.name));}; r.readAsText(f); }); }
+  function readImageFile(f){ return new Promise(function(resolve,reject){ var r=new FileReader(); r.onload=function(){ compressInputImage(String(r.result||'')).then(function(u){resolve({name:f.name,type:'image/webp',dataUrl:u});},reject); }; r.onerror=function(){reject(new Error('读取失败：'+f.name));}; r.readAsDataURL(f); }); }
   document.getElementById('docbtn').addEventListener('click', function(){ document.getElementById('docfile').click(); });
   document.getElementById('docfile').addEventListener('change', function(){
-    var files=Array.prototype.slice.call(this.files||[]); var self=this;
-    var pending=files.length;
-    files.forEach(function(f){
-      var r=new FileReader();
-      r.onload=function(){ DOCS.push({name:f.name, text:(r.result||'').toString().trim()}); pending--; if(pending<=0){ renderDocs(); self.value=''; } };
-      r.onerror=function(){ pending--; if(pending<=0){ renderDocs(); self.value=''; } alert('读取失败：'+f.name); };
-      r.readAsText(f);
+    var files=Array.prototype.slice.call(this.files||[]), self=this, imageSlots=Math.max(0,IMAGE_LIMIT-IMAGES.length);
+    var jobs=files.map(function(f){
+      if(/^video\//.test(f.type||'')) return Promise.reject(new Error('暂不支持视频：'+f.name));
+      if(/^image\/(png|jpeg|webp)$/.test(f.type||'')){ if(imageSlots<=0) return Promise.reject(new Error('图片最多 '+IMAGE_LIMIT+' 张')); imageSlots--; return readImageFile(f).then(function(x){IMAGES.push(x);}); }
+      return readTextFile(f).then(function(x){DOCS.push(x);});
     });
-    if(!files.length){ self.value=''; }
+    Promise.allSettled(jobs).then(function(results){ var errors=results.filter(function(x){return x.status==='rejected';}).map(function(x){return x.reason&&x.reason.message||String(x.reason);}); renderDocs(); self.value=''; if(errors.length) alert(errors.join('\n')); });
   });
-  // 供 mkReq / resolveOne 取用的第一性文稿块（已截断）
+  function looksCompleteScript(t){ if(!t||t.length<2500)return false; var score=0; if(/(?:^|\n)\s*(?:第?\d+场|场次|SCENE\s+\d+|INT\.|EXT\.)/im.test(t))score++; if(/(?:日|夜)\s*(?:内|外)|(?:内|外)\s*(?:日|夜)/.test(t))score++; if(/(?:^|\n)\s*[\u4e00-\u9fffA-Za-z·]{1,12}\s*[:：]\s*[^\n]{2,}/m.test(t))score++; if(/分场|剧本|第\s*\d+\s*集|【场次/.test(t))score++; return score>=2; }
+  function inputPolicy(){
+    var brief=(document.getElementById('brief').value||'').trim(), text=docText(), strict=looksCompleteScript([text,brief].filter(Boolean).join('\n\n'));
+    if(strict) return {level:4,label:'完整剧本还原',strict:true,directive:'输入是完整分场剧本。只做结构化、素材抽取和必要的下游对接，不发明新互动，不改写原台词、分场、情节和结局。'};
+    if(DOCS.length||IMAGES.length) return {level:3,label:'素材约束创作',strict:false,directive:'保留文稿明确写出的事实、人物、关系、情节与台词；图片中的身份、外形、服装、场景布局和画风是视觉约束。只在素材未定义的空白处补齐互动结构和可拍内容。'};
+    if(brief.length>=500) return {level:2,label:'详细需求执行',strict:false,directive:'将详细描述视为强约束，保留所有明确元素和因果，不擅自替换；只补齐未说明的层级。'};
+    return {level:1,label:'创意种子扩写',strict:false,directive:'保留用户点名的题材、人物、装置和情绪承诺，其余空白允许主动创作和补齐。'};
+  }
+  function intentBlock(){ var p=inputPolicy(); return '【输入意图自动识别】\n当前梯度：'+p.label+'\n执行口径：'+p.directive+'\n多种输入冲突时，按“用户本轮明确要求 > 上传原稿/图片 > 详细描述 > 题材标签 > 系统默认”裁决，同层冲突取更细颗粒度。\n\n'; }
+  function imageBlock(){ if(!IMAGES.length)return ''; return '【用户上传图片】共 '+IMAGES.length+' 张：'+IMAGES.map(function(x){return x.name;}).join('、')+'。图片会以多模态内容随本消息传入。请先识别每张图的作用（人物/场景/道具/画风/构图参考），只锁定图中可见事实，不臆测不可见剧情。\n\n'; }
+  function userMessageContent(text){ if(!IMAGES.length)return text; var out=IMAGES.map(function(x){return {type:'image_url',image_url:{url:x.dataUrl}};}); out.push({type:'text',text:text}); return out; }
+  // 供 mkReq / resolveOne 取用的用户原稿块（已截断）
   function docBlock(){
     var t=docText(); if(!t) return '';
     var truncated = t.length>DOC_INJECT_CAP;
     if(truncated) t=t.slice(0,DOC_INJECT_CAP);
-    return '【用户上传原稿·第一性】以下是用户上传的原始文稿，是本次生成的最高权威输入。原则——用户写到哪个颗粒度，就以他写的为准、按他的颗粒度执行：\n'
-      + '· 凡文稿已给出的内容（大纲/分场/人物/场景/道具/台词/镜头/分支/抉择/结局等），一律原样采纳为定稿，禁止改写、替换、删减、"优化"或用你自己的创意顶掉；专有名词、台词原文、既定情节严格保留。\n'
-      + '· 你只做三件事：补齐文稿未写的空白层、把已有内容如实组织进下方要求的 JSON 结构、叠加节奏/PAD/结构校验层。缺失字段才由你创作，已有内容照搬。\n'
-      + '· 仅当文稿内部自相矛盾、或与规则书硬约束冲突且无法两全时，才做最小幅度调整，并在 consistency 与生成日志里写明改了什么、为什么。\n'
+    return '【用户上传原稿】以下是用户提供的原始文稿。文稿明确写出的事实、专有名词、人物、关系、台词、情节、分支和结局高于默认规则：\n'
+      + '· 原稿已给出的颗粒度必须保留，不用模板创意覆盖；未给出的层级才允许补齐。\n'
+      + '· 若系统识别为完整分场剧本，只做结构化和素材抽取；若只是梳概、人设或片段，则在保留已定内容的前提下补齐互动结构。\n'
+      + '· 只有文稿自身前后矛盾时才登记 consistency；文稿与默认生成规则冲突时以文稿为准，不为凑规则改素材。\n'
       + '· 文稿与下方「自由描述」冲突时，以更细颗粒度的一方为准。\n'
       + (truncated?'（注：文稿过长，此处为前 '+DOC_INJECT_CAP+' 字节选。）\n':'')
       + '──── 文稿正文开始 ────\n' + t + '\n──── 文稿正文结束 ────\n\n';
@@ -1223,11 +1240,10 @@ flowchart TD
     var T=lastT, E=lastE;
     var inst=extOn('script_inst'); // 剧本实例化规则：off＝只出结构骨架，JSON 不要 characters/scenes/props、节点不要 cast/script
     var advChk=extOn('advanced_check'); // 高级自检：off＝精简，只要 selfcheck JSON 字段
-    var faith=extOn('faithful_import'); // 忠实导入：以上传剧本原样为准，互动硬规则降为参考
     var nodeFloor=Math.max(8,E+3), nodeCap=Math.max(22,E*3+2); // 节点总数上限随结局数放大（E=10 时可到 ~32）
     var tags=pickedList();
     var brief=(document.getElementById('brief').value||'').trim();
-    var s=docBlock()
+    var s=intentBlock()+docBlock()+imageBlock()
       +'【输入】\n'
       +(brief?('自由描述：'+brief+'\n'):'')
       +'题材标签：'+(tags.length?tags.join(' ＋ '):'（未选）')+(tags.length>1?'（融合）':'')+(tags.length?'（以上为用户硬选标签，必须在 tags 里体现）':'')+'\n'
@@ -1264,12 +1280,7 @@ flowchart TD
       +'（短片按结局树、长片按情绪弧组织；beats 的 t＝分钟、V 和 D 都必须给、取 −1 到 1，beats 至少 5 拍且覆盖全程；flowEnter＝大概第几分钟玩家进入心流；choices 与 nodes 里的 choice 节点一一对应。）\n\n'
       +'【输出格式】分两段：\n第一段【生成日志】——严格按规则书第四部分“生成顺序”的六步，逐步写出你对本案例的具体决策（每步 3–6 行，写具体内容禁止套话）：\n第0步 输入自洽检验＋题材先验：先用容量公式反查输入是否自相矛盾（矛盾则写明真实意图与裁决、新参数）；再题材画像/是否需类型融合/视角/金手指及其限制/数值信封（时长·抉择数·结局数总数→先按题材定主结局集合、判断是否有中间大结局）/一句话定位四要素自检；\n第1步 立情绪脊：主干各拍的 PAD 坐标与拐点（哪里 D 负翻正、哪里 V 正翻负）、反差催化剂、观众已知/主角未知的反讽账；\n第2步 识别岔点：从脊上列出候选岔点清单，每个标注价值岔向与选项代价；\n第3步 铺分支拓扑：说明怎么剪裁岔点满足节奏数学（抉择数/三种结局按软区间分配/小结局位置）；\n第4步 填内容：关键节点的场景/人物建置/结局差异化要点，并对 2–3 个关键节点展示题材透镜过程（情节骨架→题材反差物→升级收口→钩子）；\n'+(advChk?'第5步 自检：对照规则书第五部分清单逐项报 ✓/✗，有 ✗ 必须回步修正后再输出。':'第5步 自检（精简）：内部逐项自检不要写过程，有 ✗ 先回步修正；修不了才把结果写进 JSON 的 selfcheck 字段（四组：题材/故事/节奏/剧本，每组 ✓ 或 ✗:一句原因）。')+'\n然后另起一行只写 ===JSON===，之后只输出上面规定的 JSON，不要再有其他文字。';
     if(tags.indexOf('抽象')>=0){ s+='\n\n【抽象说明】题材含"抽象"：请以 B站 / 抖音 当下最热门的抽象梗为素材来构建（梗迭代极快，一律取当前流行的，不要套用过时老梗）。'; }
-    if(faith){ s+='\n\n【忠实导入·总闸（最高优先级，覆盖上面所有互动硬规则）】上传原稿是已完成剧本，本次只做忠实还原，不再创作：\n'
-      +'· 结构照剧本原样：剧本有几处抉择就几处、几个结局就几个（线性剧本＝0 抉择、1 结局、节点顺连成一条链）；不得为满足"结局数='+E+'/抉择数档/每抉择2–4出口/空合流禁令/反俗套/力度谱/payoffs必填"而增删或改写任何情节、抉择、结局、翻盘拍。上面这些规则在本模式下一律降为参考。\n'
-      +'· 内容照剧本原样：每个分场的台词、动作、情节原样落进对应 node 的 script（inst 关时落 text），人物与场景据剧本抽取，不替换不"优化"、不补剧本没有的桥段。\n'
-      +'· 情绪照剧本真实走势：beats 按剧本实际情绪打点，即使不满足力度谱/标准线也如实标注，绝不改情绪去凑节奏。\n'
-      +'· consistency.conflict 只在剧本"自身"前后矛盾时才写；剧本与本工具互动规则不一致不算矛盾、不要裁决、不要上调时长结局。\n'
-      +'· 生成日志照常报节奏偏离（供人看），但严禁据此回改剧本。E='+E+' 仅作参考，实际结局数以剧本为准。'; }
+    if(inputPolicy().strict){ s+='\n\n【完整剧本自动还原·最高优先级】系统已识别输入为完整分场剧本：结构、台词、动作、情节、抉择和结局均照原稿；线性剧本就输出线性节点链。结局数、抉择数、2–4出口、反俗套、力度谱、payoffs 和空合流等生成规则全部降为分析提示，不得据此增删或改写原稿。beats 按真实走势打点；consistency 只登记原稿自身矛盾。'; }
     document.getElementById('req').value=s;
   }
   // ===== 题材与标签 + 相符度评分（题材相符度评测拓展）=====
@@ -1415,9 +1426,6 @@ flowchart TD
       desc:'允许生成“被动触发”的结局：不由任何抉择直接指向，而是因为玩家“选了/没选某些分支”而被动落入（如：未走任何感情线→孤身成长结局）。仅结构型条件，不含数值累加（数值系统另等拓展）。',
       inject:'\n\n【拓展：被动条件判断（已开启）】除主动抉择（choice→next）外，允许生成“被动触发”节点：由前置结构条件触发，而非某个 choice 的 next 指向。这类节点必须加字段 trigger:{"type":"passive","condition":"触发条件（只写结构型：选了/没选哪些分支、未走哪条线，如‘未走任何感情线且未选 1-3-B’）"}。禁止写数值累加型条件（如“好感度≤60”）——数值系统不属于本拓展。被动节点 kind 仍为 major/minor（计入结局总数），无 next；它不是孤儿，是有意的被动兼底结局。未开启本拓展时，所有结局必须由某条 next 指向（不得产生被动节点）。'
     },
-    { id:'faithful_import', name:'忠实导入模式', on:false,
-      desc:'为"上传完整剧本、只想把它盘成互动结构"设计（配合左侧「上传文稿」用）。开＝忠实还原、不再创作：模型不发明互动——剧本是线性就出线性节点链，有几处抉择、几个结局就照剧本原样；台词/分场/情节原样铺进分场剧本，人物与场景据剧本抽取，情绪坐标按剧本真实走势打点。校验器把"结局数=设定 / 抉择数档 / 每抉择2–4出口 / D轴翻盘 / 爽点登记 / 空合流 / 核心道具≥1"等互动硬规则降级为软提示——仍会画出、并告诉你偏离标准线多少，但绝不判失败、不触发自动重跑。适合还原已完成剧本；从零生成新互动时请关掉。',
-      inject:'\n\n【拓展：忠实导入模式（已开启，最高优先级）】本次输入含用户已完成的完整剧本，目标＝忠实还原、不是再创作。硬性要求：① 不发明互动、不为凑规则加抉择/结局/翻盘拍——剧本线性就输出线性节点链，有几处抉择、几个结局就照剧本原样，一个也不多不少；② 台词、分场、情节原样铺进 nodes 的 script 字段，人物/场景据剧本抽取，禁止替换或"优化"；③ beats 按剧本真实情绪走势打点，即使偏离力度谱/标准线也如实标注，绝不为满足节奏硬规则而改情绪；④ 与系统提示里"结局数=E / 每抉择2–4出口 / 反俗套装置 / 力度谱阈值 / payoffs必填 / 空合流禁令"等互动生成硬规则冲突时，一律以忠实还原为准——本模式下这些只作参考、不强制。生成日志里照常报节奏偏离，但不得据此改写剧本。' },
     { id:'genre_review', name:'题材相符度评测', on:false,
       desc:'开启后，「题材与标签」区的 5 个标签可逐个评相符度（符合/一般/不符）并写评语，这些评分会进入导出的评测表。关闭时仅展示题材标签，不评分、不进导出。题材校准是持续积累的，不参与数值版本回退。',
       inject:'' }
@@ -1555,10 +1563,10 @@ flowchart TD
   function validateData(d){
     var hard=[], soft=[];
     var inst=(typeof extOn==='function')&&extOn('script_inst'); // off＝骨架模式，跳过剧本/人物/场景/道具硬检查
-    var faith=(typeof extOn==='function')&&extOn('faithful_import'); // 忠实导入：互动类硬规则降为软提示，不判失败、不触发重跑
+    var sourceStrict=inputPolicy().strict; // 自动识别完整剧本：互动类硬规则降为软提示
     function chk(name,ok,detail){ hard.push({name:name,ok:!!ok,detail:detail||''}); }
-    // 忠实导入下，互动结构类检查降级为软提示（仍显示偏离，不判失败）
-    function chkI(name,ok,detail){ if(faith){ if(!ok) soft.push('忠实导入·仅提示｜'+name+(detail?('（'+detail+'）'):'')); } else { chk(name,ok,detail); } }
+    // 完整原稿还原时，互动结构类检查降级为软提示（仍显示偏离，不判失败）
+    function chkI(name,ok,detail){ if(sourceStrict){ if(!ok) soft.push('原稿还原·仅提示｜'+name+(detail?('（'+detail+'）'):'')); } else { chk(name,ok,detail); } }
     var ns=Array.isArray(d.nodes)?d.nodes:[];
     var byId={}; ns.forEach(function(n){ byId[n.id]=n; });
     var hasScript=ns.every(function(n){ return (n.script||n.text||'').length>=30; });
@@ -1815,6 +1823,7 @@ flowchart TD
       var payload={ from:r.title||'', time:r.time, genres:d.genres||null, tags:d.tags||null,
         characters: Array.isArray(d.characters)?d.characters:[],
         scenes: Array.isArray(d.scenes)?d.scenes:[],
+        referenceImages: (r.input&&Array.isArray(r.input.images))?r.input.images:[],
         nodes: ns.filter(function(n){ return n.kind!=='minor' || (n.script||n.text); }).map(function(n){
           return { id:n.id, node_title:n.node_title||'', loc:n.loc||'', time:n.time||'', cast:n.cast||'', kind:n.kind||'normal', script:(n.script||n.text||''),
             dramatic_core:n.dramatic_core||'', emotional_owner:n.emotional_owner||'', power_shift:n.power_shift||'', information_gap:n.information_gap||'', dialogue_intent:n.dialogue_intent||'',
@@ -1833,11 +1842,12 @@ flowchart TD
     }
     if(b.getAttribute('data-act')==='regen'){
       if(!r.input){ alert('这条是旧版记录，没存输入参数，无法再次生成。'); return; }
-      var hadDocs=r.input.docs&&r.input.docs.length;
-      if(!confirm('本操作会基于记录使用的描述和题材标签'+(hadDocs?('（含当时上传的 '+r.input.docs.length+' 份文稿，无需重新上传）'):'')+'重新生成，确定吗？')) return;
-      // 回填输入：描述 / 标签 / 时长与结局选择（含 AI 推荐）+ 上传文稿
+      var hadDocs=r.input.docs&&r.input.docs.length, hadImages=r.input.images&&r.input.images.length;
+      if(!confirm('本操作会基于记录使用的描述和题材标签'+(hadDocs?('（含 '+r.input.docs.length+' 份文稿'):'')+(hadImages?((hadDocs?' / ':'（含 ')+r.input.images.length+' 张图片'):'')+((hadDocs||hadImages)?'，无需重新上传）':'')+'重新生成，确定吗？')) return;
+      // 回填输入：描述 / 标签 / 时长与结局选择（含 AI 推荐）+ 上传文稿/图片
       document.getElementById('brief').value=r.input.brief||'';
       DOCS.length=0; (r.input.docs||[]).forEach(function(dd){ DOCS.push({name:dd.name,text:dd.text}); }); renderDocs();
+      IMAGES.length=0; (r.input.images||[]).forEach(function(im){ IMAGES.push({name:im.name,type:im.type||'image/webp',dataUrl:im.dataUrl}); }); renderDocs();
       Object.keys(picked).forEach(function(k){ delete picked[k]; });
       (r.input.tags||[]).forEach(function(t){ if(TAGS.indexOf(t)===-1) TAGS.push(t); picked[t]=true; });
       renderChips();
@@ -1875,7 +1885,8 @@ flowchart TD
           renderChips();
           if(r.input.dur){ document.getElementById('dur').value=r.input.dur; if(r.input.dur!=='ai') lastT=parseInt(r.input.dur,10)||10; }
           if(r.input.ends){ document.getElementById('ends').value=r.input.ends; if(r.input.ends!=='ai') lastE=parseInt(r.input.ends,10)||3; }
-          DOCS.length=0; (r.input.docs||[]).forEach(function(dd){ DOCS.push({name:dd.name,text:dd.text}); }); renderDocs();
+          DOCS.length=0; (r.input.docs||[]).forEach(function(dd){ DOCS.push({name:dd.name,text:dd.text}); });
+          IMAGES.length=0; (r.input.images||[]).forEach(function(im){ IMAGES.push({name:im.name,type:im.type||'image/webp',dataUrl:im.dataUrl}); }); renderDocs();
         }
         var m=r.params.match(/时长(\d+)分\/结局(\d+)/);
         if(m){ lastT=parseInt(m[1],10)||lastT; lastE=parseInt(m[2],10)||lastE; }
@@ -1888,19 +1899,6 @@ flowchart TD
       return;
     }
   });
-  // 执行卡查看弹窗
-  document.getElementById('opencard').addEventListener('click', function(){
-    var ec=applyAdv(applyInst(EXEC));
-    document.getElementById('cardbody').textContent=ec;
-    document.getElementById('cardlen').textContent=ec.length;
-    document.getElementById('cardtok').textContent='~'+Math.round(ec.length/1.6);
-    document.getElementById('cardlen').style.color=ec.length>4000?'#dc2626':'';
-    document.getElementById('cardmask').style.display='flex';
-  });
-  document.getElementById('cardclose').addEventListener('click', function(){ document.getElementById('cardmask').style.display='none'; });
-  document.getElementById('cardmask').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
-  document.getElementById('cardcopy').addEventListener('click', function(){ try{ navigator.clipboard.writeText(EXEC); this.textContent='已复制'; var b=this; setTimeout(function(){ b.textContent='复制'; },1200); }catch(e){} });
-
   document.getElementById('openhist').addEventListener('click', function(){ var calOn=(typeof extOn==='function'&&extOn('emotion_calib')); document.getElementById('histexport').style.display=calOn?'':'none'; document.getElementById('histversions').style.display=calOn?'':'none'; histRender(); document.getElementById('histmask').style.display='flex'; });
   document.getElementById('histclose').addEventListener('click', function(){ document.getElementById('histmask').style.display='none'; });
   document.getElementById('histmask').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
@@ -1984,9 +1982,9 @@ flowchart TD
     if(genBusy) return;
     genStopped=false;
     var box=document.getElementById('outbox');
-    var briefTxt=(document.getElementById('brief').value||'').trim(), tagsNow=pickedList(), hasDoc=docChars()>0;
-    if(!briefTxt && !tagsNow.length && !hasDoc){ alert('您没有输入任何想法、选择任何标签，也没有上传文稿。\n\n请在左侧“描述”里写点想法、选一个题材标签，或上传一份文稿。'); document.getElementById('brief').focus(); return; }
-    if(!skipConfirm && !briefTxt && !hasDoc && tagsNow.length){ if(!confirm('您没有输入任何故事灵感，我会根据您的题材标签（'+tagsNow.join('＋')+'）生成故事，确定吗？')){ document.getElementById('brief').focus(); return; } }
+    var briefTxt=(document.getElementById('brief').value||'').trim(), tagsNow=pickedList(), hasSource=docChars()>0||IMAGES.length>0;
+    if(!briefTxt && !tagsNow.length && !hasSource){ alert('您没有输入任何想法、选择任何标签，也没有上传素材。\n\n请写点想法、选一个题材标签，或上传文稿/图片。'); document.getElementById('brief').focus(); return; }
+    if(!skipConfirm && !briefTxt && !hasSource && tagsNow.length){ if(!confirm('您没有输入任何故事灵感，我会根据您的题材标签（'+tagsNow.join('＋')+'）生成故事，确定吗？')){ document.getElementById('brief').focus(); return; } }
     var genDurSel=document.getElementById('dur').value, genEndsSel=document.getElementById('ends').value;
     if(!backendReady && !isLocked()){ box.innerHTML='<div class="hint" style="color:#d97706">请先到左下角「生产后台」配置模型，或在下方使用浏览器直连方式。</div>'; document.getElementById('orbox').scrollIntoView({behavior:'smooth',block:'center'}); return; }
     var model=getModel();
@@ -2002,11 +2000,12 @@ flowchart TD
     if(genStopped){ progSet(100,'已停止'); logLine('⏹ 已手动停止。'); done(); return; }
     progSet(8,'参数就绪，调用模型…');
     logLine('▸ 参数｜时长 '+lastT+' 分，结局数 '+lastE+'，题材 '+(tags.length?tags.join('＋'):'（未选）')+'，引擎：'+engineOf(lastT).txt);
+    logLine('▸ 输入意图｜'+inputPolicy().label+'（自动识别，无需手动开关）');
     mkReq();
     var sys=buildSys();
     logLine('▸ 规则注入：执行卡，系统提示 '+sys.length+' 字符');
     var baseUser=document.getElementById('req').value;
-    var MARK='===JSON===', MAXTRY=extOn('faithful_import')?1:2; // 忠实导入不自动重跑（重跑=改写用户剧本）
+    var MARK='===JSON===', MAXTRY=inputPolicy().strict?1:2; // 完整原稿还原不自动重跑（避免改写用户剧本）
     var attempt=0;
 
     function runOnce(user){
@@ -2077,14 +2076,14 @@ flowchart TD
         histSave({ time:new Date().toLocaleString('zh-CN',{hour12:false}), title:storyTitle(d), logline:(d.logline||''), synopsis:(d.synopsis||''), runId:d.__runId,
           params:'时长'+lastT+'分/结局'+lastE+'/'+(tags.length?tags.join('＋'):'无标签')+'/'+model+'/执行卡',
           pass:va.pass, attempts:attempt, log:logEl.textContent, analysisText:analysisText, json:c,
-          input:{ brief:briefTxt, tags:tagsNow.slice(), dur:genDurSel, ends:genEndsSel, docs:(DOCS.length?DOCS.map(function(dd){return {name:dd.name,text:dd.text};}):null) } });
+          input:{ brief:briefTxt, tags:tagsNow.slice(), dur:genDurSel, ends:genEndsSel, docs:(DOCS.length?DOCS.map(function(dd){return {name:dd.name,text:dd.text};}):null), images:(IMAGES.length?IMAGES.map(function(im){return {name:im.name,type:im.type,dataUrl:im.dataUrl};}):null), intent:inputPolicy().label } });
         rememberBackendTask(null);
         logLine('▸ 已存入「📜 记录」（右上角），最多保留 100 条。');
         done();
       }
       function fail(msg){ progSet(100,'失败 ✗'); document.getElementById('progbar').style.background='#ef4444'; logLine('✗ '+msg); box.innerHTML='<div class="hint" style="color:#d97706">'+esc(msg)+'</div>'; done(); }
       genAbort=new AbortController();
-      var requestBody={ model:model, temperature:0.8, max_tokens:20000, stream:true, usage:{include:true}, messages:[ {role:'system',content:sys}, {role:'user',content:user} ] };
+      var requestBody={ model:model, temperature:0.8, max_tokens:20000, stream:true, usage:{include:true}, messages:[ {role:'system',content:sys}, {role:'user',content:userMessageContent(user)} ] };
       if(backendReady){ activeBackendTask={project_id:backendProjectId,run_id:backendRunBase+'-a'+attempt}; requestBody._task={project_id:activeBackendTask.project_id,run_id:activeBackendTask.run_id,title:briefTxt||tagsNow.join('＋')||'未命名项目',phase:'outline-generation',attempt:attempt}; rememberBackendTask(activeBackendTask); }
       fetch('/api/llm/chat/stream',{
         method:'POST',
@@ -2135,22 +2134,6 @@ flowchart TD
   var lastData=null;
   function esc2(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function mdInline(s){ var p=esc2(s).split('**'),o=''; for(var k=0;k<p.length;k++){ o+=(k%2===1)?('<strong>'+p[k]+'</strong>'):p[k]; } return o; }
-  document.getElementById('openrules').addEventListener('click', function(){
-    document.getElementById('rulesbody').innerHTML=mdToHtml(applyInst(RB));
-    document.getElementById('rulesmask').style.display='flex';
-  });
-  document.getElementById('rulesdl').addEventListener('click', function(){
-    var md='# 互动影视游戏设计规则书\n\n'+applyInst(RB).trim()+'\n';
-    var blob=new Blob([md],{type:'text/markdown;charset=utf-8'});
-    var url=URL.createObjectURL(blob);
-    var d=new Date(), pad=function(n){return(n<10?'0':'')+n;};
-    var stamp=d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());
-    var a=document.createElement('a'); a.href=url; a.download='互动影视游戏设计规则书_'+stamp+'.md';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(function(){ URL.revokeObjectURL(url); },1000);
-  });
-  document.getElementById('rulesclose').addEventListener('click', function(){ document.getElementById('rulesmask').style.display='none'; });
-  document.getElementById('rulesmask').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
   function mdToHtml(md){
     var L=md.split('\n'), out=[], i=0;
     while(i<L.length){ var ln=L[i], t=ln.trim();
@@ -2560,7 +2543,7 @@ flowchart TD
   function orCall(userText, done){
     if(!backendReady) return done(new Error('backend-not-ready'));
     var model=getModel(); if(!model) return done(new Error('nomodel'));
-    var sys=SYS, body={model:model,temperature:0.5,messages:[{role:'system',content:sys},{role:'user',content:userText}]};
+    var sys=SYS, body={model:model,temperature:0.5,messages:[{role:'system',content:sys},{role:'user',content:userMessageContent(userText)}]};
     fetch('/api/llm/chat',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
      .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,status:r.status,j:j&&j.data?j.data:j}; }); })
      .then(function(res){ if(!res.ok) throw new Error((res.j&&res.j.error&&res.j.error.message)||('HTTP '+res.status)); done(null,(res.j.choices&&res.j.choices[0]&&res.j.choices[0].message&&res.j.choices[0].message.content)||''); })
@@ -2635,7 +2618,7 @@ flowchart TD
         recKey:key(r), title:r.title||'', time:r.time||'', input:r.input||null, data:d, json:r.json||'' };
     }
 
-    // 编剧台生成记录也自动入包；推送动作统一在分镜台的“推送到仓库”。
+    // 编剧台生成记录也自动入包；Git 提交/推送统一在生产后台管理。
     var saveTimer=0, saving=false, queued=false;
     function needsSave(r){ var had=led()[key(r)]; return !had || had!==('script@'+(r.time||'')); }
     function autoSave(){

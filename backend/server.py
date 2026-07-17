@@ -76,7 +76,7 @@ def load_settings() -> dict[str, Any]:
         "base_url": data.get("base_url", "https://openrouter.ai/api/v1"),
         "model": data.get("model", ""),
         "validator_model": data.get("validator_model", ""),
-        "image_model": data.get("image_model", "google/gemini-2.5-flash-image"),
+        "image_model": data.get("image_model") or "google/gemini-2.5-flash-image",
         "api_key": data.get("api_key", ""),
         "config_locked": bool(data.get("config_locked", False)),
         "auto_commit": bool(data.get("auto_commit", True)),
@@ -386,7 +386,13 @@ class Handler(SimpleHTTPRequestHandler):
             raise RuntimeError("请先在生产后台配置 OpenRouter API Key")
         request_body = dict(payload)
         use_image_model = bool(request_body.pop("_use_image_model", False))
-        request_body.setdefault("model", settings["image_model"] if use_image_model else settings["model"])
+        use_validator_model = bool(request_body.pop("_use_validator_model", False))
+        selected_model = settings["model"]
+        if use_image_model:
+            selected_model = settings["image_model"]
+        elif use_validator_model:
+            selected_model = settings["validator_model"] or settings["model"]
+        request_body.setdefault("model", selected_model)
         if not request_body.get("model"):
             raise RuntimeError("请先配置默认生成模型")
         request_body["stream"] = stream
