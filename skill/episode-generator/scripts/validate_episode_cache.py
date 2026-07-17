@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import xml.etree.ElementTree as ET
 from collections import defaultdict, deque
 from pathlib import Path
 
@@ -230,6 +231,45 @@ def validate_branch_audit(
         errors.append("branch-audit.md 审计结论未通过")
 
 
+def validate_flowchart_svg(
+    text: str,
+    nodes: dict[str, dict[str, object]],
+    errors: list[str],
+) -> None:
+    try:
+        ET.fromstring(text)
+    except ET.ParseError as exc:
+        errors.append(f"episode-flowchart.svg 不是有效 XML：{exc}")
+        return
+
+    expected_nodes = set(nodes)
+    actual_nodes = set(re.findall(r'data-node-id="(episode-\d{3})"', text))
+    if actual_nodes != expected_nodes:
+        errors.append(
+            "静态流程图节点覆盖不一致："
+            f"缺少 {sorted(expected_nodes - actual_nodes)}，"
+            f"多出 {sorted(actual_nodes - expected_nodes)}"
+        )
+
+    expected_edges = {
+        (node_id, target)
+        for node_id, node in nodes.items()
+        for target in node["successors"]
+    }
+    actual_edges = set(
+        re.findall(
+            r'data-edge-from="(episode-\d{3})"\s+data-edge-to="(episode-\d{3})"',
+            text,
+        )
+    )
+    if actual_edges != expected_edges:
+        errors.append(
+            "静态流程图边覆盖不一致："
+            f"缺少 {sorted(expected_edges - actual_edges)}，"
+            f"多出 {sorted(actual_edges - expected_edges)}"
+        )
+
+
 def validate_episode_files(
     directory: Path,
     nodes: dict[str, dict[str, object]],
@@ -314,16 +354,16 @@ def validate(
     topology = read_text(cache / "topology.md", errors)
     nodes = parse_topology(topology, errors) if topology else {}
     manifest = read_text(cache / "manifest.md", [])
-    if re.search(r"episode-cache-v0\.1\.(?:8|9)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:8|9|10)\b", manifest):
         branch_audit = read_text(cache / "branch-audit.md", errors)
         if branch_audit:
             validate_branch_audit(branch_audit, nodes, errors)
-    if "episode-cache-v0.1.9" in manifest:
+    if re.search(r"episode-cache-v0\.1\.(?:9|10)\b", manifest):
         for heading in ("对白校验状态", "因果连续性校验状态"):
             if not section(manifest, heading):
                 errors.append(f"manifest.md 缺少有效栏目：{heading}")
         if "## 对白校验线程" in manifest or "## 因果连续性校验线程" in manifest:
-            errors.append("v0.1.9 manifest 不得保存校验线程或 threadId")
+            errors.append("v0.1.9 及以上 manifest 不得保存校验线程或 threadId")
     count_match = re.search(r"^## 节点总数\s*\n+\s*(\d+)\s*$", manifest, re.MULTILINE)
     if not count_match:
         errors.append("manifest.md 缺少有效的节点总数")
@@ -335,7 +375,15 @@ def validate(
     validate_episode_files(cache / "episodes", nodes, errors, public=False, limits=limits, stats=stats)
 
     if require_public:
-        read_text(canvas_root / "episode-structure.md", errors)
+        structure = read_text(canvas_root / "episode-structure.md", errors)
+        if "episode-cache-v0.1.10" in manifest:
+            if "episode-flowchart.svg" not in structure:
+                errors.append("episode-structure.md 未引用静态流程图")
+            if "<details>" not in structure or "```mermaid" not in structure:
+                errors.append("episode-structure.md 未折叠保留 Mermaid 可编辑源码")
+            flowchart = read_text(canvas_root / "episode-flowchart.svg", errors)
+            if flowchart:
+                validate_flowchart_svg(flowchart, nodes, errors)
         script = read_text(canvas_root / "episode-script.md", errors)
         expected_numbers = {int(node_id.rsplit("-", 1)[1]) for node_id in nodes}
         actual_numbers = {int(number) for number in PUBLIC_HEADER.findall(script)}

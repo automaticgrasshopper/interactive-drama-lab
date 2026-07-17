@@ -26,6 +26,7 @@
 
 ```text
 {canvas-root}/episode-structure.md
+{canvas-root}/episode-flowchart.svg
 {canvas-root}/episodes/episode-NNN.md
 {canvas-root}/episode-script.md
 ```
@@ -65,7 +66,7 @@
 ## 最近更新
 ```
 
-缓存版本使用 `episode-cache-v0.1.9`。
+缓存版本使用 `episode-cache-v0.1.10`。
 
 ### global.md
 
@@ -283,13 +284,15 @@ PASS
 
 `episode-structure.md` 由冻结的 `topology.md` 和生产卡投射生成，并在后续完整剧本阶段持续保留。
 
+`episode-structure.md` 开头先写 `![分集流程图](./episode-flowchart.svg)`；随后将 Mermaid 源码放入 `<details>` 折叠区，供继续编辑。运行 `python3 {skill-root}/scripts/render_episode_flowchart.py {canvas-root} --title "《游戏标题》分集流程图"`，从同一 `topology.md` 生成静态 SVG。不得复制 Mermaid 源码充当视觉图，也不得依赖宿主页面运行 Mermaid JavaScript。
+
 每个隐藏分集缓存通过校验并冻结后，投射为公开的 `episodes/episode-NNN.md`。公开逐集文件只包含标题、梗概、完整剧本、玩家选择和结局正文，不包含生产卡、校验或下游参数。
 
 `episode-script.md` 由全部公开逐集文件按编号组装。组装阶段不重新生成全文，也不反向覆盖公开逐集文件。
 
 使用 `python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --mode record-draft` 登记已完成的真实初稿；双语义校验和修订后使用 `--mode finalize` 写入真实定稿、度量记录并组装汇总稿。该脚本只执行机械投射，不生成或改写剧情内容。
 
-只有 `index.html` 中存在明确且唯一的自动内容标记区时，才用 `edit_file` 同步公开内容；没有标记区时保留结构文件、公开逐集文件和汇总稿，不改动页面结构。
+新建 `index.html` 时必须包含唯一的 `EPISODE_GENERATOR_START` / `EPISODE_GENERATOR_END` 自动内容标记区，其中用 `<img src="./episode-flowchart.svg" alt="分集流程图">` 直接显示静态图，并链接 `episode-structure.md` 与 `episode-script.md`。已有页面只有在标记区唯一时才用 `edit_file` 同步公开内容；没有标记区时不重构页面，但仍生成 SVG 并在 `episode-structure.md` 中引用。
 
 ## 八、单集修改与依赖传播
 
