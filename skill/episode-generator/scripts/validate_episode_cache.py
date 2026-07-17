@@ -11,6 +11,13 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict, deque
 from pathlib import Path
 
+from cache_paths import cache_root_for
+from validate_storyboard_fields import (
+    build_storyboard_fields,
+    list_section,
+    validate_fields,
+)
+
 
 NODE_HEADER = re.compile(r"^##\s+(episode-\d{3})\s*｜\s*(.+?)\s*$", re.MULTILINE)
 EPISODE_REF = re.compile(r"episode-\d{3}")
@@ -20,6 +27,20 @@ DEFAULT_MIN_VISIBLE_CHARS = 850
 DEFAULT_MAX_VISIBLE_CHARS = 1300
 DEFAULT_MIN_ACTION_BEATS = 16
 DEFAULT_MAX_ACTION_BEATS = 24
+CAUSAL_AUDIT_FIELDS = (
+    "上游事实",
+    "地点与权限",
+    "事件与反应链",
+    "物件与状态",
+    "后续进入条件",
+)
+DIALOGUE_AUDIT_FIELDS = (
+    "话茬与当下目的",
+    "人物声音",
+    "设定发布与承重句",
+    "朴素中文",
+)
+INPUT_FIELDS = ("游戏企划", "角色描述", "场景描述", "道具描述")
 
 
 def read_text(path: Path, errors: list[str]) -> str:
@@ -30,6 +51,17 @@ def read_text(path: Path, errors: list[str]) -> str:
     if not text.strip():
         errors.append(f"文件为空：{path}")
     return text
+
+
+def validate_input_contract(text: str, errors: list[str]) -> None:
+    headings = tuple(re.findall(r"^##\s+(.+?)\s*$", text, re.MULTILINE))
+    if headings != INPUT_FIELDS:
+        errors.append("input.md 必须且只能按顺序包含四个一级输入字段")
+        return
+    for heading in INPUT_FIELDS:
+        content = section(text, heading)
+        if len(re.sub(r"\s+", "", content)) < 30:
+            errors.append(f"input.md 的{heading}只有名称/标识或缺少实际描述")
 
 
 def field(block: str, name: str, errors: list[str], node_id: str) -> str:
@@ -271,70 +303,6 @@ def validate_flowchart_svg(
         )
 
 
-def validate_index_html(
-    text: str,
-    canvas_root: Path,
-    nodes: dict[str, dict[str, object]],
-    errors: list[str],
-) -> None:
-    if '<meta name="generator" content="episode-generator">' not in text:
-        errors.append("index.html 缺少 episode-generator 管理标记")
-    for anchor_id, label in (
-        ("game-flowchart", "游戏流程图"),
-        ("full-script", "游戏完整剧本"),
-    ):
-        if not re.search(rf'id=["\']{re.escape(anchor_id)}["\']', text):
-            errors.append(f"index.html 缺少页面区块：{anchor_id}")
-        if label not in text:
-            errors.append(f"index.html 缺少栏目文字：{label}")
-    if "逐集剧本" not in text:
-        errors.append("index.html 缺少栏目文字：逐集剧本")
-    if not re.search(
-        r'<img\b[^>]*src=["\']\./episode-flowchart\.svg["\'][^>]*>',
-        text,
-        re.IGNORECASE,
-    ):
-        errors.append("index.html 未直接预览 episode-flowchart.svg")
-    if re.search(r'href\s*=\s*["\'][^"\']*\.md(?:[#?][^"\']*)?["\']', text, re.IGNORECASE):
-        errors.append("index.html 不得以 Markdown 文件链接代替正文展示")
-
-    expected = set(nodes)
-    articles = re.findall(
-        r'<article\b[^>]*\bid=["\'](episode-\d{3})["\'][^>]*'
-        r'\bdata-episode-id=["\'](episode-\d{3})["\'][^>]*'
-        r'\bdata-source-sha256=["\']([0-9a-f]{64})["\']',
-        text,
-        re.IGNORECASE,
-    )
-    article_ids = {article_id for article_id, data_id, _ in articles if article_id == data_id}
-    if len(articles) != len(article_ids):
-        errors.append("index.html 存在重复分集正文或分集 id/data-episode-id 不一致")
-    if article_ids != expected:
-        errors.append(
-            "index.html 逐集正文覆盖不一致："
-            f"缺少 {sorted(expected - article_ids)}，多出 {sorted(article_ids - expected)}"
-        )
-
-    nav_ids = set(re.findall(r'href=["\']#(episode-\d{3})["\']', text))
-    jump_ids = set(re.findall(r'data-jump=["\'](episode-\d{3})["\']', text))
-    if nav_ids != expected or jump_ids != expected:
-        errors.append(
-            "index.html 逐集页内跳转覆盖不一致："
-            f"href缺少 {sorted(expected - nav_ids)}，"
-            f"data-jump缺少 {sorted(expected - jump_ids)}"
-        )
-
-    source_hashes = {article_id: digest for article_id, _, digest in articles}
-    for node_id in sorted(expected):
-        path = canvas_root / "episodes" / f"{node_id}.md"
-        if not path.is_file() or node_id not in source_hashes:
-            continue
-        source = path.read_text(encoding="utf-8").strip()
-        actual = hashlib.sha256(source.encode("utf-8")).hexdigest()
-        if source_hashes[node_id] != actual:
-            errors.append(f"index.html 展示的 {node_id} 不是当前逐集源文件版本")
-
-
 def validate_episode_files(
     directory: Path,
     nodes: dict[str, dict[str, object]],
@@ -342,6 +310,7 @@ def validate_episode_files(
     public: bool,
     limits: tuple[int, int, int, int],
     stats: dict[str, tuple[int, int]],
+    allow_pending: bool = False,
 ) -> None:
     expected = set(nodes)
     actual = {path.stem for path in directory.glob("episode-*.md")} if directory.is_dir() else set()
@@ -381,9 +350,11 @@ def validate_episode_files(
                 "## 校验状态",
             ):
                 if heading not in text:
-                    errors.append(f"隐藏分集缺少栏目 {heading}：{path}")
+                    errors.append(f"私有分集缓存缺少栏目 {heading}：{path}")
             for heading in ("当前集初稿", "当前集定稿"):
                 content = section(text, heading)
+                if allow_pending and (not content or content == "PENDING"):
+                    continue
                 if len(re.sub(r"\s+", "", content)) < 300 or PLACEHOLDER.search(content):
                     errors.append(f"{node_id} 的{heading}不是实际完整正文")
             for heading in ("生产卡", "单集梗概"):
@@ -391,10 +362,133 @@ def validate_episode_files(
                 if not content or re.search(r"见公开|与.*公开.*一致|同公开", content):
                     errors.append(f"{node_id} 的{heading}仍含公开稿引用占位")
             metric_record = section(text, "度量记录")
+            if allow_pending and "判定：PENDING" in metric_record:
+                continue
             if not re.search(r"可见字符数：\s*\d+", metric_record):
                 errors.append(f"{node_id} 度量记录缺少可见字符数")
             if not re.search(r"动作段数：\s*\d+", metric_record):
                 errors.append(f"{node_id} 度量记录缺少动作段数")
+
+
+def audit_field(block: str, name: str) -> str:
+    match = re.search(rf"^-\s*{re.escape(name)}：\s*(.*?)\s*$", block, re.MULTILINE)
+    return match.group(1).strip() if match else ""
+
+
+def validate_audit_block(
+    block: str,
+    heading: str,
+    fields: tuple[str, ...],
+    expected_digest: str,
+    node_id: str,
+    errors: list[str],
+) -> None:
+    if not block:
+        errors.append(f"{node_id} 缺少{heading}")
+        return
+    if audit_field(block, "状态") != "PASS":
+        errors.append(f"{node_id} 的{heading}未 PASS")
+    if audit_field(block, "正文 SHA-256") != expected_digest:
+        errors.append(f"{node_id} 的{heading}正文指纹与当前定稿不一致")
+    for name in fields:
+        value = audit_field(block, name)
+        match = re.fullmatch(r"PASS[｜|]\s*(\S.*)", value)
+        if not match or len(re.sub(r"\s+", "", match.group(1))) < 8:
+            errors.append(f"{node_id} 的{heading}缺少具体依据：{name}")
+    if audit_field(block, "未解决问题") != "无":
+        errors.append(f"{node_id} 的{heading}仍有未解决问题")
+
+
+def validate_v12_episode_audits(
+    canvas_root: Path,
+    cache_root: Path,
+    topology_text: str,
+    nodes: dict[str, dict[str, object]],
+    known_assets: dict[str, set[str]],
+    errors: list[str],
+    require_public: bool,
+    limits: tuple[int, int, int, int],
+) -> None:
+    for node_id in sorted(nodes):
+        cache_path = cache_root / "episodes" / f"{node_id}.md"
+        if not cache_path.is_file():
+            continue
+        cache_text = cache_path.read_text(encoding="utf-8")
+        for heading, asset_kind in (
+            ("关联角色", "角色"),
+            ("关联场景", "场景"),
+            ("关联道具", "道具"),
+        ):
+            try:
+                values = list_section(cache_text, heading)
+            except ValueError as exc:
+                errors.append(f"{node_id}：{exc}")
+                continue
+            unknown = set(values) - known_assets[asset_kind]
+            if unknown:
+                errors.append(f"{node_id} 的{heading}含非上游正式名称：{sorted(unknown)}")
+
+        for heading in ("因果复核记录", "对白复核记录"):
+            if f"## {heading}" not in cache_text:
+                errors.append(f"{node_id} 缺少栏目：{heading}")
+
+        status = section(cache_text, "校验状态")
+        frozen = "冻结状态：已冻结" in status
+        if not frozen:
+            if require_public:
+                errors.append(f"{node_id} 尚未通过真实语义复核并冻结")
+            continue
+
+        final_text = section(cache_text, "当前集定稿").strip()
+        if len(re.sub(r"\s+", "", final_text)) < 300:
+            errors.append(f"{node_id} 当前集定稿不是实际完整正文")
+            continue
+        expected_digest = hashlib.sha256(final_text.encode("utf-8")).hexdigest()
+        validate_audit_block(
+            section(cache_text, "因果复核记录"),
+            "因果复核记录",
+            CAUSAL_AUDIT_FIELDS,
+            expected_digest,
+            node_id,
+            errors,
+        )
+
+        try:
+            validate_fields(build_storyboard_fields(cache_text, topology_text))
+        except ValueError as exc:
+            errors.append(f"{node_id} 无法按九个固定字段直接交给故事版：{exc}")
+
+        validate_audit_block(
+            section(cache_text, "对白复核记录"),
+            "对白复核记录",
+            DIALOGUE_AUDIT_FIELDS,
+            expected_digest,
+            node_id,
+            errors,
+        )
+
+        visible_chars, action_beats = episode_metrics(final_text)
+        metric_record = section(cache_text, "度量记录")
+        char_match = re.search(r"可见字符数：\s*(\d+)", metric_record)
+        beat_match = re.search(r"动作段数：\s*(\d+)", metric_record)
+        if not char_match or int(char_match.group(1)) != visible_chars:
+            errors.append(f"{node_id} 度量记录的可见字符数与当前定稿不一致")
+        if not beat_match or int(beat_match.group(1)) != action_beats:
+            errors.append(f"{node_id} 度量记录的动作段数与当前定稿不一致")
+        passed = (
+            limits[0] <= visible_chars <= limits[1]
+            and limits[2] <= action_beats <= limits[3]
+        )
+        if ("判定：PASS" in metric_record) != passed:
+            errors.append(f"{node_id} 度量记录判定与重新计算结果不一致")
+
+        public_path = canvas_root / "episodes" / f"{node_id}.md"
+        if require_public:
+            if not public_path.is_file():
+                continue
+            public_text = public_path.read_text(encoding="utf-8").strip()
+            if public_text != final_text:
+                errors.append(f"{node_id} 公开逐集文件与通过复核的当前集定稿不一致")
 
 
 def validate(
@@ -404,9 +498,10 @@ def validate(
 ) -> tuple[list[str], dict[str, tuple[int, int]]]:
     errors: list[str] = []
     stats: dict[str, tuple[int, int]] = {}
-    cache = canvas_root / ".episode-cache"
+    cache = cache_root_for(canvas_root)
     required = (
         "manifest.md",
+        "input.md",
         "global.md",
         "characters.md",
         "props.md",
@@ -418,17 +513,40 @@ def validate(
 
     topology = read_text(cache / "topology.md", errors)
     nodes = parse_topology(topology, errors) if topology else {}
+    input_text = read_text(cache / "input.md", errors)
+    validate_input_contract(input_text, errors)
+    known_assets = {
+        "角色": set(re.findall(r"^角色名称:\s*(\S.*?)\s*$", input_text, re.MULTILINE)),
+        "场景": set(re.findall(r"^场景名称:\s*(\S.*?)\s*$", input_text, re.MULTILINE)),
+        "道具": set(re.findall(r"^道具名称:\s*(\S.*?)\s*$", input_text, re.MULTILINE)),
+    }
+    for kind, values in known_assets.items():
+        if not values:
+            errors.append(f"input.md 未解析到正式{kind}名称")
     manifest = read_text(cache / "manifest.md", [])
-    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11)\b", manifest):
+    is_v12 = "episode-cache-v0.1.12" in manifest
+    if is_v12:
+        declared_canvas = section(manifest, "公开 Canvas").strip()
+        if not declared_canvas:
+            errors.append("manifest.md 缺少有效栏目：公开 Canvas")
+        elif Path(declared_canvas).expanduser().resolve() != canvas_root.resolve():
+            errors.append("manifest.md 的公开 Canvas 与当前校验项目不一致")
+    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12)\b", manifest):
         branch_audit = read_text(cache / "branch-audit.md", errors)
         if branch_audit:
             validate_branch_audit(branch_audit, nodes, errors)
-    if re.search(r"episode-cache-v0\.1\.(?:9|10|11)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12)\b", manifest):
         for heading in ("对白校验状态", "因果连续性校验状态"):
             if not section(manifest, heading):
                 errors.append(f"manifest.md 缺少有效栏目：{heading}")
-        if "## 对白校验线程" in manifest or "## 因果连续性校验线程" in manifest:
-            errors.append("v0.1.9 及以上 manifest 不得保存校验线程或 threadId")
+        runtime_markers = re.compile(
+            r"(?:threadId|child\s+thread|子线程\s*(?:ID|编号)|agentId|subagent)",
+            re.IGNORECASE,
+        )
+        for name in ("manifest.md", "validation.md"):
+            state_text = read_text(cache / name, [])
+            if runtime_markers.search(state_text):
+                errors.append(f"{name} 不得保存子线程、子 Agent 或运行时标识")
     count_match = re.search(r"^## 节点总数\s*\n+\s*(\d+)\s*$", manifest, re.MULTILINE)
     if not count_match:
         errors.append("manifest.md 缺少有效的节点总数")
@@ -437,11 +555,30 @@ def validate(
             f"manifest 节点总数为 {count_match.group(1)}，topology 实际为 {len(nodes)}"
         )
     validate_graph(nodes, errors)
-    validate_episode_files(cache / "episodes", nodes, errors, public=False, limits=limits, stats=stats)
+    validate_episode_files(
+        cache / "episodes",
+        nodes,
+        errors,
+        public=False,
+        limits=limits,
+        stats=stats,
+        allow_pending=is_v12,
+    )
+    if is_v12:
+        validate_v12_episode_audits(
+            canvas_root,
+            cache,
+            topology,
+            nodes,
+            known_assets,
+            errors,
+            require_public,
+            limits,
+        )
 
     if require_public:
         structure = read_text(canvas_root / "episode-structure.md", errors)
-        if re.search(r"episode-cache-v0\.1\.(?:10|11)\b", manifest):
+        if re.search(r"episode-cache-v0\.1\.(?:10|11|12)\b", manifest):
             if "episode-flowchart.svg" not in structure:
                 errors.append("episode-structure.md 未引用静态流程图")
             if "<details>" not in structure or "```mermaid" not in structure:
@@ -449,10 +586,6 @@ def validate(
             flowchart = read_text(canvas_root / "episode-flowchart.svg", errors)
             if flowchart:
                 validate_flowchart_svg(flowchart, nodes, errors)
-        if "episode-cache-v0.1.11" in manifest:
-            index_html = read_text(canvas_root / "index.html", errors)
-            if index_html:
-                validate_index_html(index_html, canvas_root, nodes, errors)
         script = read_text(canvas_root / "episode-script.md", errors)
         expected_numbers = {int(node_id.rsplit("-", 1)[1]) for node_id in nodes}
         actual_numbers = {int(number) for number in PUBLIC_HEADER.findall(script)}

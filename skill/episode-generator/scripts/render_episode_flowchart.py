@@ -10,6 +10,8 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from pathlib import Path
 
+from cache_paths import cache_root_for
+
 
 NODE_HEADER = re.compile(r"^##\s+(episode-\d{3})\s*｜\s*(.+?)\s*$", re.MULTILINE)
 EPISODE_REF = re.compile(r"episode-\d{3}")
@@ -202,7 +204,7 @@ def main() -> int:
     args = parser.parse_args()
 
     root = args.canvas_root.resolve()
-    topology_path = root / ".episode-cache" / "topology.md"
+    topology_path = cache_root_for(root) / "topology.md"
     nodes = parse_topology(topology_path.read_text(encoding="utf-8"))
     title = args.title or f"{root.name} 分集流程图"
     output = args.output.resolve() if args.output else root / "episode-flowchart.svg"

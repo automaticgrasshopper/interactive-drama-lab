@@ -1,13 +1,13 @@
-# 画布缓存与滚动窗口协议
+# Canvas 公开层、私有缓存与滚动窗口协议
 
-规定 Canvas 文件、隐藏缓存、滚动窗口和校验回写方法。运行环境须开放 `ls / glob / read_file / write_file / edit_file / grep / exec`。
+规定 Canvas 公开文件、Canvas 外私有缓存、滚动窗口和校验回写方法。运行环境须开放 `ls / glob / read_file / write_file / edit_file / grep / exec`。文件工具没有隐藏标记，隔离依靠目录边界完成。
 
 ## 一、项目定位
 
 1. 用 `ls` 查看当前 workspace。
-2. 用 `glob` 查找 `**/canvas/*/index.html`。
-3. 唯一候选先核对页面标题或 manifest；内容不匹配时视为无候选。
-4. 多个候选依次核对游戏标题 slug、页面标题、任务关联文件和 manifest，只保留内容匹配项；最近更新时间只用于匹配项之间的排序。
+2. 用 `glob` 查找 `**/.episode-generator-cache/*/manifest.md`，以缓存目录名作为 slug，并确认对应 `canvas/{slug}/episode-structure.md` 存在或已预留。
+3. 唯一候选先核对 manifest 项目标题；内容不匹配时视为无候选。
+4. 多个候选依次核对游戏标题 slug、任务关联文件、结构稿标题和 manifest，只保留内容匹配项；最近更新时间只用于匹配项之间的排序。
 5. 没有匹配候选时，在当前 workspace 的 `canvas/` 下创建游戏标题 slug 目录和基础文件。
 6. 将全部候选、核验结果和最终路径写入 manifest；不询问路径选择。
 
@@ -17,7 +17,7 @@
 
 ```text
 {canvas-root}/episodes/
-{canvas-root}/.episode-cache/episodes/
+{workspace-root}/.episode-generator-cache/{slug}/episodes/
 ```
 
 使用 `write_file` 创建不存在的公开逐集文件和缓存文件；已有文件必须先 `read_file`，再使用 `edit_file`。
@@ -34,18 +34,39 @@
 缓存文件：
 
 ```text
-{canvas-root}/.episode-cache/manifest.md
-{canvas-root}/.episode-cache/global.md
-{canvas-root}/.episode-cache/branch-audit.md
-{canvas-root}/.episode-cache/topology.md
-{canvas-root}/.episode-cache/characters.md
-{canvas-root}/.episode-cache/props.md
-{canvas-root}/.episode-cache/hooks.md
-{canvas-root}/.episode-cache/validation.md
-{canvas-root}/.episode-cache/episodes/episode-NNN.md
+{workspace-root}/.episode-generator-cache/{slug}/manifest.md
+{workspace-root}/.episode-generator-cache/{slug}/input.md
+{workspace-root}/.episode-generator-cache/{slug}/global.md
+{workspace-root}/.episode-generator-cache/{slug}/branch-audit.md
+{workspace-root}/.episode-generator-cache/{slug}/topology.md
+{workspace-root}/.episode-generator-cache/{slug}/characters.md
+{workspace-root}/.episode-generator-cache/{slug}/props.md
+{workspace-root}/.episode-generator-cache/{slug}/hooks.md
+{workspace-root}/.episode-generator-cache/{slug}/validation.md
+{workspace-root}/.episode-generator-cache/{slug}/episodes/episode-NNN.md
 ```
 
+Canvas 项目中只允许保留 `episode-flowchart.svg`、`episode-structure.md`、`episode-script.md` 和 `episodes/`。不得在 Canvas 内创建缓存目录、审计文件、生产卡、运行日志或 HTML 首页。
+
 ## 三、缓存格式
+
+### input.md
+
+四项输入通过门禁后才创建项目缓存，并按以下顺序原样保存：
+
+```text
+# 正式输入
+## 游戏企划
+实际描述
+## 角色描述
+实际描述
+## 场景描述
+实际描述
+## 道具描述
+实际描述
+```
+
+二级标题必须且只能是以上四项；每项必须含实际描述，不能只有名称或标识。交给故事版的九个输出字段不得写入本文件。
 
 ### manifest.md
 
@@ -55,6 +76,7 @@
 # 项目清单
 
 ## 项目
+## 公开 Canvas
 ## 缓存版本
 ## 当前阶段
 ## 节点总数
@@ -66,7 +88,7 @@
 ## 最近更新
 ```
 
-缓存版本使用 `episode-cache-v0.1.11`。
+缓存版本使用 `episode-cache-v0.1.12`。
 
 ### global.md
 
@@ -194,9 +216,69 @@ PASS
 ## 当前集初稿
 ## 当前集定稿
 ## 度量记录
+## 因果复核记录
+## 对白复核记录
 ## 真实结尾状态
-## 下游自然参数
+## 关联角色
+## 关联场景
+## 关联道具
 ## 校验状态
+```
+
+三个资产栏目必须使用逐项 Markdown 列表，值只能是上游 `角色名称`、`场景名称`、`道具名称` 的原文。资产状态写入人物、物件或真实结尾缓存，不得混入资产名称。
+
+### 故事版字段映射
+
+以下是 `episode-generator` 输出字段与故事版/分镜输入字段的一一映射，不是 `episode-generator` 的输入，也不是内部缓存栏目要求。每一集直接传递以下九个一级字段；多集重复传递同一字段组，不创建 JSON、交接文件、路径或额外的 `分集列表` 字段：
+
+```text
+分集编号
+分集标题
+分集剧本
+  单集梗概
+  完整剧本
+剧本分析
+  本集冲突
+  前置节点编号列表
+  后续节点编号列表
+关联角色
+关联场景
+关联道具
+是否结局
+互动节点
+  是否为分支节点
+  是否有选择问题
+  选择问题
+  选项列表
+    选项编号
+    选项文字
+    目标分集编号
+  默认下一分集编号
+```
+
+不允许新增、删除、改名、换序或自定义嵌套字段。脚本只在内存中验证候选字段；正文、拓扑或资产字段变化后，旧校验立即失效，受影响分集复核重新通过后才能直接向故事版传参。
+
+两轮复核记录固定使用以下格式。`正文 SHA-256` 必须是当前候选定稿去除首尾空白后的 SHA-256；每个 PASS 后必须有针对本集的具体依据，不能只写 PASS 或套用通用句。
+
+```text
+## 因果复核记录
+- 状态：PASS/FAIL/PENDING
+- 正文 SHA-256：64位十六进制/PENDING
+- 上游事实：PASS｜具体依据
+- 地点与权限：PASS｜具体依据
+- 事件与反应链：PASS｜具体依据
+- 物件与状态：PASS｜具体依据
+- 后续进入条件：PASS｜具体依据
+- 未解决问题：无/具体问题
+
+## 对白复核记录
+- 状态：PASS/FAIL/PENDING
+- 正文 SHA-256：64位十六进制/PENDING
+- 话茬与当下目的：PASS｜具体依据
+- 人物声音：PASS｜具体依据
+- 设定发布与承重句：PASS｜具体依据
+- 朴素中文：PASS｜具体依据
+- 未解决问题：无/具体问题
 ```
 
 生产卡在核心关系或个人创伤会被触发时，写明相关人物当前最怕失去或最想挽回的对象、尚未解决的关系心结，以及核心事件对他的意义。普通过场不强制填写情感升级。
@@ -261,7 +343,7 @@ PASS
 6. 更新 `validation.md` 和 `manifest.md`。
 7. 冻结当前集，再继续下一节点。
 
-`当前集初稿`和`当前集定稿`必须包含实际剧本文本，不得写“已完成”“见公开稿”“与公开稿一致”等替代语。`度量记录`固定记录公开可见字符数、动作段数、门槛和判定；机械门禁、中文对白与因果连续性三项均通过后才允许冻结。
+`当前集初稿`和`当前集定稿`必须包含实际剧本文本，不得写“已完成”“见公开稿”“与公开稿一致”等替代语。`度量记录`固定记录公开可见字符数、动作段数、门槛和判定；机械门禁、中文对白与因果连续性三项均通过后才允许冻结。复核记录的正文指纹与当前候选不一致时自动失效，必须重新执行两轮复核。
 
 ## 六、确定性校验
 
@@ -276,8 +358,9 @@ PASS
 - 分集缓存文件数量与节点数一致；
 - Canvas 完整稿节点数与拓扑一致。
 - 每集可见字符数和动作段数达到 manifest 中记录的项目门槛；未记录时使用 850—1300 个去空白字符、16—24 个动作段。
-- 隐藏缓存保存真实初稿、真实定稿和度量记录，不接受事后引用公开稿的占位文字。
-- v0.1.11 阅读页包含流程图预览、完整逐集正文和有效页内跳转；逐集节点覆盖与拓扑一致，源文件 SHA-256 与当前公开逐集文件一致，且没有指向 Markdown 正文的导航链接。
+- 私有缓存保存真实初稿、真实定稿和度量记录，不接受事后引用公开稿的占位文字。
+- v0.1.12 每集因果与对白复核记录栏目完整、具体依据非空、未解决问题为“无”，且两项正文 SHA-256 均等于当前定稿与公开逐集文件的 SHA-256。
+- `度量记录`中的数字和判定必须与当前定稿重新计算结果一致；定稿脚本不得硬编码 PASS。
 
 关键物件来源、钩子回收、中文对白和叙事连续性继续执行语义检查，不由确定性脚本替代。
 
@@ -287,26 +370,26 @@ PASS
 
 `episode-structure.md` 开头先写 `![分集流程图](./episode-flowchart.svg)`；随后将 Mermaid 源码放入 `<details>` 折叠区，供继续编辑。运行 `python3 {skill-root}/scripts/render_episode_flowchart.py {canvas-root} --title "《游戏标题》分集流程图"`，从同一 `topology.md` 生成静态 SVG。不得复制 Mermaid 源码充当视觉图，也不得依赖宿主页面运行 Mermaid JavaScript。
 
-每个隐藏分集缓存通过校验并冻结后，投射为公开的 `episodes/episode-NNN.md`。公开逐集文件只包含标题、梗概、完整剧本、玩家选择和结局正文，不包含生产卡、校验或下游参数。
+每个私有分集缓存通过校验并冻结后，投射为公开的 `episodes/episode-NNN.md`。公开逐集文件只包含标题、梗概、完整剧本、玩家选择和结局正文，不包含生产卡、校验或下游参数。
 
 `episode-script.md` 由全部公开逐集文件按编号组装。组装阶段不重新生成全文，也不反向覆盖公开逐集文件。
 
-使用 `python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --mode record-draft` 登记已完成的真实初稿；双语义校验和修订后使用 `--mode finalize` 写入真实定稿、度量记录并组装汇总稿。该脚本只执行机械投射，不生成或改写剧情内容。
+将真实完整初稿直接写入私有分集的 `当前集初稿`，再使用 `python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --mode record-draft [--episodes episode-001,...]` 核验初稿并把定稿与两轮复核状态重置为 PENDING。主 Agent 把修订候选写入 `当前集定稿`，完成因果复核与对白复核后，将两项带当前定稿 SHA-256 的具体记录写入缓存，再使用 `--mode finalize` 冻结、投射公开逐集文件并组装汇总稿。
 
-完成 SVG、公开逐集文件与汇总稿后，运行 `python3 {skill-root}/scripts/build_episode_index.py {canvas-root}` 确定性构建 `index.html`。阅读页固定包含：带边框的项目标题区、`游戏流程图` 内嵌 SVG 预览、`游戏完整剧本` 区、`逐集剧本` 导航与全部逐集正文。导航必须使用可工作的页内锚点，不得以 Markdown 文件链接代替正文展示。
+`finalize` 必须重新计算机械门禁并核对两轮复核记录；任何一项缺失、FAIL、PENDING、依据为空、遗留问题非“无”或正文 SHA-256 不一致时立即失败，不写定稿、不写语义 PASS、不组装汇总稿。该脚本只执行门禁与机械投射，不生成、摘要或改写剧情内容。
 
-构建器只读取冻结产物并进行转义和排版，不生成、摘要或改写剧情，因此不增加内容生成 token。它为每集写入源文件 SHA-256，供最终校验确认页面正文与逐集源文件来自同一版本。已有 `episode-generator` 管理标记的页面可直接重建；非本 Skill 管理的页面默认拒绝覆盖，只有用户明确授权时才使用 `--force`。
+公开交付只使用 `episode-flowchart.svg`、`episode-structure.md`、`episodes/episode-NNN.md` 和 `episode-script.md`。不生成或维护 `index.html`，避免平台画布与本地 HTML 形成两套展示源。
 
 ## 八、单集修改与依赖传播
 
 收到单集修改请求时，以公开逐集文件为编辑入口，不从汇总稿中提取。
 
-1. 读取公开逐集文件、对应隐藏缓存、所有直接前置真实结尾和直接后续进入条件。
-2. 修改后运行中文对白和连续性双校验。
-3. 若真实结尾与缓存边界未变，只更新该集公开文件、隐藏缓存和汇总稿。
+1. 读取公开逐集文件、对应私有缓存、所有直接前置真实结尾和直接后续进入条件。
+2. 修改公开候选后，把同一正文写入私有缓存的 `当前集定稿`，旧复核指纹立即失效；随后运行中文对白和连续性双校验。
+3. 若真实结尾与缓存边界未变，双校验通过后使用 `finalize --episodes episode-NNN` 从缓存定稿投射该集公开文件并更新汇总稿。
 4. 若人物关系、已知信息、物件状态、钩子、选择或结局条件变化，使用 `grep` 和拓扑找出引用该状态的节点，解冻受影响节点及其直接后续。
 5. 重新校验受影响范围后，更新对应公开逐集文件和汇总稿。
-6. 未受影响的公开逐集文件保持冻结，不重新生成。
+6. 未受影响的公开逐集文件保持冻结，不重新生成；修改后的正文指纹变化会使旧复核记录失效，必须重跑两轮再 finalize。
 
 ## 九、恢复
 
