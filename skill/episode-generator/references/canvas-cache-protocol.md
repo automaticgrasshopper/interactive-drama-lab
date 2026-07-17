@@ -58,7 +58,6 @@
 ## 缓存版本
 ## 当前阶段
 ## 节点总数
-## 单集门槛
 ## 执行组计划
 ## 当前执行组
 ## 已完成分集
@@ -67,14 +66,7 @@
 ## 最近更新
 ```
 
-缓存版本使用 `episode-cache-v0.1.12`。`单集门槛`固定记录：
-
-```text
-- 可见字符数：850—1300
-- 动作段数：16—24
-```
-
-上游明确指定其它单集体量时写入换算后的项目上下界；确定性脚本直接读取这里，不另用默认值覆盖。
+缓存版本使用 `episode-cache-v0.1.11`。
 
 ### global.md
 
@@ -285,8 +277,7 @@ PASS
 - Canvas 完整稿节点数与拓扑一致。
 - 每集可见字符数和动作段数达到 manifest 中记录的项目门槛；未记录时使用 850—1300 个去空白字符、16—24 个动作段。
 - 隐藏缓存保存真实初稿、真实定稿和度量记录，不接受事后引用公开稿的占位文字。
-- v0.1.12 最终校验确认隐藏定稿与公开逐集逐字一致，缓存度量与公开稿重新计算结果一致，两项语义校验和冻结状态均已明确通过。
-- 阅读页包含流程图预览、完整逐集正文和有效页内跳转；逐集节点覆盖与拓扑一致，源文件 SHA-256 与当前公开逐集文件一致，且没有指向 Markdown 正文的导航链接。
+- v0.1.11 阅读页包含流程图预览、完整逐集正文和有效页内跳转；逐集节点覆盖与拓扑一致，源文件 SHA-256 与当前公开逐集文件一致，且没有指向 Markdown 正文的导航链接。
 
 关键物件来源、钩子回收、中文对白和叙事连续性继续执行语义检查，不由确定性脚本替代。
 
@@ -296,23 +287,11 @@ PASS
 
 `episode-structure.md` 开头先写 `![分集流程图](./episode-flowchart.svg)`；随后将 Mermaid 源码放入 `<details>` 折叠区，供继续编辑。运行 `python3 {skill-root}/scripts/render_episode_flowchart.py {canvas-root} --title "《游戏标题》分集流程图"`，从同一 `topology.md` 生成静态 SVG。不得复制 Mermaid 源码充当视觉图，也不得依赖宿主页面运行 Mermaid JavaScript。
 
-每个隐藏分集缓存通过校验并冻结后，投射为公开的 `episodes/episode-NNN.md`。公开逐集文件只包含标题、梗概、完整剧本、玩家选择和结局正文，不包含生产卡、校验或下游参数。不得先写公开稿再反向登记初稿或定稿。
+每个隐藏分集缓存通过校验并冻结后，投射为公开的 `episodes/episode-NNN.md`。公开逐集文件只包含标题、梗概、完整剧本、玩家选择和结局正文，不包含生产卡、校验或下游参数。
 
 `episode-script.md` 由全部公开逐集文件按编号组装。组装阶段不重新生成全文，也不反向覆盖公开逐集文件。
 
-把真实初稿写入隐藏分集的`当前集初稿`后，运行：
-
-```text
-python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --mode check-draft --episode episode-NNN
-```
-
-脚本读取 manifest 项目门槛并记录真实度量，同时把旧语义状态重置为待校验、冻结状态重置为未冻结，防止修改后的正文沿用旧 PASS；失败时不得进入语义校验。双语义校验和修订完成后，把真实定稿写入`当前集定稿`，由主 Agent 在`校验状态`分别记录中文对白与因果连续性 PASS，再运行：
-
-```text
-python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --mode finalize --episode episode-NNN
-```
-
-脚本不生成语义 PASS，只在两项状态已存在且定稿重新通过机械门禁时冻结并投射这一集。全部分集投射后运行`--mode assemble`组装汇总稿。任何模式都不生成或改写剧情内容。
+使用 `python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --mode record-draft` 登记已完成的真实初稿；双语义校验和修订后使用 `--mode finalize` 写入真实定稿、度量记录并组装汇总稿。该脚本只执行机械投射，不生成或改写剧情内容。
 
 完成 SVG、公开逐集文件与汇总稿后，运行 `python3 {skill-root}/scripts/build_episode_index.py {canvas-root}` 确定性构建 `index.html`。阅读页固定包含：带边框的项目标题区、`游戏流程图` 内嵌 SVG 预览、`游戏完整剧本` 区、`逐集剧本` 导航与全部逐集正文。导航必须使用可工作的页内锚点，不得以 Markdown 文件链接代替正文展示。
 
