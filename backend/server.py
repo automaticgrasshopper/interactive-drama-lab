@@ -24,12 +24,15 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from backend.run_store import RunStore
+
 ROOT = Path(__file__).resolve().parent.parent
 H5_DIR = ROOT / "h5"
 DATAPACKS_DIR = H5_DIR / "datapacks"
 DATA_DIR = ROOT / "data" / "projects"
 RUNTIME_DIR = ROOT / ".runtime"
 SETTINGS_PATH = RUNTIME_DIR / "settings.json"
+RUNS = RunStore(DATA_DIR)
 
 
 def run_git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -194,6 +197,23 @@ class Handler(SimpleHTTPRequestHandler):
                     runs.append({"id": item.stem, "title": record.get("title", ""), "time": record.get("time", ""), "pass": record.get("pass"), "attempts": record.get("attempts")})
             self._json(200, {"ok": True, "runs": runs})
             return
+        if path == "/api/tasks":
+            query = urllib.parse.parse_qs(parsed.query)
+            project_id = safe_name((query.get("project_id") or [""])[0], "")
+            if not project_id:
+                self._json(400, {"ok": False, "error": "缺少 project_id"})
+                return
+            self._json(200, {"ok": True, "tasks": RUNS.list_tasks(project_id)})
+            return
+        task_match = re.fullmatch(r"/api/tasks/([^/]+)/([^/]+)", path)
+        if task_match:
+            project_id, run_id = map(urllib.parse.unquote, task_match.groups())
+            record = RUNS.read(project_id, run_id)
+            if record is None:
+                self._json(404, {"ok": False, "error": "任务不存在"})
+            else:
+                self._json(200, {"ok": True, "task": record})
+            return
         if path == "/api/git/status":
             self._json(200, {"ok": True, "git": git_status()})
             return
@@ -230,6 +250,10 @@ class Handler(SimpleHTTPRequestHandler):
                 self.create_or_update_project()
             elif path == "/api/runs":
                 self.save_run()
+            elif re.fullmatch(r"/api/tasks/[^/]+/[^/]+/stop", path):
+                _, _, _, project_id, run_id, _ = path.split("/")
+                RUNS.request_stop(urllib.parse.unquote(project_id), urllib.parse.unquote(run_id))
+                self._json(200, {"ok": True, "status": "stopping"})
             elif path == "/api/git/commit":
                 self.git_commit("projects")
             elif path == "/api/git/push":
@@ -374,28 +398,61 @@ class Handler(SimpleHTTPRequestHandler):
 
     def llm_chat_stream(self) -> None:
         payload = self._payload()
+        task_meta = payload.pop("_task", {}) if isinstance(payload.get("_task"), dict) else {}
+        project_id = safe_name(task_meta.get("project_id"), "")
+        run_id = safe_name(task_meta.get("run_id"), "")
+        phase = str(task_meta.get("phase") or "generation")
+        title = str(task_meta.get("title") or project_id or "生成任务")
+        if project_id and run_id:
+            RUNS.create(project_id, run_id, title, phase, {"model": payload.get("model", ""), "message_count": len(payload.get("messages", []))})
         req = self._openrouter_request(payload, stream=True)
         try:
             response = urllib.request.urlopen(req, timeout=300)
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
+            if project_id and run_id:
+                RUNS.update(project_id, run_id, status="failed", error=f"{exc.code} {detail}")
             raise RuntimeError(f"OpenRouter 请求失败：{exc.code} {detail}") from exc
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
         self._cors()
         self.end_headers()
+        received = 0
+        response_text = ""
+        usage: Any = None
         try:
             while True:
-                chunk = response.read(4096)
-                if not chunk:
+                if project_id and run_id and RUNS.should_stop(project_id, run_id):
+                    RUNS.update(project_id, run_id, status="stopped", progress=min(99, received // 120))
                     break
-                self.wfile.write(chunk)
+                line = response.readline()
+                if not line:
+                    break
+                self.wfile.write(line)
                 self.wfile.flush()
+                decoded = line.decode("utf-8", errors="replace").strip()
+                if decoded.startswith("data:"):
+                    raw = decoded[5:].strip()
+                    if raw and raw != "[DONE]":
+                        try:
+                            event = json.loads(raw)
+                            delta = event.get("choices", [{}])[0].get("delta", {}).get("content") or ""
+                            response_text += delta
+                            received += len(delta)
+                            if event.get("usage"):
+                                usage = event["usage"]
+                            if project_id and run_id and delta:
+                                RUNS.update(project_id, run_id, response_text=response_text, usage=usage, progress=min(95, max(1, received // 120)))
+                        except (json.JSONDecodeError, IndexError, TypeError):
+                            pass
         except (BrokenPipeError, ConnectionResetError):
-            pass
+            if project_id and run_id:
+                RUNS.update(project_id, run_id, status="disconnected", response_text=response_text, usage=usage)
         finally:
             response.close()
+        if project_id and run_id and not RUNS.should_stop(project_id, run_id):
+            RUNS.update(project_id, run_id, status="completed", progress=100, response_text=response_text, usage=usage)
 
     def log_message(self, _format: str, *args: Any) -> None:
         return

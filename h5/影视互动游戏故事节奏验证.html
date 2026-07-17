@@ -2002,7 +2002,8 @@ flowchart TD
   });
 
   // ===== 一键生成：完整链条（流式逻辑链日志 → JSON → 校验 → 渲染各页签）=====
-  var genBusy=false, genAbort=null, genStopped=false;
+  var genBusy=false, genAbort=null, genStopped=false, activeBackendTask=null;
+  function taskStamp(){ return new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14)+'-'+Math.random().toString(36).slice(2,7); }
   function genAll(skipConfirm){
     if(genBusy) return;
     genStopped=false;
@@ -2013,6 +2014,7 @@ flowchart TD
     var genDurSel=document.getElementById('dur').value, genEndsSel=document.getElementById('ends').value;
     if(!backendReady && !isLocked()){ box.innerHTML='<div class="hint" style="color:#d97706">请先到左下角「生产后台」配置模型，或在下方使用浏览器直连方式。</div>'; document.getElementById('orbox').scrollIntoView({behavior:'smooth',block:'center'}); return; }
     var key=(document.getElementById('orkey').value||'').trim(), model=backendReady?(backendSettings.model||getModel()):getModel();
+    var backendProjectId=projectSlug(briefTxt||tagsNow.join('-')||'未命名项目'), backendRunBase=taskStamp();
     genBusy=true;
     var btn=document.getElementById('gen'), old=btn.textContent; btn.textContent='生成中…'; btn.disabled=true;
     document.getElementById('stopgen').style.display='inline-block';
@@ -2106,6 +2108,7 @@ flowchart TD
       function fail(msg){ progSet(100,'失败 ✗'); document.getElementById('progbar').style.background='#ef4444'; logLine('✗ '+msg); box.innerHTML='<div class="hint" style="color:#d97706">'+esc(msg)+'</div>'; done(); }
       genAbort=new AbortController();
       var requestBody={ model:model, temperature:0.8, max_tokens:20000, stream:true, usage:{include:true}, messages:[ {role:'system',content:sys}, {role:'user',content:user} ] };
+      if(backendReady){ activeBackendTask={project_id:backendProjectId,run_id:backendRunBase+'-a'+attempt}; requestBody._task={project_id:activeBackendTask.project_id,run_id:activeBackendTask.run_id,title:briefTxt||tagsNow.join('＋')||'未命名项目',phase:'outline-generation'}; }
       fetch(backendReady?'/api/llm/chat/stream':'https://openrouter.ai/api/v1/chat/completions',{
         method:'POST',
         signal:genAbort.signal,
@@ -2130,12 +2133,12 @@ flowchart TD
         fail('调用失败：'+e.message+(backendReady?'（检查生产后台的 Key、模型与网络）':'（检查 Key / 模型 slug / 网络；若被 CORS 拦，点"连不上？"让 kian 代发）'));
       });
     }
-    function done(){ genBusy=false; genAbort=null; document.getElementById('stopgen').style.display='none'; btn.textContent=old; btn.disabled=false; setTimeout(function(){ document.getElementById('progbar').style.background='linear-gradient(90deg,#3b82f6,#7c3aed)'; },1500); }
+    function done(){ genBusy=false; genAbort=null; activeBackendTask=null; document.getElementById('stopgen').style.display='none'; btn.textContent=old; btn.disabled=false; setTimeout(function(){ document.getElementById('progbar').style.background='linear-gradient(90deg,#3b82f6,#7c3aed)'; },1500); }
     runOnce(baseUser);
     });
   }
   document.getElementById('gen').addEventListener('click', function(){ genAll(false); });
-  document.getElementById('stopgen').addEventListener('click', function(){ if(!genBusy) return; genStopped=true; document.getElementById('stopgen').style.display='none'; try{ if(genAbort) genAbort.abort(); }catch(e){} });
+  document.getElementById('stopgen').addEventListener('click', function(){ if(!genBusy) return; genStopped=true; document.getElementById('stopgen').style.display='none'; if(backendReady&&activeBackendTask){ fetch('/api/tasks/'+encodeURIComponent(activeBackendTask.project_id)+'/'+encodeURIComponent(activeBackendTask.run_id)+'/stop',{method:'POST'}).catch(function(){}); } try{ if(genAbort) genAbort.abort(); }catch(e){} });
 
   // ===== “连不上？”弹窗：让 kian 代发这段请求 =====
   function openCC(){
