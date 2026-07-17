@@ -66,7 +66,7 @@
 ## 最近更新
 ```
 
-缓存版本使用 `episode-cache-v0.1.10`。
+缓存版本使用 `episode-cache-v0.1.11`。
 
 ### global.md
 
@@ -277,6 +277,7 @@ PASS
 - Canvas 完整稿节点数与拓扑一致。
 - 每集可见字符数和动作段数达到 manifest 中记录的项目门槛；未记录时使用 850—1300 个去空白字符、16—24 个动作段。
 - 隐藏缓存保存真实初稿、真实定稿和度量记录，不接受事后引用公开稿的占位文字。
+- v0.1.11 阅读页包含流程图预览、完整逐集正文和有效页内跳转；逐集节点覆盖与拓扑一致，源文件 SHA-256 与当前公开逐集文件一致，且没有指向 Markdown 正文的导航链接。
 
 关键物件来源、钩子回收、中文对白和叙事连续性继续执行语义检查，不由确定性脚本替代。
 
@@ -292,7 +293,9 @@ PASS
 
 使用 `python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --mode record-draft` 登记已完成的真实初稿；双语义校验和修订后使用 `--mode finalize` 写入真实定稿、度量记录并组装汇总稿。该脚本只执行机械投射，不生成或改写剧情内容。
 
-新建 `index.html` 时必须包含唯一的 `EPISODE_GENERATOR_START` / `EPISODE_GENERATOR_END` 自动内容标记区，其中用 `<img src="./episode-flowchart.svg" alt="分集流程图">` 直接显示静态图，并链接 `episode-structure.md` 与 `episode-script.md`。已有页面只有在标记区唯一时才用 `edit_file` 同步公开内容；没有标记区时不重构页面，但仍生成 SVG 并在 `episode-structure.md` 中引用。
+完成 SVG、公开逐集文件与汇总稿后，运行 `python3 {skill-root}/scripts/build_episode_index.py {canvas-root}` 确定性构建 `index.html`。阅读页固定包含：带边框的项目标题区、`游戏流程图` 内嵌 SVG 预览、`游戏完整剧本` 区、`逐集剧本` 导航与全部逐集正文。导航必须使用可工作的页内锚点，不得以 Markdown 文件链接代替正文展示。
+
+构建器只读取冻结产物并进行转义和排版，不生成、摘要或改写剧情，因此不增加内容生成 token。它为每集写入源文件 SHA-256，供最终校验确认页面正文与逐集源文件来自同一版本。已有 `episode-generator` 管理标记的页面可直接重建；非本 Skill 管理的页面默认拒绝覆盖，只有用户明确授权时才使用 `--force`。
 
 ## 八、单集修改与依赖传播
 

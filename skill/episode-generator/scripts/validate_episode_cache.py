@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -270,6 +271,70 @@ def validate_flowchart_svg(
         )
 
 
+def validate_index_html(
+    text: str,
+    canvas_root: Path,
+    nodes: dict[str, dict[str, object]],
+    errors: list[str],
+) -> None:
+    if '<meta name="generator" content="episode-generator">' not in text:
+        errors.append("index.html 缺少 episode-generator 管理标记")
+    for anchor_id, label in (
+        ("game-flowchart", "游戏流程图"),
+        ("full-script", "游戏完整剧本"),
+    ):
+        if not re.search(rf'id=["\']{re.escape(anchor_id)}["\']', text):
+            errors.append(f"index.html 缺少页面区块：{anchor_id}")
+        if label not in text:
+            errors.append(f"index.html 缺少栏目文字：{label}")
+    if "逐集剧本" not in text:
+        errors.append("index.html 缺少栏目文字：逐集剧本")
+    if not re.search(
+        r'<img\b[^>]*src=["\']\./episode-flowchart\.svg["\'][^>]*>',
+        text,
+        re.IGNORECASE,
+    ):
+        errors.append("index.html 未直接预览 episode-flowchart.svg")
+    if re.search(r'href\s*=\s*["\'][^"\']*\.md(?:[#?][^"\']*)?["\']', text, re.IGNORECASE):
+        errors.append("index.html 不得以 Markdown 文件链接代替正文展示")
+
+    expected = set(nodes)
+    articles = re.findall(
+        r'<article\b[^>]*\bid=["\'](episode-\d{3})["\'][^>]*'
+        r'\bdata-episode-id=["\'](episode-\d{3})["\'][^>]*'
+        r'\bdata-source-sha256=["\']([0-9a-f]{64})["\']',
+        text,
+        re.IGNORECASE,
+    )
+    article_ids = {article_id for article_id, data_id, _ in articles if article_id == data_id}
+    if len(articles) != len(article_ids):
+        errors.append("index.html 存在重复分集正文或分集 id/data-episode-id 不一致")
+    if article_ids != expected:
+        errors.append(
+            "index.html 逐集正文覆盖不一致："
+            f"缺少 {sorted(expected - article_ids)}，多出 {sorted(article_ids - expected)}"
+        )
+
+    nav_ids = set(re.findall(r'href=["\']#(episode-\d{3})["\']', text))
+    jump_ids = set(re.findall(r'data-jump=["\'](episode-\d{3})["\']', text))
+    if nav_ids != expected or jump_ids != expected:
+        errors.append(
+            "index.html 逐集页内跳转覆盖不一致："
+            f"href缺少 {sorted(expected - nav_ids)}，"
+            f"data-jump缺少 {sorted(expected - jump_ids)}"
+        )
+
+    source_hashes = {article_id: digest for article_id, _, digest in articles}
+    for node_id in sorted(expected):
+        path = canvas_root / "episodes" / f"{node_id}.md"
+        if not path.is_file() or node_id not in source_hashes:
+            continue
+        source = path.read_text(encoding="utf-8").strip()
+        actual = hashlib.sha256(source.encode("utf-8")).hexdigest()
+        if source_hashes[node_id] != actual:
+            errors.append(f"index.html 展示的 {node_id} 不是当前逐集源文件版本")
+
+
 def validate_episode_files(
     directory: Path,
     nodes: dict[str, dict[str, object]],
@@ -354,11 +419,11 @@ def validate(
     topology = read_text(cache / "topology.md", errors)
     nodes = parse_topology(topology, errors) if topology else {}
     manifest = read_text(cache / "manifest.md", [])
-    if re.search(r"episode-cache-v0\.1\.(?:8|9|10)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11)\b", manifest):
         branch_audit = read_text(cache / "branch-audit.md", errors)
         if branch_audit:
             validate_branch_audit(branch_audit, nodes, errors)
-    if re.search(r"episode-cache-v0\.1\.(?:9|10)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:9|10|11)\b", manifest):
         for heading in ("对白校验状态", "因果连续性校验状态"):
             if not section(manifest, heading):
                 errors.append(f"manifest.md 缺少有效栏目：{heading}")
@@ -376,7 +441,7 @@ def validate(
 
     if require_public:
         structure = read_text(canvas_root / "episode-structure.md", errors)
-        if "episode-cache-v0.1.10" in manifest:
+        if re.search(r"episode-cache-v0\.1\.(?:10|11)\b", manifest):
             if "episode-flowchart.svg" not in structure:
                 errors.append("episode-structure.md 未引用静态流程图")
             if "<details>" not in structure or "```mermaid" not in structure:
@@ -384,6 +449,10 @@ def validate(
             flowchart = read_text(canvas_root / "episode-flowchart.svg", errors)
             if flowchart:
                 validate_flowchart_svg(flowchart, nodes, errors)
+        if "episode-cache-v0.1.11" in manifest:
+            index_html = read_text(canvas_root / "index.html", errors)
+            if index_html:
+                validate_index_html(index_html, canvas_root, nodes, errors)
         script = read_text(canvas_root / "episode-script.md", errors)
         expected_numbers = {int(node_id.rsplit("-", 1)[1]) for node_id in nodes}
         actual_numbers = {int(number) for number in PUBLIC_HEADER.findall(script)}
