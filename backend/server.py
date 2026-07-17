@@ -76,7 +76,9 @@ def load_settings() -> dict[str, Any]:
         "base_url": data.get("base_url", "https://openrouter.ai/api/v1"),
         "model": data.get("model", ""),
         "validator_model": data.get("validator_model", ""),
+        "image_model": data.get("image_model", "google/gemini-2.5-flash-image"),
         "api_key": data.get("api_key", ""),
+        "config_locked": bool(data.get("config_locked", False)),
         "auto_commit": bool(data.get("auto_commit", True)),
         "auto_push": bool(data.get("auto_push", False)),
     }
@@ -89,7 +91,9 @@ def public_settings() -> dict[str, Any]:
         "base_url": data["base_url"],
         "model": data["model"],
         "validator_model": data["validator_model"],
+        "image_model": data["image_model"],
         "api_key_configured": bool(data["api_key"]),
+        "config_locked": data["config_locked"],
         "auto_commit": data["auto_commit"],
         "auto_push": data["auto_push"],
     }
@@ -227,13 +231,21 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             payload = self._payload()
             current = load_settings()
-            for key in ("provider", "base_url", "model", "validator_model", "auto_commit", "auto_push"):
+            if current["config_locked"] and not payload.get("unlock"):
+                raise RuntimeError("生产后台配置已锁定，请先解锁")
+            if payload.get("unlock"):
+                current["config_locked"] = False
+            for key in ("provider", "base_url", "model", "validator_model", "image_model", "auto_commit", "auto_push"):
                 if key in payload:
                     current[key] = payload[key]
             if payload.get("api_key"):
                 current["api_key"] = str(payload["api_key"]).strip()
             if payload.get("clear_api_key"):
                 current["api_key"] = ""
+            if payload.get("lock"):
+                if not current["api_key"] or not current["model"]:
+                    raise RuntimeError("锁定前必须配置 API Key 和生成模型")
+                current["config_locked"] = True
             atomic_json(SETTINGS_PATH, current)
             self._json(200, {"ok": True, "settings": public_settings()})
         except Exception as exc:  # noqa: BLE001
@@ -365,13 +377,16 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _openrouter_request(self, payload: dict[str, Any], stream: bool) -> urllib.request.Request:
         settings = load_settings()
+        if not settings["config_locked"]:
+            raise RuntimeError("生产后台配置尚未锁定")
         if settings["provider"] != "openrouter":
             raise RuntimeError("当前仅启用 OpenRouter provider")
         api_key = settings["api_key"]
         if not api_key:
             raise RuntimeError("请先在生产后台配置 OpenRouter API Key")
         request_body = dict(payload)
-        request_body.setdefault("model", settings["model"])
+        use_image_model = bool(request_body.pop("_use_image_model", False))
+        request_body.setdefault("model", settings["image_model"] if use_image_model else settings["model"])
         if not request_body.get("model"):
             raise RuntimeError("请先配置默认生成模型")
         request_body["stream"] = stream

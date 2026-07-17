@@ -254,41 +254,19 @@
     </div>
   </div>
 
-  <!-- ============ 对接模型：请求 + 输出（大纲 / 情绪节拍表） ============ -->
+  <!-- ============ 统一模型连接 + 输出（大纲 / 情绪节拍表） ============ -->
   <div class="panel" style="margin-top:18px; padding:20px;">
-    <div style="font-size:15px; font-weight:700; margin-bottom:6px;">对接模型</div>
-    <div class="hint" style="margin-bottom:12px;">选好 Key 和模型点<b>确定</b>锁定；想换点右上角「编辑」，生成时的六步逻辑链会实时打在下方日志里。</div>
+    <div style="font-size:15px; font-weight:700; margin-bottom:6px;">生成服务</div>
+    <div class="hint" style="margin-bottom:12px;">API Key 与模型由左下角「生产后台」统一配置并锁定。本页只读取后端配置。</div>
 
     <textarea id="sysprompt" style="display:none;"></textarea>
-
     <div id="orbox" style="position:relative;border:1px solid #eef0f4;border-radius:14px;padding:16px;background:#fcfcfd;">
-      <div id="oredit">
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-          <div style="flex:1;min-width:220px;">
-            <label class="flab">OpenRouter API Key</label>
-            <input id="orkey" type="password" placeholder="null" class="ctl">
-          </div>
-          <div style="flex:1;min-width:220px;">
-            <label class="flab">模型</label>
-            <select id="ormodel" class="ctl">
-              <option value="anthropic/claude-opus-4.8" selected>Claude Opus 4.8（默认）</option>
-              <option value="openai/gpt-5.5">GPT-5.5</option>
-              <option value="anthropic/claude-opus-4.7">Claude Opus 4.7</option>
-              <option value="anthropic/claude-sonnet-5">Claude Sonnet 5</option>
-              <option value="anthropic/claude-sonnet-4.5">Claude Sonnet 4.5</option>
-              <option value="__other__">其他（自填 slug）</option>
-            </select>
-            <input id="ormodel_custom" type="text" placeholder="其他：填 OpenRouter 上的 model slug" class="ctl" style="display:none;margin-top:8px;">
-          </div>
-          <button id="orlock" style="height:46px;padding:0 28px;border:none;border-radius:12px;background:#1f2430;color:#fff;font-size:14.5px;font-weight:600;cursor:pointer;">确定</button>
-        </div>
+      <div id="orview" style="display:block;">
+        <div style="font-size:13.5px;color:#3a4255;line-height:1.9;">🔒 <b id="orview_state">等待生产后台</b>　模型：<b id="orview_model">未配置</b>　｜　Key：<span id="orview_key" style="font-family:ui-monospace,Menlo,monospace;">后端管理</span></div>
       </div>
-      <div id="orview" style="display:none;">
-        <button id="orunlock" style="position:absolute;top:10px;right:12px;height:30px;padding:0 12px;border:1px solid #dfe2ea;border-radius:8px;background:#fff;color:#3a4255;font-size:12px;font-weight:600;cursor:pointer;">✎ 编辑</button>
-        <div style="font-size:13.5px;color:#3a4255;line-height:1.9;">🔒 <b>已锁定</b>　模型：<b id="orview_model"></b>　｜　Key：<span id="orview_key" style="font-family:ui-monospace,Menlo,monospace;"></span></div>
-      </div>
+      <div id="oredit" style="display:none;"><input id="orkey"><select id="ormodel"><option value="__backend__">后端</option></select><input id="ormodel_custom"><button id="orlock">锁定</button><button id="orunlock">解锁</button></div>
     </div>
-    <div style="margin:10px 0 14px;"><a href="#" id="cantconnect" style="font-size:12px;color:#3b82f6;text-decoration:none;">连不上？</a></div>
+    <div style="margin:10px 0 14px;"><a href="index.html#backend" target="_top" style="font-size:12px;color:#3b82f6;text-decoration:none;">前往生产后台配置</a><a href="#" id="cantconnect" style="display:none;">连不上？</a></div>
 
     <div id="progbox" style="display:none;margin-bottom:10px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
@@ -1510,7 +1488,7 @@ flowchart TD
   document.getElementById('extallon').addEventListener('click', function(){ EXTENSIONS.forEach(function(e){e.on=true;}); extSave(); extRender(); bindExtToggles(); document.getElementById('sysprompt').value=buildSys(); });
   document.getElementById('extalloff').addEventListener('click', function(){ EXTENSIONS.forEach(function(e){e.on=false;}); extSave(); extRender(); bindExtToggles(); document.getElementById('sysprompt').value=buildSys(); });
   document.getElementById('sysprompt').value=buildSys();
-  // 模型连接：localhost 后端优先；直接 file:// 打开时保留浏览器直连兼容。
+  // 模型连接统一由生产后台提供。
   var backendReady=false, backendSettings=null, BACKEND_TASK_KEY='idl_active_backend_task_v1';
   function rememberBackendTask(task){ try{ if(task) localStorage.setItem(BACKEND_TASK_KEY,JSON.stringify(task)); else localStorage.removeItem(BACKEND_TASK_KEY); }catch(e){} }
   function rememberedBackendTask(){ try{ return JSON.parse(localStorage.getItem(BACKEND_TASK_KEY)||'null'); }catch(e){ return null; } }
@@ -1522,10 +1500,10 @@ flowchart TD
     document.getElementById('ormodel_custom').style.display=(sel.value==='__other__')?'block':'none';
   }
   function initBackend(){
-    if(location.protocol==='file:') return Promise.resolve(false);
+    if(location.protocol==='file:'){ document.getElementById('orview_state').textContent='请用启动脚本打开'; return Promise.resolve(false); }
     return fetch('/api/settings').then(function(r){ return r.json().then(function(j){ if(!r.ok||!j.ok) throw new Error(j.error||'后端不可用'); return j.settings; }); })
-      .then(function(s){ backendSettings=s; backendReady=!!(s.api_key_configured&&s.model); applyModelSlug(s.model); if(backendReady){ setLocked(true); document.getElementById('orview_key').textContent='后端已配置'; document.getElementById('orview_model').textContent=s.model; } return backendReady; })
-      .catch(function(){ backendReady=false; return false; });
+      .then(function(s){ backendSettings=s; backendReady=!!(s.config_locked&&s.api_key_configured&&s.model); applyModelSlug(s.model); document.getElementById('orview_state').textContent=backendReady?'生产后台已锁定':'生产后台未锁定'; document.getElementById('orview_key').textContent=s.api_key_configured?'后端已配置':'未配置'; document.getElementById('orview_model').textContent=s.model||'未配置'; return backendReady; })
+      .catch(function(){ backendReady=false; document.getElementById('orview_state').textContent='后端未连接'; return false; });
   }
   function parseRecoveredTask(task){
     var acc=String(task.response_text||''), mark='===JSON===', idx=acc.indexOf(mark), raw=idx>=0?acc.slice(idx+mark.length):acc;
@@ -1548,36 +1526,11 @@ flowchart TD
     }
     poll();
   }
-  try{
-    var _k=localStorage.getItem('or_key'), _m=localStorage.getItem('or_model'), _mc=localStorage.getItem('or_model_custom');
-    if(_k) document.getElementById('orkey').value=_k;
-    if(_m){ document.getElementById('ormodel').value=_m; if(_m==='__other__'){ document.getElementById('ormodel_custom').style.display='block'; if(_mc) document.getElementById('ormodel_custom').value=_mc; } }
-  }catch(e){}
-  // 边输入边存（input），不再等失焦 change；防“粘完直接用→key 没存上→每次重输”
-  document.getElementById('orkey').addEventListener('input', function(){ try{ localStorage.setItem('or_key', this.value.trim()); }catch(e){} });
-  document.getElementById('orkey').addEventListener('change', function(){ try{ localStorage.setItem('or_key', this.value.trim()); }catch(e){} });
-  document.getElementById('ormodel_custom').addEventListener('change', function(){ try{ localStorage.setItem('or_model_custom', this.value.trim()); }catch(e){} });
-  function getModel(){ var s=document.getElementById('ormodel'); if(s.value==='__other__') return (document.getElementById('ormodel_custom').value||'').trim(); return s.value; }
-  document.getElementById('ormodel').addEventListener('change', function(){ document.getElementById('ormodel_custom').style.display=(this.value==='__other__')?'block':'none'; try{ localStorage.setItem('or_model', this.value); }catch(e){} });
-  // ===== 锁定 / 编辑 Key 与模型 =====
-  function modelLabel(){ var s=document.getElementById('ormodel'); if(s.value==='__other__') return (document.getElementById('ormodel_custom').value||'').trim()||'（未填 slug）'; return s.options[s.selectedIndex].textContent; }
-  function maskKey(k){ return k ? '************' : 'null'; }
-  function setLocked(on){
-    document.getElementById('oredit').style.display=on?'none':'block';
-    document.getElementById('orview').style.display=on?'block':'none';
-    if(on){ document.getElementById('orview_model').textContent=modelLabel(); document.getElementById('orview_key').textContent=maskKey((document.getElementById('orkey').value||'').trim()); }
-    try{ localStorage.setItem('or_locked', on?'1':''); }catch(e){}
-  }
-  function isLocked(){ return document.getElementById('orview').style.display!=='none'; }
-  document.getElementById('orlock').addEventListener('click', function(){
-    var key=(document.getElementById('orkey').value||'').trim();
-    if(!key){ alert('先填 OpenRouter API Key。'); return; }
-    if(!getModel()){ alert('选"其他"时请填模型 slug。'); return; }
-    try{ localStorage.setItem('or_key',key); localStorage.setItem('or_model',document.getElementById('ormodel').value); }catch(e){}
-    setLocked(true);
-  });
-  document.getElementById('orunlock').addEventListener('click', function(){ setLocked(false); });
-  try{ if(localStorage.getItem('or_locked')==='1' && (document.getElementById('orkey').value||'').trim()) setLocked(true); }catch(e){}
+  function getModel(){ return backendSettings&&backendSettings.model||''; }
+  function modelLabel(){ return getModel()||'未配置'; }
+  function setLocked(){ document.getElementById('oredit').style.display='none'; document.getElementById('orview').style.display='block'; }
+  function isLocked(){ return backendReady; }
+  setLocked();
   initBackend().then(function(ok){ if(ok) recoverBackendTask(); });
 
   // ===== 进度条 =====
@@ -2036,7 +1989,7 @@ flowchart TD
     if(!skipConfirm && !briefTxt && !hasDoc && tagsNow.length){ if(!confirm('您没有输入任何故事灵感，我会根据您的题材标签（'+tagsNow.join('＋')+'）生成故事，确定吗？')){ document.getElementById('brief').focus(); return; } }
     var genDurSel=document.getElementById('dur').value, genEndsSel=document.getElementById('ends').value;
     if(!backendReady && !isLocked()){ box.innerHTML='<div class="hint" style="color:#d97706">请先到左下角「生产后台」配置模型，或在下方使用浏览器直连方式。</div>'; document.getElementById('orbox').scrollIntoView({behavior:'smooth',block:'center'}); return; }
-    var key=(document.getElementById('orkey').value||'').trim(), model=backendReady?(backendSettings.model||getModel()):getModel();
+    var model=getModel();
     var backendProjectId=projectSlug(briefTxt||tagsNow.join('-')||'未命名项目'), backendRunBase=taskStamp();
     genBusy=true;
     var btn=document.getElementById('gen'), old=btn.textContent; btn.textContent='生成中…'; btn.disabled=true;
@@ -2133,10 +2086,10 @@ flowchart TD
       genAbort=new AbortController();
       var requestBody={ model:model, temperature:0.8, max_tokens:20000, stream:true, usage:{include:true}, messages:[ {role:'system',content:sys}, {role:'user',content:user} ] };
       if(backendReady){ activeBackendTask={project_id:backendProjectId,run_id:backendRunBase+'-a'+attempt}; requestBody._task={project_id:activeBackendTask.project_id,run_id:activeBackendTask.run_id,title:briefTxt||tagsNow.join('＋')||'未命名项目',phase:'outline-generation',attempt:attempt}; rememberBackendTask(activeBackendTask); }
-      fetch(backendReady?'/api/llm/chat/stream':'https://openrouter.ai/api/v1/chat/completions',{
+      fetch('/api/llm/chat/stream',{
         method:'POST',
         signal:genAbort.signal,
-        headers:backendReady?{'Content-Type':'application/json'}:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+        headers:{'Content-Type':'application/json'},
         body:JSON.stringify(requestBody)
       }).then(function(r){
         if(!r.ok) return r.json().then(function(j){ throw new Error((j&&j.error&&j.error.message)||('HTTP '+r.status)); });
@@ -2154,7 +2107,7 @@ flowchart TD
         return pump();
       }).catch(function(e){
         if(genStopped || (e&&e.name==='AbortError')){ rememberBackendTask(null); progSet(100,'已停止'); document.getElementById('progbar').style.background='#94a3b8'; logLine('⏹ 已手动停止本次生成（未渲染、未存记录）。可改输入后重新生成。'); box.innerHTML='<div class="hint" style="color:#6b7488">已手动停止。</div>'; done(); return; }
-        fail('调用失败：'+e.message+(backendReady?'（检查生产后台的 Key、模型与网络）':'（检查 Key / 模型 slug / 网络；若被 CORS 拦，点"连不上？"让 kian 代发）'));
+        fail('调用失败：'+e.message+'（检查生产后台是否已配置并锁定 Key、模型与网络）');
       });
     }
     function done(){ genBusy=false; genAbort=null; activeBackendTask=null; document.getElementById('stopgen').style.display='none'; btn.textContent=old; btn.disabled=false; setTimeout(function(){ document.getElementById('progbar').style.background='linear-gradient(90deg,#3b82f6,#7c3aed)'; },1500); }
@@ -2605,12 +2558,11 @@ flowchart TD
 
   // ===== 推荐时长 / 结局数（模型能力测试；无 Key 或失败时离线粗估兜底）=====
   function orCall(userText, done){
-    var key=(document.getElementById('orkey').value||'').trim();
-    if(!backendReady && !key) return done(new Error('nokey'));
-    var model=backendReady?(backendSettings.model||getModel()):getModel(); if(!model) return done(new Error('nomodel'));
+    if(!backendReady) return done(new Error('backend-not-ready'));
+    var model=getModel(); if(!model) return done(new Error('nomodel'));
     var sys=SYS, body={model:model,temperature:0.5,messages:[{role:'system',content:sys},{role:'user',content:userText}]};
-    fetch(backendReady?'/api/llm/chat':'https://openrouter.ai/api/v1/chat/completions',{ method:'POST', headers:backendReady?{'Content-Type':'application/json'}:{'Authorization':'Bearer '+key,'Content-Type':'application/json'}, body:JSON.stringify(body) })
-     .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,status:r.status,j:backendReady&&j&&j.data?j.data:j}; }); })
+    fetch('/api/llm/chat',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+     .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,status:r.status,j:j&&j.data?j.data:j}; }); })
      .then(function(res){ if(!res.ok) throw new Error((res.j&&res.j.error&&res.j.error.message)||('HTTP '+res.status)); done(null,(res.j.choices&&res.j.choices[0]&&res.j.choices[0].message&&res.j.choices[0].message.content)||''); })
      .catch(function(e){ done(e); });
   }

@@ -148,35 +148,20 @@
         </div>
         <div style="height:10px;background:#eef1f6;border-radius:999px;overflow:hidden;"><div id="progbar"></div></div>
       </div>
-      <div class="hint">一键生成 = 分镜表/分镜提示词 → 人物三视图 → 场景图 → CG分镜（锤点驱动）→ 故事版 一整套跑完，进度条代表整套进度。先在下方「对接模型」填 Key（文本+图像都用它）并锁定。分镜规则内嵌于本页执行卡，点顶部按钮可查看。</div>
+      <div class="hint">一键生成 = 分镜表/分镜提示词 → 人物三视图 → 场景图 → CG分镜（锤点驱动）→ 故事版。文本模型、图像模型和 Key 由生产后台统一配置。</div>
 
-      <!-- 对接模型 -->
       <div style="margin-top:20px;border-top:1px solid #eef0f4;padding-top:16px;">
-        <div style="font-size:14px;font-weight:700;margin-bottom:10px;">对接模型</div>
-        <div id="oredit">
-          <div class="field"><label>OpenRouter API Key</label><input id="orkey" class="ctl" type="password" placeholder="null"></div>
-          <div class="field"><label>模型</label>
-            <select id="ormodel" class="ctl">
-              <option value="anthropic/claude-opus-4.8" selected>Claude Opus 4.8（默认）</option>
-              <option value="openai/gpt-5.5">GPT-5.5</option>
-              <option value="anthropic/claude-sonnet-5">Claude Sonnet 5</option>
-              <option value="__other__">其他（自填 slug）</option>
-            </select>
-            <input id="ormodel_custom" class="ctl" type="text" placeholder="其他：填 model slug" style="display:none;margin-top:8px;">
-          </div>
-          <button id="orlock" class="btn lock">确定锁定</button>
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px;">生成服务</div>
+        <div id="orview" style="position:relative;border:1px solid #eef0f4;border-radius:12px;padding:13px;background:#fafbfc;">
+          <div style="font-size:13px;color:#3a4255;line-height:1.9;">🔒 <b id="orview_state">等待生产后台</b><br>文本模型：<b id="orview_model">未配置</b><br>图像模型：<b id="orview_image">未配置</b></div>
         </div>
-        <div id="orview" style="position:relative;">
-          <button id="orunlock" class="hbtn" style="position:absolute;top:0;right:0;">✎ 编辑</button>
-          <div style="font-size:13px;color:#3a4255;line-height:1.9;">🔒 已锁定　模型：<b id="orview_model"></b><br>Key：<span id="orview_key" style="font-family:ui-monospace,monospace;"></span></div>
-        </div>
+        <div id="oredit" style="display:none;"><input id="orkey"><select id="ormodel"><option value="__backend__">后端</option></select><input id="ormodel_custom"><button id="orlock">锁定</button><button id="orunlock">解锁</button><input id="orimg"></div>
+        <div style="margin-top:8px"><a href="index.html#backend" target="_top" style="font-size:12px;color:#3b82f6;text-decoration:none;">前往生产后台配置</a></div>
       </div>
 
-      <!-- 出图设置（三视图/场景图/CG 共用） -->
       <div style="margin-top:16px;border-top:1px solid #eef0f4;padding-top:16px;">
-        <div style="font-size:14px;font-weight:700;margin-bottom:10px;">出图设置 <em style="font-style:normal;font-size:11px;color:#aab0bf;font-weight:500;">（三视图/场景图/CG 共用）</em></div>
-        <div class="field"><label>图像模型 slug <em>（OpenRouter，需支持出图）</em></label><input id="orimg" class="ctl" type="text" placeholder="google/gemini-2.5-flash-image"></div>
-        <div class="field"><label>全片画风锁点 <em>（可选，人物/场景/分镜共用一句）</em></label><input id="orstyle" class="ctl" type="text" placeholder="如：low-saturation muted palette, 35mm film grain, grounded realism"></div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px;">全片画风锁点 <em style="font-style:normal;font-size:11px;color:#aab0bf;font-weight:500;">（可选，人物/场景/分镜共用一句）</em></div>
+        <div class="field"><input id="orstyle" class="ctl" type="text" placeholder="如：low-saturation muted palette, 35mm film grain, grounded realism"></div>
       </div>
       <div id="genlog"></div>
     </div>
@@ -603,19 +588,18 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   }
 
   function sbGenImage(prompt, cb, refs){
-    var key=(localStorage.getItem('sb_key')||(document.getElementById('orkey').value||'')).trim();
-    if(!key){ cb(new Error('未锁定 OpenRouter Key（下方对接模型处填并锁定）')); return; }
-    var model=(localStorage.getItem('sb_img_model')||'google/gemini-2.5-flash-image');
+    if(!backendReady){ cb(new Error('请先在生产后台配置并锁定文本与图像模型')); return; }
+    var model=getImageModel();
     var content;
     if(refs&&refs.length){
       // 多模态：先放参考图（锁脸/服装/空间），再放文字提示词
       content=[]; refs.forEach(function(u){ if(u) content.push({type:'image_url',image_url:{url:u}}); });
       content.push({type:'text',text:'以上参考图是本镜人物/场景的身份与空间锁定锚点，请严格沿用（人脸/发型/服装/场景布局保持一致），只按下面描述改镜头、景别、光影与动作：\n'+prompt});
     } else { content=prompt; }
-    fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({model:model,modalities:['image','text'],messages:[{role:'user',content:content}]})})
-    .then(function(res){ if(!res.ok) return res.json().then(function(j){throw new Error((j&&j.error&&j.error.message)||('HTTP '+res.status));}); return res.json(); })
-    .then(function(d){ var m=d&&d.choices&&d.choices[0]&&d.choices[0].message;
+    fetch('/api/llm/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({_use_image_model:true,model:model,modalities:['image','text'],messages:[{role:'user',content:content}]})})
+    .then(function(res){ if(!res.ok) return res.json().then(function(j){throw new Error((j&&j.error)||('HTTP '+res.status));}); return res.json(); })
+    .then(function(w){ var d=w&&w.data?w.data:w, m=d&&d.choices&&d.choices[0]&&d.choices[0].message;
       var url=m&&m.images&&m.images[0]&&(m.images[0].image_url&&m.images[0].image_url.url||m.images[0].url);
       if(!url&&typeof (m&&m.content)==='string'){ var mm=m.content.match(/data:image\/[a-zA-Z]+;base64,[A-Za-z0-9+\/=]+/); if(mm)url=mm[0]; }
       if(!url){ cb(new Error('模型未返回图片（换支持出图的模型）')); return; }
@@ -772,26 +756,21 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(m){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[m];}); }
 
-  // ---- 锁定 Key ----
-  function modelLabel(){ var s=document.getElementById('ormodel'); if(s.value==='__other__') return (document.getElementById('ormodel_custom').value||'').trim()||'（未填）'; return s.options[s.selectedIndex].textContent; }
-  function getModel(){ var s=document.getElementById('ormodel'); return s.value==='__other__'?(document.getElementById('ormodel_custom').value||'').trim():s.value; }
-  function setLocked(on){
-    document.getElementById('oredit').style.display=on?'none':'block';
-    document.getElementById('orview').style.display=on?'block':'none';
-    if(on){ document.getElementById('orview_model').textContent=modelLabel(); var k=(document.getElementById('orkey').value||'').trim(); document.getElementById('orview_key').textContent=k?'************':'null'; }
-    try{ localStorage.setItem('sb_locked',on?'1':''); }catch(e){}
+  // ---- 统一生产后台配置 ----
+  var backendReady=false, backendSettings=null;
+  function getModel(){ return backendSettings&&backendSettings.model||''; }
+  function getImageModel(){ return backendSettings&&backendSettings.image_model||''; }
+  function isLocked(){ return backendReady; }
+  function initBackend(){
+    if(location.protocol==='file:'){ document.getElementById('orview_state').textContent='请用启动脚本打开'; return Promise.resolve(false); }
+    return fetch('/api/settings').then(function(r){return r.json().then(function(j){if(!r.ok||!j.ok)throw new Error(j.error||'后端不可用');return j.settings;});})
+      .then(function(s){backendSettings=s;backendReady=!!(s.config_locked&&s.api_key_configured&&s.model&&s.image_model);document.getElementById('orview_state').textContent=backendReady?'生产后台已锁定':'生产后台未锁定';document.getElementById('orview_model').textContent=s.model||'未配置';document.getElementById('orview_image').textContent=s.image_model||'未配置';return backendReady;})
+      .catch(function(){backendReady=false;document.getElementById('orview_state').textContent='后端未连接';return false;});
   }
-  function isLocked(){ return document.getElementById('orview').style.display!=='none'; }
-  document.getElementById('ormodel').addEventListener('change',function(){ document.getElementById('ormodel_custom').style.display=this.value==='__other__'?'block':'none'; try{localStorage.setItem('sb_model',this.value);}catch(e){} });
-  document.getElementById('orlock').addEventListener('click',function(){ var k=(document.getElementById('orkey').value||'').trim(); if(!k){alert('先填 API Key');return;} if(!getModel()){alert('选其他时请填 slug');return;} try{localStorage.setItem('sb_key',k);localStorage.setItem('sb_model',document.getElementById('ormodel').value);}catch(e){} setLocked(true); });
-  document.getElementById('orunlock').addEventListener('click',function(){ setLocked(false); });
-  // 边输入边存（input）：分镜台原本只在点“锁定”才存 key，不锁就不存→下次重输
-  document.getElementById('orkey').addEventListener('input',function(){ try{ localStorage.setItem('sb_key',this.value.trim()); }catch(e){} });
-  try{ var _k=localStorage.getItem('sb_key'),_m=localStorage.getItem('sb_model'); if(_k)document.getElementById('orkey').value=_k; if(_m){document.getElementById('ormodel').value=_m; if(_m==='__other__')document.getElementById('ormodel_custom').style.display='block';} if(localStorage.getItem('sb_locked')==='1'&&_k)setLocked(true); }catch(e){}
-  // 出图设置（图像模型 + 画风锁点）→ localStorage，实时保存
-  (function(){ var im=document.getElementById('orimg'), st=document.getElementById('orstyle');
-    try{ im.value=localStorage.getItem('sb_img_model')||''; st.value=localStorage.getItem('sb_style')||''; }catch(e){}
-    im.addEventListener('input',function(){ try{ if(this.value.trim())localStorage.setItem('sb_img_model',this.value.trim()); else localStorage.removeItem('sb_img_model'); }catch(e){} });
+  initBackend();
+  // 画风锁点仍属于当前作品，而不是全局模型设置。
+  (function(){ var st=document.getElementById('orstyle');
+    try{ st.value=localStorage.getItem('sb_style')||''; }catch(e){}
     st.addEventListener('input',function(){ try{ if(this.value.trim())localStorage.setItem('sb_style',this.value.trim()); else localStorage.removeItem('sb_style'); }catch(e){} });
   })();
 
@@ -875,7 +854,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   // boardOnly=true：只重跑 LLM 出分镜表+分镜提示词，跳过人物/场景/CG/故事版图像流水线（供“分镜提示词”页单独补生成）
   function startGen(boardOnly){
     if(busy) return;
-    if(!isLocked()){ alert('先在下方「对接模型」填 Key、选模型并锁定'); return; }
+    if(!isLocked()){ alert('请先到左下角「生产后台」配置并锁定文本与图像模型'); return; }
     var scene=buildSceneText(boardOnly);   // 重新生成优先用已有节点，不再要求重新粘贴/选场次
     if(!scene){ alert(srcMode==='text'?'先写一场戏':'先粘贴 JSON 并选场次（或粘贴含 nodes 的 JSON）'); return; }
     var camNote=document.getElementById('camstyle').value==='free'?'允许必要动镜（但仍以固定为主，动镜须轻/短/有落点）':'固定镜头为主，运镜栏默认写“固定”';
@@ -886,13 +865,12 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     logLine('▸ 输入：'+(srcMode==='text'?'手填一场戏':'剧本 JSON '+(scene.split('场次 ').length-1)+' 个场次'));
     logLine('▸ 镜头风格：'+camNote);
     logLine('▸ 调用 '+getModel()+'，按导演分镜执行卡出分镜…\n──────────────────────────────');
-    var key=(document.getElementById('orkey').value||'').trim();
     var user=scene+'\n\n【镜头风格约束】'+camNote+'\n\n请按导演分镜执行卡出分镜：先诊断戏剧问题(内部)、挑导演语法、锚定全场相机、逐镜填表、再逐镜出分镜提示词。只返回 ===JSON=== 之后的 JSON。';
     logHead=logEl.textContent;
     var acc='', JSON_EXP=6000; var HI=boardOnly?100:30;
     progScaled(33,0,HI,'模型输出中…');
     gAbort=new AbortController();
-    fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',signal:gAbort.signal,headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+    fetch('/api/llm/chat/stream',{method:'POST',signal:gAbort.signal,headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model:getModel(),temperature:0.7,max_tokens:32000,stream:true,messages:[{role:'system',content:SYS+'\n\n'+EXEC},{role:'user',content:user}]})
     }).then(function(r){
       if(!r.ok) return r.json().then(function(j){ throw new Error((j&&j.error&&j.error.message)||('HTTP '+r.status)); });
