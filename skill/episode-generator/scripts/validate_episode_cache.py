@@ -61,6 +61,25 @@ def episode_metrics(text: str) -> tuple[int, int]:
     return visible_chars, action_beats
 
 
+def project_limits(manifest: str) -> tuple[int, int, int, int]:
+    block = section(manifest, "单集门槛")
+    chars = re.search(r"^-\s*可见字符数：\s*(\d+)\s*[—-]\s*(\d+)\s*$", block, re.MULTILINE)
+    beats = re.search(r"^-\s*动作段数：\s*(\d+)\s*[—-]\s*(\d+)\s*$", block, re.MULTILINE)
+    if not chars and not beats:
+        return (
+            DEFAULT_MIN_VISIBLE_CHARS,
+            DEFAULT_MAX_VISIBLE_CHARS,
+            DEFAULT_MIN_ACTION_BEATS,
+            DEFAULT_MAX_ACTION_BEATS,
+        )
+    if not chars or not beats:
+        raise ValueError("manifest 的单集门槛必须同时记录可见字符数和动作段数")
+    limits = tuple(map(int, (*chars.groups(), *beats.groups())))
+    if limits[0] > limits[1] or limits[2] > limits[3]:
+        raise ValueError("manifest 的单集门槛上下界无效")
+    return limits
+
+
 def parse_topology(text: str, errors: list[str]) -> dict[str, dict[str, object]]:
     matches = list(NODE_HEADER.finditer(text))
     if not matches:
@@ -419,11 +438,13 @@ def validate(
     topology = read_text(cache / "topology.md", errors)
     nodes = parse_topology(topology, errors) if topology else {}
     manifest = read_text(cache / "manifest.md", [])
-    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11)\b", manifest):
+    if "episode-cache-v0.1.12" in manifest and not section(manifest, "单集门槛"):
+        errors.append("v0.1.12 manifest.md 缺少有效栏目：单集门槛")
+    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12)\b", manifest):
         branch_audit = read_text(cache / "branch-audit.md", errors)
         if branch_audit:
             validate_branch_audit(branch_audit, nodes, errors)
-    if re.search(r"episode-cache-v0\.1\.(?:9|10|11)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12)\b", manifest):
         for heading in ("对白校验状态", "因果连续性校验状态"):
             if not section(manifest, heading):
                 errors.append(f"manifest.md 缺少有效栏目：{heading}")
@@ -441,7 +462,7 @@ def validate(
 
     if require_public:
         structure = read_text(canvas_root / "episode-structure.md", errors)
-        if re.search(r"episode-cache-v0\.1\.(?:10|11)\b", manifest):
+        if re.search(r"episode-cache-v0\.1\.(?:10|11|12)\b", manifest):
             if "episode-flowchart.svg" not in structure:
                 errors.append("episode-structure.md 未引用静态流程图")
             if "<details>" not in structure or "```mermaid" not in structure:
@@ -449,7 +470,7 @@ def validate(
             flowchart = read_text(canvas_root / "episode-flowchart.svg", errors)
             if flowchart:
                 validate_flowchart_svg(flowchart, nodes, errors)
-        if "episode-cache-v0.1.11" in manifest:
+        if re.search(r"episode-cache-v0\.1\.(?:11|12)\b", manifest):
             index_html = read_text(canvas_root / "index.html", errors)
             if index_html:
                 validate_index_html(index_html, canvas_root, nodes, errors)
@@ -469,6 +490,31 @@ def validate(
                 episode_text = public_episode.read_text(encoding="utf-8").strip()
                 if episode_text and episode_text not in script:
                     errors.append(f"完整剧本汇总未原样包含：{public_episode}")
+                if "episode-cache-v0.1.12" in manifest:
+                    cache_episode = cache / "episodes" / f"{node_id}.md"
+                    cache_text = read_text(cache_episode, errors)
+                    final_text = section(cache_text, "当前集定稿")
+                    if final_text != episode_text:
+                        errors.append(f"{node_id} 的隐藏定稿与公开逐集文件不一致")
+                    metric_record = section(cache_text, "度量记录")
+                    visible_chars, action_beats = episode_metrics(episode_text)
+                    recorded_chars = re.search(r"可见字符数：\s*(\d+)", metric_record)
+                    recorded_beats = re.search(r"动作段数：\s*(\d+)", metric_record)
+                    if not recorded_chars or int(recorded_chars.group(1)) != visible_chars:
+                        errors.append(f"{node_id} 的缓存可见字符数与公开稿不一致")
+                    if not recorded_beats or int(recorded_beats.group(1)) != action_beats:
+                        errors.append(f"{node_id} 的缓存动作段数与公开稿不一致")
+                    if "- 判定：PASS" not in metric_record:
+                        errors.append(f"{node_id} 的机械门禁未记录为 PASS")
+                    status = section(cache_text, "校验状态")
+                    for name, value in (
+                        ("机械完整度", "PASS"),
+                        ("中文对白", "PASS"),
+                        ("因果连续性", "PASS"),
+                        ("冻结状态", "已冻结"),
+                    ):
+                        if not re.search(rf"^-\s*{name}：\s*{value}\s*$", status, re.MULTILINE):
+                            errors.append(f"{node_id} 的{name}未记录为{value}")
 
     return errors, stats
 
@@ -478,18 +524,25 @@ def main() -> int:
     parser.add_argument("canvas_root", type=Path)
     parser.add_argument("--require-public", action="store_true")
     parser.add_argument("--report-stats", action="store_true")
-    parser.add_argument("--min-visible-chars", type=int, default=DEFAULT_MIN_VISIBLE_CHARS)
-    parser.add_argument("--max-visible-chars", type=int, default=DEFAULT_MAX_VISIBLE_CHARS)
-    parser.add_argument("--min-action-beats", type=int, default=DEFAULT_MIN_ACTION_BEATS)
-    parser.add_argument("--max-action-beats", type=int, default=DEFAULT_MAX_ACTION_BEATS)
+    parser.add_argument("--min-visible-chars", type=int)
+    parser.add_argument("--max-visible-chars", type=int)
+    parser.add_argument("--min-action-beats", type=int)
+    parser.add_argument("--max-action-beats", type=int)
     args = parser.parse_args()
 
-    limits = (
+    try:
+        manifest_path = args.canvas_root.resolve() / ".episode-cache" / "manifest.md"
+        limits = project_limits(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    overrides = (
         args.min_visible_chars,
         args.max_visible_chars,
         args.min_action_beats,
         args.max_action_beats,
     )
+    limits = tuple(value if value is not None else limits[index] for index, value in enumerate(overrides))
     errors, stats = validate(args.canvas_root.resolve(), args.require_public, limits)
     if args.report_stats and stats:
         print("episode\tvisible_chars\taction_beats\tstatus")
