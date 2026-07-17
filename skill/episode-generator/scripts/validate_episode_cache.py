@@ -174,6 +174,62 @@ def validate_graph(nodes: dict[str, dict[str, object]], errors: list[str]) -> No
         errors.append("拓扑中存在循环")
 
 
+def validate_branch_audit(
+    text: str,
+    nodes: dict[str, dict[str, object]],
+    errors: list[str],
+) -> None:
+    for heading in ("目标轴", "候选岔点", "前五分钟交互", "审计结论"):
+        if not section(text, heading):
+            errors.append(f"branch-audit.md 缺少有效栏目：{heading}")
+
+    fork_pattern = re.compile(
+        r"^###\s+(fork-\d{3})\s*｜\s*(.+?)\s*$\n(.*?)(?=^###\s+|^##\s+|\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    forks = list(fork_pattern.finditer(text))
+    if not forks:
+        errors.append("branch-audit.md 未记录候选岔点")
+    for match in forks:
+        fork_id = match.group(1)
+        block = match.group(3)
+        handling = re.search(r"^-\s*处理：\s*(保留|删除)\s*$", block, re.MULTILINE)
+        landing = re.search(
+            r"^-\s*落图节点：\s*(episode-\d{3}|无)\s*$", block, re.MULTILINE
+        )
+        if not handling:
+            errors.append(f"{fork_id} 缺少有效处理结论")
+            continue
+        if not landing:
+            errors.append(f"{fork_id} 缺少有效落图节点")
+            continue
+        decision = handling.group(1)
+        node_id = landing.group(1)
+        if decision == "保留":
+            if node_id == "无" or node_id not in nodes:
+                errors.append(f"{fork_id} 保留但未指向有效拓扑节点")
+            elif "选择" not in str(nodes[node_id]["interaction"]):
+                errors.append(f"{fork_id} 指向的 {node_id} 不是选择节点")
+        elif node_id != "无":
+            errors.append(f"{fork_id} 已删除但仍声明落图节点 {node_id}")
+        if decision == "删除" and not re.search(r"^-\s*理由：\s*\S+", block, re.MULTILINE):
+            errors.append(f"{fork_id} 删除但未记录理由")
+
+    early = section(text, "前五分钟交互")
+    early_node = re.search(r"^-\s*落图节点：\s*(episode-\d{3})\s*$", early, re.MULTILINE)
+    if not early_node:
+        errors.append("branch-audit.md 未记录前五分钟交互的落图节点")
+    else:
+        node_id = early_node.group(1)
+        if node_id not in nodes:
+            errors.append(f"前五分钟交互指向不存在节点：{node_id}")
+        elif "选择" not in str(nodes[node_id]["interaction"]):
+            errors.append(f"前五分钟交互节点不是选择节点：{node_id}")
+
+    if "PASS" not in section(text, "审计结论"):
+        errors.append("branch-audit.md 审计结论未通过")
+
+
 def validate_episode_files(
     directory: Path,
     nodes: dict[str, dict[str, object]],
@@ -258,6 +314,16 @@ def validate(
     topology = read_text(cache / "topology.md", errors)
     nodes = parse_topology(topology, errors) if topology else {}
     manifest = read_text(cache / "manifest.md", [])
+    if re.search(r"episode-cache-v0\.1\.(?:8|9)\b", manifest):
+        branch_audit = read_text(cache / "branch-audit.md", errors)
+        if branch_audit:
+            validate_branch_audit(branch_audit, nodes, errors)
+    if "episode-cache-v0.1.9" in manifest:
+        for heading in ("对白校验状态", "因果连续性校验状态"):
+            if not section(manifest, heading):
+                errors.append(f"manifest.md 缺少有效栏目：{heading}")
+        if "## 对白校验线程" in manifest or "## 因果连续性校验线程" in manifest:
+            errors.append("v0.1.9 manifest 不得保存校验线程或 threadId")
     count_match = re.search(r"^## 节点总数\s*\n+\s*(\d+)\s*$", manifest, re.MULTILINE)
     if not count_match:
         errors.append("manifest.md 缺少有效的节点总数")

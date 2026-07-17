@@ -35,6 +35,7 @@
 ```text
 {canvas-root}/.episode-cache/manifest.md
 {canvas-root}/.episode-cache/global.md
+{canvas-root}/.episode-cache/branch-audit.md
 {canvas-root}/.episode-cache/topology.md
 {canvas-root}/.episode-cache/characters.md
 {canvas-root}/.episode-cache/props.md
@@ -59,12 +60,12 @@
 ## 执行组计划
 ## 当前执行组
 ## 已完成分集
-## 对白校验线程
-## 因果连续性校验线程
+## 对白校验状态
+## 因果连续性校验状态
 ## 最近更新
 ```
 
-缓存版本使用 `episode-cache-v0.7`。
+缓存版本使用 `episode-cache-v0.1.9`。
 
 ### global.md
 
@@ -97,6 +98,45 @@
 ```
 
 无前置或无后续统一写`无`；节点编号固定为三位数字。
+
+### branch-audit.md
+
+拓扑冻结前记录候选生成与遗漏审计，不进入公开层：
+
+```text
+# 分支遗漏审计
+
+## 目标轴
+- 关系目标：
+- 核心任务目标：
+- 当前情绪：
+- 题材权重：
+
+## 候选岔点
+### fork-001｜来源事件
+- 玩家：
+- 互斥行动：动作A；动作B
+- 认同开关：负面剥离/正面认领/无
+- 目标冲突：
+- 即时状态差：
+- VAD方向差：
+- 代价：
+- 处理：保留/删除
+- 落图节点：episode-002/无
+- 理由：
+
+## 前五分钟交互
+- 落图节点：episode-002
+- 教学：
+- 情绪代入：
+- 戏剧功能：
+- 不同即时结果：
+
+## 审计结论
+PASS
+```
+
+每个保留候选必须指向最终拓扑中的选择节点；删除候选必须记录事实不可执行、没有即时状态差或互动预算价值不足等具体理由。不得以“主干已经这样写”“不符合预定剧情”作为删除理由。
 
 ### characters.md
 
