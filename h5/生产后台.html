@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>生产后台</title>
+<style>
+:root{--bg:#f2f4f8;--panel:#fff;--ink:#222839;--muted:#8a92a6;--line:#e1e5ed;--brand:#6c4cff;--ok:#169c68;--warn:#d8871c}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}.shell{max-width:1180px;margin:0 auto;padding:34px}.head{display:flex;justify-content:space-between;align-items:end;margin-bottom:24px}.head h1{margin:0;font-size:34px}.head p{margin:8px 0 0;color:var(--muted)}.status{padding:8px 13px;border-radius:999px;background:#e8f7f1;color:var(--ok);font-weight:700}.grid{display:grid;grid-template-columns:1.05fr .95fr;gap:22px}.card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 10px 30px rgba(32,40,70,.05)}h2{margin:0 0 18px;font-size:20px}.field{margin:0 0 16px}.field label{display:block;margin-bottom:7px;font-size:13px;font-weight:700}.field input,.field select{width:100%;height:44px;padding:0 13px;border:1px solid #d9deea;border-radius:11px;background:#fff;font-size:14px;outline:none}.field input:focus,.field select:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(108,76,255,.12)}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.toggle{display:flex;gap:10px;align-items:center;margin:12px 0;color:#4d566a}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}.btn{border:0;border-radius:11px;padding:11px 17px;font-weight:750;cursor:pointer;background:#edf0f6;color:#31394c}.btn.pri{background:var(--brand);color:#fff}.btn.dark{background:#222839;color:#fff}.btn:hover{transform:translateY(-1px)}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}.metric{padding:15px;border-radius:14px;background:#f6f7fb}.metric b{display:block;font-size:20px}.metric span{font-size:12px;color:var(--muted)}.list{display:flex;flex-direction:column;gap:10px}.item{padding:14px;border:1px solid var(--line);border-radius:13px}.item b{display:block}.item small{color:var(--muted)}.empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}.msg{min-height:22px;margin-top:12px;font-size:13px;color:var(--muted);white-space:pre-wrap}.msg.err{color:#c2413b}.msg.ok{color:var(--ok)}@media(max-width:800px){.grid{grid-template-columns:1fr}.row,.summary{grid-template-columns:1fr}.shell{padding:18px}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="head"><div><h1>⚙️ 生产后台</h1><p>模型配置、本机项目、任务状态与 Git 同步。</p></div><div id="health" class="status">连接中</div></header>
+  <section class="grid">
+    <div class="card">
+      <h2>模型与保存策略</h2>
+      <div class="field"><label>服务商</label><select id="provider"><option value="openrouter">OpenRouter</option></select></div>
+      <div class="field"><label>API Base URL</label><input id="base" value="https://openrouter.ai/api/v1"></div>
+      <div class="field"><label>OpenRouter API Key</label><input id="key" type="password" placeholder="未修改时留空；密钥只保存在本机 .runtime/"></div>
+      <div class="row"><div class="field"><label>生成模型</label><input id="model" placeholder="例如 anthropic/claude-sonnet-4"></div><div class="field"><label>校验模型</label><input id="validator" placeholder="可与生成模型相同"></div></div>
+      <label class="toggle"><input id="autoCommit" type="checkbox" checked> 每次项目保存后自动创建本地 Git 提交</label>
+      <label class="toggle"><input id="autoPush" type="checkbox"> 每次提交后自动推送远端（默认关闭）</label>
+      <div class="actions"><button class="btn pri" id="save">保存设置</button><button class="btn" id="clearKey">清除密钥</button></div>
+      <div id="settingsMsg" class="msg"></div>
+    </div>
+    <div class="card">
+      <h2>仓库与本机项目</h2>
+      <div class="summary"><div class="metric"><b id="changed">-</b><span>工作区改动</span></div><div class="metric"><b id="ahead">-</b><span>待推送提交</span></div><div class="metric"><b id="projectCount">-</b><span>后端项目</span></div></div>
+      <div class="actions"><button class="btn dark" id="commit">提交项目数据</button><button class="btn pri" id="push">推送到 Git</button><button class="btn" id="refresh">刷新</button></div>
+      <div id="gitMsg" class="msg"></div>
+      <h2 style="margin-top:26px">最近项目</h2><div id="projects" class="list"><div class="empty">暂无后端项目</div></div>
+    </div>
+  </section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+async function api(path,opt){const r=await fetch(path,opt);const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||'请求失败');return j}
+function msg(id,text,type){const el=$(id);el.textContent=text||'';el.className='msg '+(type||'')}
+async function load(){try{const [h,s,g,p]=await Promise.all([api('/api/health'),api('/api/settings'),api('/api/git/status'),api('/api/projects')]);$('health').textContent='后端已连接';const v=s.settings;$('provider').value=v.provider;$('base').value=v.base_url;$('model').value=v.model;$('validator').value=v.validator_model;$('autoCommit').checked=v.auto_commit;$('autoPush').checked=v.auto_push;$('key').placeholder=v.api_key_configured?'已配置；输入新值可替换':'请输入 OpenRouter API Key';$('changed').textContent=g.git.changed;$('ahead').textContent=g.git.ahead;$('projectCount').textContent=p.projects.length;renderProjects(p.projects)}catch(e){$('health').textContent='后端未连接';$('health').style.background='#fff0e0';$('health').style.color='#b96812';msg('gitMsg',e.message,'err')}}
+function renderProjects(items){$('projects').innerHTML=items.length?items.map(x=>`<div class="item"><b>${esc(x.title)}</b><small>${esc(x.stage)} · ${esc(x.updated_at)}</small></div>`).join(''):'<div class="empty">暂无后端项目。后续生成将自动保存到 data/projects/。</div>'}
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+$('save').onclick=async()=>{try{const payload={provider:$('provider').value,base_url:$('base').value.trim(),model:$('model').value.trim(),validator_model:$('validator').value.trim(),auto_commit:$('autoCommit').checked,auto_push:$('autoPush').checked};if($('key').value.trim())payload.api_key=$('key').value.trim();await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});$('key').value='';msg('settingsMsg','设置已保存在本机后端。','ok');load()}catch(e){msg('settingsMsg',e.message,'err')}};
+$('clearKey').onclick=async()=>{try{await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({clear_api_key:true})});msg('settingsMsg','本机密钥已清除。','ok');load()}catch(e){msg('settingsMsg',e.message,'err')}};
+$('commit').onclick=async()=>{try{const j=await api('/api/git/commit',{method:'POST'});msg('gitMsg',j.message,'ok');load()}catch(e){msg('gitMsg',e.message,'err')}};
+$('push').onclick=async()=>{try{const j=await api('/api/git/push',{method:'POST'});msg('gitMsg',j.message,'ok');load()}catch(e){msg('gitMsg',e.message,'err')}};
+$('refresh').onclick=load;load();
+</script>
+</body>
+</html>

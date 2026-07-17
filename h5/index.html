@@ -37,6 +37,7 @@
   .tab.mini { padding:10px 4px; }
   .tab.mini .ico { font-size:18px; margin-bottom:3px; }
   .tab.mini .lbl { font-size:12px; color:#9a8fc4; }
+  .tab.mini.active .lbl { color:#fff; }
 
   /* 右侧内容区 */
   #stage { flex:1; position:relative; background:#f4f5f8; }
@@ -63,6 +64,9 @@
       <span class="ico">🎮</span><span class="lbl">游戏界面</span>
     </button>
     <div style="flex:1"></div>
+    <button class="tab mini" data-key="backend" data-src="生产后台.html">
+      <span class="ico">⚙️</span><span class="lbl">生产后台</span>
+    </button>
   </nav>
   <main id="stage"></main>
 </div>
