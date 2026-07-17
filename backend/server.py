@@ -404,7 +404,7 @@ class Handler(SimpleHTTPRequestHandler):
         phase = str(task_meta.get("phase") or "generation")
         title = str(task_meta.get("title") or project_id or "生成任务")
         if project_id and run_id:
-            RUNS.create(project_id, run_id, title, phase, {"model": payload.get("model", ""), "message_count": len(payload.get("messages", []))})
+            RUNS.create(project_id, run_id, title, phase, {"model": payload.get("model", ""), "message_count": len(payload.get("messages", [])), "attempt": task_meta.get("attempt", 1)})
         req = self._openrouter_request(payload, stream=True)
         try:
             response = urllib.request.urlopen(req, timeout=300)

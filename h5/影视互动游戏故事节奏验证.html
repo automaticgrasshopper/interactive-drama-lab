@@ -1511,7 +1511,9 @@ flowchart TD
   document.getElementById('extalloff').addEventListener('click', function(){ EXTENSIONS.forEach(function(e){e.on=false;}); extSave(); extRender(); bindExtToggles(); document.getElementById('sysprompt').value=buildSys(); });
   document.getElementById('sysprompt').value=buildSys();
   // 模型连接：localhost 后端优先；直接 file:// 打开时保留浏览器直连兼容。
-  var backendReady=false, backendSettings=null;
+  var backendReady=false, backendSettings=null, BACKEND_TASK_KEY='idl_active_backend_task_v1';
+  function rememberBackendTask(task){ try{ if(task) localStorage.setItem(BACKEND_TASK_KEY,JSON.stringify(task)); else localStorage.removeItem(BACKEND_TASK_KEY); }catch(e){} }
+  function rememberedBackendTask(){ try{ return JSON.parse(localStorage.getItem(BACKEND_TASK_KEY)||'null'); }catch(e){ return null; } }
   function applyModelSlug(slug){
     if(!slug) return;
     var sel=document.getElementById('ormodel'), found=false;
@@ -1524,6 +1526,27 @@ flowchart TD
     return fetch('/api/settings').then(function(r){ return r.json().then(function(j){ if(!r.ok||!j.ok) throw new Error(j.error||'后端不可用'); return j.settings; }); })
       .then(function(s){ backendSettings=s; backendReady=!!(s.api_key_configured&&s.model); applyModelSlug(s.model); if(backendReady){ setLocked(true); document.getElementById('orview_key').textContent='后端已配置'; document.getElementById('orview_model').textContent=s.model; } return backendReady; })
       .catch(function(){ backendReady=false; return false; });
+  }
+  function parseRecoveredTask(task){
+    var acc=String(task.response_text||''), mark='===JSON===', idx=acc.indexOf(mark), raw=idx>=0?acc.slice(idx+mark.length):acc;
+    var a=raw.indexOf('{'), b=raw.lastIndexOf('}'); if(a<0||b<=a) throw new Error('已完成任务中没有可恢复的 JSON');
+    raw=raw.slice(a,b+1); var d=JSON.parse(raw); document.getElementById('resp').value=raw; lastData=d;
+    var va=validateData(d); renderOut(); document.getElementById('outbox').innerHTML=analysisHtml(va,task.request&&task.request.attempt||1)+document.getElementById('outbox').innerHTML;
+    progShow(); progSet(100,va.pass?'后端任务已恢复 ✓':'后端任务已恢复，但校验未通过');
+    logLine('▸ 已从后端恢复任务 '+task.run_id+'，无需重新调用模型。'); rememberBackendTask(null);
+  }
+  function recoverBackendTask(){
+    var saved=rememberedBackendTask(); if(!saved||!saved.project_id||!saved.run_id) return;
+    var box=document.getElementById('outbox'), tries=0;
+    function poll(){
+      fetch('/api/tasks/'+encodeURIComponent(saved.project_id)+'/'+encodeURIComponent(saved.run_id)).then(function(r){ return r.json().then(function(j){ if(!r.ok||!j.ok) throw new Error(j.error||'任务读取失败'); return j.task; }); }).then(function(task){
+        tries++; if(task.status==='completed'){ parseRecoveredTask(task); return; }
+        if(['failed','stopped'].indexOf(task.status)>=0){ box.innerHTML='<div class="hint" style="color:#d97706">后端任务 '+esc(task.status)+'：'+esc(task.error||'没有可恢复结果')+'</div>'; rememberBackendTask(null); return; }
+        box.innerHTML='<div class="hint" style="color:#2563eb">正在恢复后端任务：'+esc(task.phase||'生成中')+' · '+(task.progress||0)+'%</div>'; progShow(); progSet(task.progress||5,'后端任务继续运行…');
+        if(tries<900) setTimeout(poll,2000);
+      }).catch(function(e){ box.innerHTML='<div class="hint" style="color:#d97706">任务恢复暂时失败：'+esc(e.message)+'</div>'; });
+    }
+    poll();
   }
   try{
     var _k=localStorage.getItem('or_key'), _m=localStorage.getItem('or_model'), _mc=localStorage.getItem('or_model_custom');
@@ -1555,7 +1578,7 @@ flowchart TD
   });
   document.getElementById('orunlock').addEventListener('click', function(){ setLocked(false); });
   try{ if(localStorage.getItem('or_locked')==='1' && (document.getElementById('orkey').value||'').trim()) setLocked(true); }catch(e){}
-  initBackend();
+  initBackend().then(function(ok){ if(ok) recoverBackendTask(); });
 
   // ===== 进度条 =====
   var progTimer=null;
@@ -2102,13 +2125,14 @@ flowchart TD
           params:'时长'+lastT+'分/结局'+lastE+'/'+(tags.length?tags.join('＋'):'无标签')+'/'+model+'/执行卡',
           pass:va.pass, attempts:attempt, log:logEl.textContent, analysisText:analysisText, json:c,
           input:{ brief:briefTxt, tags:tagsNow.slice(), dur:genDurSel, ends:genEndsSel, docs:(DOCS.length?DOCS.map(function(dd){return {name:dd.name,text:dd.text};}):null) } });
+        rememberBackendTask(null);
         logLine('▸ 已存入「📜 记录」（右上角），最多保留 100 条。');
         done();
       }
       function fail(msg){ progSet(100,'失败 ✗'); document.getElementById('progbar').style.background='#ef4444'; logLine('✗ '+msg); box.innerHTML='<div class="hint" style="color:#d97706">'+esc(msg)+'</div>'; done(); }
       genAbort=new AbortController();
       var requestBody={ model:model, temperature:0.8, max_tokens:20000, stream:true, usage:{include:true}, messages:[ {role:'system',content:sys}, {role:'user',content:user} ] };
-      if(backendReady){ activeBackendTask={project_id:backendProjectId,run_id:backendRunBase+'-a'+attempt}; requestBody._task={project_id:activeBackendTask.project_id,run_id:activeBackendTask.run_id,title:briefTxt||tagsNow.join('＋')||'未命名项目',phase:'outline-generation'}; }
+      if(backendReady){ activeBackendTask={project_id:backendProjectId,run_id:backendRunBase+'-a'+attempt}; requestBody._task={project_id:activeBackendTask.project_id,run_id:activeBackendTask.run_id,title:briefTxt||tagsNow.join('＋')||'未命名项目',phase:'outline-generation',attempt:attempt}; rememberBackendTask(activeBackendTask); }
       fetch(backendReady?'/api/llm/chat/stream':'https://openrouter.ai/api/v1/chat/completions',{
         method:'POST',
         signal:genAbort.signal,
@@ -2129,7 +2153,7 @@ flowchart TD
         }); }
         return pump();
       }).catch(function(e){
-        if(genStopped || (e&&e.name==='AbortError')){ progSet(100,'已停止'); document.getElementById('progbar').style.background='#94a3b8'; logLine('⏹ 已手动停止本次生成（未渲染、未存记录）。可改输入后重新生成。'); box.innerHTML='<div class="hint" style="color:#6b7488">已手动停止。</div>'; done(); return; }
+        if(genStopped || (e&&e.name==='AbortError')){ rememberBackendTask(null); progSet(100,'已停止'); document.getElementById('progbar').style.background='#94a3b8'; logLine('⏹ 已手动停止本次生成（未渲染、未存记录）。可改输入后重新生成。'); box.innerHTML='<div class="hint" style="color:#6b7488">已手动停止。</div>'; done(); return; }
         fail('调用失败：'+e.message+(backendReady?'（检查生产后台的 Key、模型与网络）':'（检查 Key / 模型 slug / 网络；若被 CORS 拦，点"连不上？"让 kian 代发）'));
       });
     }
