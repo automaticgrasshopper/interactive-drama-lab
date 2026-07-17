@@ -18,6 +18,7 @@ import os
 import re
 import subprocess
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -98,6 +99,8 @@ def project_dirs() -> list[dict[str, Any]]:
         if not path.is_dir():
             continue
         meta = read_json(path / "project.json", {})
+        runs_dir = path / "runs"
+        run_count = len(list(runs_dir.glob("*.json"))) if runs_dir.is_dir() else 0
         projects.append(
             {
                 "id": path.name,
@@ -107,6 +110,7 @@ def project_dirs() -> list[dict[str, Any]]:
                     "updated_at",
                     dt.datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds"),
                 ),
+                "run_count": run_count,
             }
         )
     return projects
@@ -165,7 +169,8 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
-        path = self.path.split("?", 1)[0]
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
         if path == "/api/health":
             self._json(200, {"ok": True, "service": "interactive-drama-backend", "root": str(ROOT)})
             return
@@ -174,6 +179,20 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if path == "/api/projects":
             self._json(200, {"ok": True, "projects": project_dirs()})
+            return
+        if path == "/api/runs":
+            query = urllib.parse.parse_qs(parsed.query)
+            project_id = safe_name((query.get("project_id") or [""])[0], "")
+            if not project_id:
+                self._json(400, {"ok": False, "error": "缺少 project_id"})
+                return
+            runs_dir = DATA_DIR / project_id / "runs"
+            runs = []
+            if runs_dir.is_dir():
+                for item in sorted(runs_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+                    record = read_json(item, {})
+                    runs.append({"id": item.stem, "title": record.get("title", ""), "time": record.get("time", ""), "pass": record.get("pass"), "attempts": record.get("attempts")})
+            self._json(200, {"ok": True, "runs": runs})
             return
         if path == "/api/git/status":
             self._json(200, {"ok": True, "git": git_status()})
@@ -209,12 +228,16 @@ class Handler(SimpleHTTPRequestHandler):
                 self.git_commit("datapacks")
             elif path == "/api/projects":
                 self.create_or_update_project()
+            elif path == "/api/runs":
+                self.save_run()
             elif path == "/api/git/commit":
                 self.git_commit("projects")
             elif path == "/api/git/push":
                 self.git_push()
             elif path == "/api/llm/chat":
                 self.llm_chat()
+            elif path == "/api/llm/chat/stream":
+                self.llm_chat_stream()
             else:
                 self.send_error(404, "Not Found")
         except Exception as exc:  # noqa: BLE001
@@ -260,6 +283,35 @@ class Handler(SimpleHTTPRequestHandler):
                 commit_result["push"] = push.stdout.strip()
         self._json(200, {"ok": True, "project": meta, "git": commit_result})
 
+    def save_run(self) -> None:
+        payload = self._payload()
+        title = str(payload.get("title") or "未命名项目").strip()
+        project_id = safe_name(payload.get("project_id") or title, "project")
+        run = payload.get("run")
+        if not isinstance(run, dict):
+            raise RuntimeError("run 必须是对象")
+        target = DATA_DIR / project_id
+        runs_dir = target / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        raw_id = payload.get("run_id") or run.get("runId") or run.get("time") or dt.datetime.now().isoformat()
+        run_id = safe_name(raw_id, dt.datetime.now().strftime("%Y%m%d-%H%M%S"))
+        atomic_json(runs_dir / f"{run_id}.json", run)
+        now = dt.datetime.now().isoformat(timespec="seconds")
+        meta = read_json(target / "project.json", {})
+        meta.update({"id": project_id, "title": title, "stage": payload.get("stage", "生成记录已保存"), "updated_at": now, "latest_run": run_id})
+        atomic_json(target / "project.json", meta)
+        settings = load_settings()
+        commit_result = None
+        if settings["auto_commit"]:
+            commit_result = self.commit_paths([str(target.relative_to(ROOT))], f"保存生成记录 {title}")
+            if settings["auto_push"] and commit_result.get("status") == "committed":
+                push = run_git("push", "origin", "HEAD")
+                if push.returncode:
+                    commit_result["push_error"] = push.stdout.strip()
+                else:
+                    commit_result["push"] = push.stdout.strip()
+        self._json(200, {"ok": True, "project": meta, "run_id": run_id, "git": commit_result})
+
     def commit_paths(self, paths: list[str], message: str) -> dict[str, Any]:
         changed = run_git("status", "--porcelain", "--", *paths).stdout.strip()
         if not changed:
@@ -287,8 +339,7 @@ class Handler(SimpleHTTPRequestHandler):
             raise RuntimeError(push.stdout.strip() or "推送失败")
         self._json(200, {"ok": True, "message": push.stdout.strip() or "已推送到远端。"})
 
-    def llm_chat(self) -> None:
-        payload = self._payload()
+    def _openrouter_request(self, payload: dict[str, Any], stream: bool) -> urllib.request.Request:
         settings = load_settings()
         if settings["provider"] != "openrouter":
             raise RuntimeError("当前仅启用 OpenRouter provider")
@@ -299,14 +350,20 @@ class Handler(SimpleHTTPRequestHandler):
         request_body.setdefault("model", settings["model"])
         if not request_body.get("model"):
             raise RuntimeError("请先配置默认生成模型")
-        request_body["stream"] = False
+        request_body["stream"] = stream
+        if stream:
+            request_body.setdefault("usage", {"include": True})
         url = settings["base_url"].rstrip("/") + "/chat/completions"
-        req = urllib.request.Request(
+        return urllib.request.Request(
             url,
             data=json.dumps(request_body).encode("utf-8"),
             headers={"Authorization": "Bearer " + api_key, "Content-Type": "application/json"},
             method="POST",
         )
+
+    def llm_chat(self) -> None:
+        payload = self._payload()
+        req = self._openrouter_request(payload, stream=False)
         try:
             with urllib.request.urlopen(req, timeout=180) as response:
                 data = json.loads(response.read().decode("utf-8"))
@@ -314,6 +371,31 @@ class Handler(SimpleHTTPRequestHandler):
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"OpenRouter 请求失败：{exc.code} {detail}") from exc
         self._json(200, {"ok": True, "data": data})
+
+    def llm_chat_stream(self) -> None:
+        payload = self._payload()
+        req = self._openrouter_request(payload, stream=True)
+        try:
+            response = urllib.request.urlopen(req, timeout=300)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"OpenRouter 请求失败：{exc.code} {detail}") from exc
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self._cors()
+        self.end_headers()
+        try:
+            while True:
+                chunk = response.read(4096)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            response.close()
 
     def log_message(self, _format: str, *args: Any) -> None:
         return

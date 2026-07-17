@@ -1510,7 +1510,21 @@ flowchart TD
   document.getElementById('extallon').addEventListener('click', function(){ EXTENSIONS.forEach(function(e){e.on=true;}); extSave(); extRender(); bindExtToggles(); document.getElementById('sysprompt').value=buildSys(); });
   document.getElementById('extalloff').addEventListener('click', function(){ EXTENSIONS.forEach(function(e){e.on=false;}); extSave(); extRender(); bindExtToggles(); document.getElementById('sysprompt').value=buildSys(); });
   document.getElementById('sysprompt').value=buildSys();
-  // Key / 模型 记忆（仅存本机 localStorage）
+  // 模型连接：localhost 后端优先；直接 file:// 打开时保留浏览器直连兼容。
+  var backendReady=false, backendSettings=null;
+  function applyModelSlug(slug){
+    if(!slug) return;
+    var sel=document.getElementById('ormodel'), found=false;
+    [].forEach.call(sel.options,function(o){ if(o.value===slug){ found=true; sel.value=slug; } });
+    if(!found){ sel.value='__other__'; document.getElementById('ormodel_custom').value=slug; }
+    document.getElementById('ormodel_custom').style.display=(sel.value==='__other__')?'block':'none';
+  }
+  function initBackend(){
+    if(location.protocol==='file:') return Promise.resolve(false);
+    return fetch('/api/settings').then(function(r){ return r.json().then(function(j){ if(!r.ok||!j.ok) throw new Error(j.error||'后端不可用'); return j.settings; }); })
+      .then(function(s){ backendSettings=s; backendReady=!!(s.api_key_configured&&s.model); applyModelSlug(s.model); if(backendReady){ setLocked(true); document.getElementById('orview_key').textContent='后端已配置'; document.getElementById('orview_model').textContent=s.model; } return backendReady; })
+      .catch(function(){ backendReady=false; return false; });
+  }
   try{
     var _k=localStorage.getItem('or_key'), _m=localStorage.getItem('or_model'), _mc=localStorage.getItem('or_model_custom');
     if(_k) document.getElementById('orkey').value=_k;
@@ -1541,6 +1555,7 @@ flowchart TD
   });
   document.getElementById('orunlock').addEventListener('click', function(){ setLocked(false); });
   try{ if(localStorage.getItem('or_locked')==='1' && (document.getElementById('orkey').value||'').trim()) setLocked(true); }catch(e){}
+  initBackend();
 
   // ===== 进度条 =====
   var progTimer=null;
@@ -1682,9 +1697,20 @@ flowchart TD
   var HKEY='gen_history_v1';
   var viewedHist=null; // 当前正在主界面查看的那条记录（用 time 作标识）
   function histAll(){ try{ return JSON.parse(localStorage.getItem(HKEY)||'[]'); }catch(e){ return []; } }
+  function projectSlug(title){ return String(title||'project').trim().replace(/\s+/g,'-').replace(/[^\w\-\u4e00-\u9fff]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,80)||'project'; }
+  function saveRunToBackend(rec){
+    if(location.protocol==='file:') return;
+    var title=rec.title||rec.logline||'未命名项目';
+    fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project_id:projectSlug(title),title:title,stage:rec.pass?'生成完成':'生成未达标',run_id:rec.runId||rec.time,run:rec})})
+      .then(function(r){ return r.json().then(function(j){ if(!r.ok||!j.ok) throw new Error(j.error||'后端保存失败'); return j; }); })
+      .then(function(j){ logLine('▸ 已自动保存到本机后端项目'+(j.git&&j.git.status==='committed'?'，并创建本地 Git 提交':'')+'。'); })
+      .catch(function(e){ console.warn('[backend] 生成记录自动保存失败',e); logLine('⚠ 后端自动保存失败：'+e.message+'（浏览器记录仍保留）'); });
+  }
   function histSave(rec){ var a=histAll(); a.unshift(rec); while(a.length>100) a.pop();
     viewedHist=rec&&rec.time; // 刚生成的这条即主界面正显示的内容
-    try{ localStorage.setItem(HKEY,JSON.stringify(a)); }catch(e){ while(a.length>1){ a.pop(); try{ localStorage.setItem(HKEY,JSON.stringify(a)); break; }catch(e2){} } } setTimeout(function(){ if(window.__idlSaveScriptRecord) window.__idlSaveScriptRecord(); },0); }
+    try{ localStorage.setItem(HKEY,JSON.stringify(a)); }catch(e){ while(a.length>1){ a.pop(); try{ localStorage.setItem(HKEY,JSON.stringify(a)); break; }catch(e2){} } }
+    saveRunToBackend(rec);
+    setTimeout(function(){ if(window.__idlSaveScriptRecord) window.__idlSaveScriptRecord(); },0); }
   var PAGESZ=10;
   function histRender(){
     var a=histAll(), list=document.getElementById('histlist'), view=document.getElementById('histview');
@@ -1985,8 +2011,8 @@ flowchart TD
     if(!briefTxt && !tagsNow.length && !hasDoc){ alert('您没有输入任何想法、选择任何标签，也没有上传文稿。\n\n请在左侧“描述”里写点想法、选一个题材标签，或上传一份文稿。'); document.getElementById('brief').focus(); return; }
     if(!skipConfirm && !briefTxt && !hasDoc && tagsNow.length){ if(!confirm('您没有输入任何故事灵感，我会根据您的题材标签（'+tagsNow.join('＋')+'）生成故事，确定吗？')){ document.getElementById('brief').focus(); return; } }
     var genDurSel=document.getElementById('dur').value, genEndsSel=document.getElementById('ends').value;
-    if(!isLocked()){ box.innerHTML='<div class="hint" style="color:#d97706">先在下方「对接模型」填 Key、选模型并点「确定」锁定。</div>'; document.getElementById('orbox').scrollIntoView({behavior:'smooth',block:'center'}); return; }
-    var key=(document.getElementById('orkey').value||'').trim(), model=getModel();
+    if(!backendReady && !isLocked()){ box.innerHTML='<div class="hint" style="color:#d97706">请先到左下角「生产后台」配置模型，或在下方使用浏览器直连方式。</div>'; document.getElementById('orbox').scrollIntoView({behavior:'smooth',block:'center'}); return; }
+    var key=(document.getElementById('orkey').value||'').trim(), model=backendReady?(backendSettings.model||getModel()):getModel();
     genBusy=true;
     var btn=document.getElementById('gen'), old=btn.textContent; btn.textContent='生成中…'; btn.disabled=true;
     document.getElementById('stopgen').style.display='inline-block';
@@ -2079,11 +2105,12 @@ flowchart TD
       }
       function fail(msg){ progSet(100,'失败 ✗'); document.getElementById('progbar').style.background='#ef4444'; logLine('✗ '+msg); box.innerHTML='<div class="hint" style="color:#d97706">'+esc(msg)+'</div>'; done(); }
       genAbort=new AbortController();
-      fetch('https://openrouter.ai/api/v1/chat/completions',{
+      var requestBody={ model:model, temperature:0.8, max_tokens:20000, stream:true, usage:{include:true}, messages:[ {role:'system',content:sys}, {role:'user',content:user} ] };
+      fetch(backendReady?'/api/llm/chat/stream':'https://openrouter.ai/api/v1/chat/completions',{
         method:'POST',
         signal:genAbort.signal,
-        headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' },
-        body:JSON.stringify({ model:model, temperature:0.8, max_tokens:20000, stream:true, usage:{include:true}, messages:[ {role:'system',content:sys}, {role:'user',content:user} ] })
+        headers:backendReady?{'Content-Type':'application/json'}:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+        body:JSON.stringify(requestBody)
       }).then(function(r){
         if(!r.ok) return r.json().then(function(j){ throw new Error((j&&j.error&&j.error.message)||('HTTP '+r.status)); });
         if(!r.body || !r.body.getReader){ return r.text().then(function(t){ feed(t); finish(); }); }
@@ -2100,7 +2127,7 @@ flowchart TD
         return pump();
       }).catch(function(e){
         if(genStopped || (e&&e.name==='AbortError')){ progSet(100,'已停止'); document.getElementById('progbar').style.background='#94a3b8'; logLine('⏹ 已手动停止本次生成（未渲染、未存记录）。可改输入后重新生成。'); box.innerHTML='<div class="hint" style="color:#6b7488">已手动停止。</div>'; done(); return; }
-        fail('调用失败：'+e.message+'（检查 Key / 模型 slug / 网络；若被 CORS 拦，点"连不上？"让 kian 代发）');
+        fail('调用失败：'+e.message+(backendReady?'（检查生产后台的 Key、模型与网络）':'（检查 Key / 模型 slug / 网络；若被 CORS 拦，点"连不上？"让 kian 代发）'));
       });
     }
     function done(){ genBusy=false; genAbort=null; document.getElementById('stopgen').style.display='none'; btn.textContent=old; btn.disabled=false; setTimeout(function(){ document.getElementById('progbar').style.background='linear-gradient(90deg,#3b82f6,#7c3aed)'; },1500); }
@@ -2551,11 +2578,12 @@ flowchart TD
 
   // ===== 推荐时长 / 结局数（模型能力测试；无 Key 或失败时离线粗估兜底）=====
   function orCall(userText, done){
-    var key=(document.getElementById('orkey').value||'').trim(); if(!key) return done(new Error('nokey'));
-    var model=getModel(); if(!model) return done(new Error('nomodel'));
-    var sys=SYS;
-    fetch('https://openrouter.ai/api/v1/chat/completions',{ method:'POST', headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'}, body:JSON.stringify({model:model,temperature:0.5,messages:[{role:'system',content:sys},{role:'user',content:userText}]}) })
-     .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,status:r.status,j:j}; }); })
+    var key=(document.getElementById('orkey').value||'').trim();
+    if(!backendReady && !key) return done(new Error('nokey'));
+    var model=backendReady?(backendSettings.model||getModel()):getModel(); if(!model) return done(new Error('nomodel'));
+    var sys=SYS, body={model:model,temperature:0.5,messages:[{role:'system',content:sys},{role:'user',content:userText}]};
+    fetch(backendReady?'/api/llm/chat':'https://openrouter.ai/api/v1/chat/completions',{ method:'POST', headers:backendReady?{'Content-Type':'application/json'}:{'Authorization':'Bearer '+key,'Content-Type':'application/json'}, body:JSON.stringify(body) })
+     .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,status:r.status,j:backendReady&&j&&j.data?j.data:j}; }); })
      .then(function(res){ if(!res.ok) throw new Error((res.j&&res.j.error&&res.j.error.message)||('HTTP '+res.status)); done(null,(res.j.choices&&res.j.choices[0]&&res.j.choices[0].message&&res.j.choices[0].message.content)||''); })
      .catch(function(e){ done(e); });
   }
