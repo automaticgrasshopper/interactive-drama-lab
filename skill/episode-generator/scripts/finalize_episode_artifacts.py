@@ -25,6 +25,11 @@ DIALOGUE_FIELDS = (
     "设定发布与承重句",
     "朴素中文",
 )
+COLD_FIELDS = (
+    "动作可拍门",
+    "对白可说门",
+    "冷读六问",
+)
 
 
 def section(text: str, heading: str) -> str:
@@ -71,6 +76,17 @@ def pending_audit(fields: tuple[str, ...]) -> str:
     return "\n".join(lines)
 
 
+def pending_cold_audit() -> str:
+    lines = [
+        "- 状态：PENDING",
+        "- 隔离方式：PENDING",
+        "- 正文 SHA-256：PENDING",
+    ]
+    lines.extend(f"- {name}：PENDING｜待独立冷读" for name in COLD_FIELDS)
+    lines.extend(("- 一句话复述：PENDING", "- 未解决问题：待复核"))
+    return "\n".join(lines)
+
+
 def validate_audit(
     cache_text: str,
     heading: str,
@@ -92,6 +108,17 @@ def validate_audit(
             raise SystemExit(f"{episode_id} 的{heading}缺少具体依据：{name}")
     if field(block, "未解决问题") != "无":
         raise SystemExit(f"{episode_id} 的{heading}仍有未解决问题")
+
+
+def validate_cold_audit(cache_text: str, expected_digest: str, episode_id: str) -> None:
+    validate_audit(
+        cache_text, "冷读复核记录", COLD_FIELDS, expected_digest, episode_id
+    )
+    block = section(cache_text, "冷读复核记录")
+    if field(block, "隔离方式") not in ("独立冷读", "最小上下文复检"):
+        raise SystemExit(f"{episode_id} 的冷读复核记录缺少有效隔离方式")
+    if len(re.sub(r"\s+", "", field(block, "一句话复述"))) < 12:
+        raise SystemExit(f"{episode_id} 的冷读复核记录缺少具体一句话复述")
 
 
 def selected_paths(root: Path, selection: str | None) -> list[Path]:
@@ -142,9 +169,13 @@ def main() -> int:
                 cache_text, "对白复核记录", pending_audit(DIALOGUE_FIELDS)
             )
             cache_text = replace_section(
+                cache_text, "冷读复核记录", pending_cold_audit()
+            )
+            cache_text = replace_section(
                 cache_text,
                 "校验状态",
-                "- 机械完整度：PENDING\n- 因果连续性：PENDING\n- 中文对白：PENDING\n- 冻结状态：未冻结",
+                "- 机械完整度：PENDING\n- 因果连续性：PENDING\n"
+                "- 中文对白：PENDING\n- 独立冷读：PENDING\n- 冻结状态：未冻结",
             )
         else:
             candidate_text = section(cache_text, "当前集定稿").strip()
@@ -172,6 +203,7 @@ def main() -> int:
             validate_audit(
                 cache_text, "对白复核记录", DIALOGUE_FIELDS, current_digest, episode_id
             )
+            validate_cold_audit(cache_text, current_digest, episode_id)
             record = (
                 f"- 可见字符数：{visible_chars}\n"
                 f"- 动作段数：{action_beats}\n"
@@ -186,6 +218,7 @@ def main() -> int:
                 "- 机械完整度：PASS\n"
                 "- 因果连续性：PASS（见当前正文指纹对应的因果复核记录）\n"
                 "- 中文对白：PASS（见当前正文指纹对应的对白复核记录）\n"
+                "- 独立冷读：PASS（见当前正文指纹对应的冷读复核记录）\n"
                 "- 冻结状态：已冻结",
             )
             public_path = root / "episodes" / cache_path.name

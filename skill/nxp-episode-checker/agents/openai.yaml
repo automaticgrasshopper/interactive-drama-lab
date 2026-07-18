@@ -1,0 +1,4 @@
+interface:
+  display_name: "分集冷读校验师"
+  short_description: "独立检查动作可拍、对白可说及单集因果、余波和事实来源，只判不改"
+  default_prompt: "Use $nxp-episode-checker 只读观众前情摘要、入口硬状态和当前一集正文，不看生产卡、作者意图和后续结局；先过动作可拍门和对白可说门，再回答冷读六问并输出 PASS/FAIL 与定位。"

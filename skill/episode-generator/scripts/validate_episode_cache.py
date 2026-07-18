@@ -40,6 +40,11 @@ DIALOGUE_AUDIT_FIELDS = (
     "设定发布与承重句",
     "朴素中文",
 )
+COLD_AUDIT_FIELDS = (
+    "动作可拍门",
+    "对白可说门",
+    "冷读六问",
+)
 INPUT_FIELDS = ("游戏企划", "角色描述", "场景描述", "道具描述")
 
 
@@ -408,6 +413,7 @@ def validate_v12_episode_audits(
     errors: list[str],
     require_public: bool,
     limits: tuple[int, int, int, int],
+    require_cold: bool = False,
 ) -> None:
     for node_id in sorted(nodes):
         cache_path = cache_root / "episodes" / f"{node_id}.md"
@@ -428,7 +434,10 @@ def validate_v12_episode_audits(
             if unknown:
                 errors.append(f"{node_id} 的{heading}含非上游正式名称：{sorted(unknown)}")
 
-        for heading in ("因果复核记录", "对白复核记录"):
+        required_headings = ["因果复核记录", "对白复核记录"]
+        if require_cold:
+            required_headings.append("冷读复核记录")
+        for heading in required_headings:
             if f"## {heading}" not in cache_text:
                 errors.append(f"{node_id} 缺少栏目：{heading}")
 
@@ -466,6 +475,23 @@ def validate_v12_episode_audits(
             node_id,
             errors,
         )
+        if require_cold:
+            cold_block = section(cache_text, "冷读复核记录")
+            validate_audit_block(
+                cold_block,
+                "冷读复核记录",
+                COLD_AUDIT_FIELDS,
+                expected_digest,
+                node_id,
+                errors,
+            )
+            if audit_field(cold_block, "隔离方式") not in (
+                "独立冷读",
+                "最小上下文复检",
+            ):
+                errors.append(f"{node_id} 的冷读复核记录缺少有效隔离方式")
+            if len(re.sub(r"\s+", "", audit_field(cold_block, "一句话复述"))) < 12:
+                errors.append(f"{node_id} 的冷读复核记录缺少具体一句话复述")
 
         visible_chars, action_beats = episode_metrics(final_text)
         metric_record = section(cache_text, "度量记录")
@@ -525,18 +551,24 @@ def validate(
             errors.append(f"input.md 未解析到正式{kind}名称")
     manifest = read_text(cache / "manifest.md", [])
     is_v12 = "episode-cache-v0.1.12" in manifest
-    if is_v12:
+    is_v13 = "episode-cache-v0.1.13" in manifest
+    is_v14 = "episode-cache-v0.1.14" in manifest
+    is_current_cache = is_v12 or is_v13 or is_v14
+    if is_current_cache:
         declared_canvas = section(manifest, "公开 Canvas").strip()
         if not declared_canvas:
             errors.append("manifest.md 缺少有效栏目：公开 Canvas")
         elif Path(declared_canvas).expanduser().resolve() != canvas_root.resolve():
             errors.append("manifest.md 的公开 Canvas 与当前校验项目不一致")
-    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12|13|14)\b", manifest):
         branch_audit = read_text(cache / "branch-audit.md", errors)
         if branch_audit:
             validate_branch_audit(branch_audit, nodes, errors)
-    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12)\b", manifest):
-        for heading in ("对白校验状态", "因果连续性校验状态"):
+    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12|13|14)\b", manifest):
+        manifest_headings = ["对白校验状态", "因果连续性校验状态"]
+        if is_v13 or is_v14:
+            manifest_headings.append("冷读校验状态")
+        for heading in manifest_headings:
             if not section(manifest, heading):
                 errors.append(f"manifest.md 缺少有效栏目：{heading}")
         runtime_markers = re.compile(
@@ -562,9 +594,9 @@ def validate(
         public=False,
         limits=limits,
         stats=stats,
-        allow_pending=is_v12,
+        allow_pending=is_current_cache,
     )
-    if is_v12:
+    if is_current_cache:
         validate_v12_episode_audits(
             canvas_root,
             cache,
@@ -574,11 +606,12 @@ def validate(
             errors,
             require_public,
             limits,
+            require_cold=is_v13 or is_v14,
         )
 
     if require_public:
         structure = read_text(canvas_root / "episode-structure.md", errors)
-        if re.search(r"episode-cache-v0\.1\.(?:10|11|12)\b", manifest):
+        if re.search(r"episode-cache-v0\.1\.(?:10|11|12|13|14)\b", manifest):
             if "episode-flowchart.svg" not in structure:
                 errors.append("episode-structure.md 未引用静态流程图")
             if "<details>" not in structure or "```mermaid" not in structure:
