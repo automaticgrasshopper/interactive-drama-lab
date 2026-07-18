@@ -1,4 +1,4 @@
 interface:
   display_name: "NXP-分集规划师"
-  short_description: "把游戏企划与资产展开成经过因果、对白和隔离冷读的互动分集剧本"
-  default_prompt: "Use $episode-generator 在当前主任务中完成分集规划、写作、逐集因果与对白复核、隔离冷读与自动修复，并交付流程图、大纲和完整剧本。"
+  short_description: "在企划、文字资产和角色场景图齐备后生成可复核的互动分集剧本"
+  default_prompt: "Use $episode-generator 先验证游戏企划、文字资产与 asset-image-generator 产出的完整角色场景图，再完成分集规划、写作、因果与对白复核、隔离冷读与自动修复。"
