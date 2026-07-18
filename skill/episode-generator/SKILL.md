@@ -169,6 +169,12 @@ description: "当outline-generator 已经产出 游戏企划 和，以及asset-d
 
 全部流程在一次任务中自动连续执行。中间不发送流程图完成、结构完成、批次完成或校验完成等阶段性消息，也不询问是否继续。全部请求范围完成并通过最终校验后，只发送完成状态、校验结论和 Canvas 入口；完整内容保留在 Canvas。
 
+### 可见进度消息安全
+
+默认不发送中间进度消息。运行环境或更高优先级规则强制要求发送可见进度时，只使用“正在处理，完成后统一交付”这类不含工作阶段的笼统表述。
+
+任何可见的中间消息都不得提及缓存、拓扑、生产卡、执行组、分支审计、校验轮、冷读、SHA、内部文件、解冻范围、修复次数或其它内部分析与工序。需要用户补充外部输入时，只说明缺少的正式输入和所需行动，不解释内部执行到哪一步。
+
 ### 第一阶段：全局规划并落画布
 
 1. 读取 `references/production-protocol.md`、`references/canvas-cache-protocol.md` 和 `references/emotional-spine-and-branching.md`；悬疑、惊悚、犯罪、反转、秘密或证据延后揭露题材同时读取 `references/causal-clarity-and-suspense.md`。
