@@ -45,10 +45,7 @@ COLD_AUDIT_FIELDS = (
     "对白可说门",
     "冷读六问",
 )
-LEGACY_INPUT_FIELDS = ("游戏企划", "角色描述", "场景描述", "道具描述")
-IMAGE_INPUT_FIELDS = ("角色图片", "场景图片")
-V15_INPUT_FIELDS = LEGACY_INPUT_FIELDS + IMAGE_INPUT_FIELDS
-IMAGE_PLACEHOLDER = re.compile(r"^(?:无|未生成|待生成|待补|PENDING|TODO|占位符)$", re.IGNORECASE)
+INPUT_FIELDS = ("游戏企划", "角色描述", "场景描述", "道具描述")
 
 
 def read_text(path: Path, errors: list[str]) -> str:
@@ -61,57 +58,15 @@ def read_text(path: Path, errors: list[str]) -> str:
     return text
 
 
-def image_mappings(text: str, heading: str) -> dict[str, str]:
-    mappings: dict[str, str] = {}
-    for name, reference in re.findall(
-        r"^-\s*(.+?)[：:]\s*(\S.*?)\s*$", section(text, heading), re.MULTILINE
-    ):
-        if name.strip() != "来源":
-            mappings[name.strip()] = reference.strip()
-    return mappings
-
-
-def validate_input_contract(
-    text: str, errors: list[str], require_images: bool = False
-) -> None:
-    expected_fields = V15_INPUT_FIELDS if require_images else LEGACY_INPUT_FIELDS
+def validate_input_contract(text: str, errors: list[str]) -> None:
     headings = tuple(re.findall(r"^##\s+(.+?)\s*$", text, re.MULTILINE))
-    if headings != expected_fields:
-        count = "六" if require_images else "四"
-        errors.append(f"input.md 必须且只能按顺序包含{count}个一级输入字段")
+    if headings != INPUT_FIELDS:
+        errors.append("input.md 必须且只能按顺序包含四个一级输入字段")
         return
-    for heading in LEGACY_INPUT_FIELDS:
+    for heading in INPUT_FIELDS:
         content = section(text, heading)
         if len(re.sub(r"\s+", "", content)) < 30:
             errors.append(f"input.md 的{heading}只有名称/标识或缺少实际描述")
-    if not require_images:
-        return
-    for heading in IMAGE_INPUT_FIELDS:
-        block = section(text, heading)
-        if not re.search(
-            r"^-\s*来源：\s*asset-image-generator\s*$", block, re.MULTILINE
-        ):
-            errors.append(f"input.md 的{heading}未声明 asset-image-generator 来源")
-        mappings = image_mappings(text, heading)
-        if not mappings:
-            errors.append(f"input.md 的{heading}缺少正式资产图片引用")
-        for name, reference in mappings.items():
-            if len(reference) < 3 or IMAGE_PLACEHOLDER.fullmatch(reference):
-                errors.append(f"input.md 的{heading}中{name}缺少有效图片引用")
-
-
-def validate_image_coverage(
-    text: str, known_assets: dict[str, set[str]], errors: list[str]
-) -> None:
-    for kind, heading in (("角色", "角色图片"), ("场景", "场景图片")):
-        expected = known_assets[kind]
-        actual = set(image_mappings(text, heading))
-        missing = expected - actual
-        unknown = actual - expected
-        if missing:
-            errors.append(f"input.md 的{heading}未覆盖正式{kind}：{sorted(missing)}")
-        if unknown:
-            errors.append(f"input.md 的{heading}含非正式{kind}：{sorted(unknown)}")
 
 
 def field(block: str, name: str, errors: list[str], node_id: str) -> str:
@@ -584,15 +539,8 @@ def validate(
 
     topology = read_text(cache / "topology.md", errors)
     nodes = parse_topology(topology, errors) if topology else {}
-    manifest = read_text(cache / "manifest.md", [])
-    is_v12 = "episode-cache-v0.1.12" in manifest
-    is_v13 = "episode-cache-v0.1.13" in manifest
-    is_v14 = "episode-cache-v0.1.14" in manifest
-    is_v15 = "episode-cache-v0.1.15" in manifest
-    is_v16 = "episode-cache-v0.1.16" in manifest
-    is_current_cache = is_v12 or is_v13 or is_v14 or is_v15 or is_v16
     input_text = read_text(cache / "input.md", errors)
-    validate_input_contract(input_text, errors, require_images=is_v15)
+    validate_input_contract(input_text, errors)
     known_assets = {
         "角色": set(re.findall(r"^角色名称:\s*(\S.*?)\s*$", input_text, re.MULTILINE)),
         "场景": set(re.findall(r"^场景名称:\s*(\S.*?)\s*$", input_text, re.MULTILINE)),
@@ -601,21 +549,24 @@ def validate(
     for kind, values in known_assets.items():
         if not values:
             errors.append(f"input.md 未解析到正式{kind}名称")
-    if is_v15:
-        validate_image_coverage(input_text, known_assets, errors)
+    manifest = read_text(cache / "manifest.md", [])
+    is_v12 = "episode-cache-v0.1.12" in manifest
+    is_v13 = "episode-cache-v0.1.13" in manifest
+    is_v14 = "episode-cache-v0.1.14" in manifest
+    is_current_cache = is_v12 or is_v13 or is_v14
     if is_current_cache:
         declared_canvas = section(manifest, "公开 Canvas").strip()
         if not declared_canvas:
             errors.append("manifest.md 缺少有效栏目：公开 Canvas")
         elif Path(declared_canvas).expanduser().resolve() != canvas_root.resolve():
             errors.append("manifest.md 的公开 Canvas 与当前校验项目不一致")
-    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12|13|14|15|16)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12|13|14)\b", manifest):
         branch_audit = read_text(cache / "branch-audit.md", errors)
         if branch_audit:
             validate_branch_audit(branch_audit, nodes, errors)
-    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12|13|14|15|16)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12|13|14)\b", manifest):
         manifest_headings = ["对白校验状态", "因果连续性校验状态"]
-        if is_v13 or is_v14 or is_v15 or is_v16:
+        if is_v13 or is_v14:
             manifest_headings.append("冷读校验状态")
         for heading in manifest_headings:
             if not section(manifest, heading):
@@ -655,12 +606,12 @@ def validate(
             errors,
             require_public,
             limits,
-            require_cold=is_v13 or is_v14 or is_v15 or is_v16,
+            require_cold=is_v13 or is_v14,
         )
 
     if require_public:
         structure = read_text(canvas_root / "episode-structure.md", errors)
-        if re.search(r"episode-cache-v0\.1\.(?:10|11|12|13|14|15|16)\b", manifest):
+        if re.search(r"episode-cache-v0\.1\.(?:10|11|12|13|14)\b", manifest):
             if "episode-flowchart.svg" not in structure:
                 errors.append("episode-structure.md 未引用静态流程图")
             if "<details>" not in structure or "```mermaid" not in structure:
