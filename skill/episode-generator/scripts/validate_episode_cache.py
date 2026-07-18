@@ -589,7 +589,8 @@ def validate(
     is_v13 = "episode-cache-v0.1.13" in manifest
     is_v14 = "episode-cache-v0.1.14" in manifest
     is_v15 = "episode-cache-v0.1.15" in manifest
-    is_current_cache = is_v12 or is_v13 or is_v14 or is_v15
+    is_v16 = "episode-cache-v0.1.16" in manifest
+    is_current_cache = is_v12 or is_v13 or is_v14 or is_v15 or is_v16
     input_text = read_text(cache / "input.md", errors)
     validate_input_contract(input_text, errors, require_images=is_v15)
     known_assets = {
@@ -608,13 +609,13 @@ def validate(
             errors.append("manifest.md 缺少有效栏目：公开 Canvas")
         elif Path(declared_canvas).expanduser().resolve() != canvas_root.resolve():
             errors.append("manifest.md 的公开 Canvas 与当前校验项目不一致")
-    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12|13|14|15)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12|13|14|15|16)\b", manifest):
         branch_audit = read_text(cache / "branch-audit.md", errors)
         if branch_audit:
             validate_branch_audit(branch_audit, nodes, errors)
-    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12|13|14|15)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12|13|14|15|16)\b", manifest):
         manifest_headings = ["对白校验状态", "因果连续性校验状态"]
-        if is_v13 or is_v14 or is_v15:
+        if is_v13 or is_v14 or is_v15 or is_v16:
             manifest_headings.append("冷读校验状态")
         for heading in manifest_headings:
             if not section(manifest, heading):
@@ -654,12 +655,12 @@ def validate(
             errors,
             require_public,
             limits,
-            require_cold=is_v13 or is_v14 or is_v15,
+            require_cold=is_v13 or is_v14 or is_v15 or is_v16,
         )
 
     if require_public:
         structure = read_text(canvas_root / "episode-structure.md", errors)
-        if re.search(r"episode-cache-v0\.1\.(?:10|11|12|13|14|15)\b", manifest):
+        if re.search(r"episode-cache-v0\.1\.(?:10|11|12|13|14|15|16)\b", manifest):
             if "episode-flowchart.svg" not in structure:
                 errors.append("episode-structure.md 未引用静态流程图")
             if "<details>" not in structure or "```mermaid" not in structure:

@@ -1,4 +1,4 @@
 interface:
   display_name: "NXP-分集规划师"
-  short_description: "在企划、文字资产和角色场景图齐备后生成可复核的互动分集剧本"
-  default_prompt: "Use $episode-generator 先验证游戏企划、文字资产与 asset-image-generator 产出的完整角色场景图，再完成分集规划、写作、因果与对白复核、隔离冷读与自动修复。"
+  short_description: "在企划与文字资产齐备、图片流程启动后生成可复核的互动分集剧本"
+  default_prompt: "Use $episode-generator 验证游戏企划与文字资产；新项目先启动 asset-image-generator 但不等待或读取图片，随即完成分集规划、写作、复核与自动修复。"
