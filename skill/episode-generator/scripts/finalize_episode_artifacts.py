@@ -9,7 +9,11 @@ import re
 from pathlib import Path
 
 from cache_paths import cache_root_for
-from validate_storyboard_fields import build_storyboard_fields, validate_fields
+from validate_storyboard_fields import (
+    build_storyboard_fields,
+    validate_fields,
+    validate_final_script_format,
+)
 
 
 CAUSAL_FIELDS = (
@@ -181,6 +185,10 @@ def main() -> int:
             candidate_text = section(cache_text, "当前集定稿").strip()
             if len(re.sub(r"\s+", "", candidate_text)) < 300:
                 raise SystemExit(f"{episode_id} 当前集定稿不是实际完整正文")
+            try:
+                validate_final_script_format(candidate_text)
+            except ValueError as exc:
+                raise SystemExit(f"{episode_id} 正式剧本格式未通过：{exc}") from exc
             synopsis_match = re.search(r"^单集梗概：\s*(.+)$", candidate_text, re.MULTILINE)
             if not synopsis_match:
                 raise SystemExit(f"{episode_id} 当前集定稿缺少单集梗概")
@@ -221,18 +229,26 @@ def main() -> int:
                 "- 独立冷读：PASS（见当前正文指纹对应的冷读复核记录）\n"
                 "- 冻结状态：已冻结",
             )
-            public_path = root / "episodes" / cache_path.name
-            public_path.parent.mkdir(parents=True, exist_ok=True)
-            public_path.write_text(candidate_text + "\n", encoding="utf-8")
         cache_path.write_text(cache_text.rstrip() + "\n", encoding="utf-8")
         if args.mode == "finalize":
             validate_fields(build_storyboard_fields(cache_text, topology))
 
     if args.mode == "finalize":
-        all_public = sorted((root / "episodes").glob("episode-*.md"))
-        combined = "\n\n---\n\n".join(
-            path.read_text(encoding="utf-8").strip() for path in all_public
-        )
+        all_cache = sorted((cache_root / "episodes").glob("episode-*.md"))
+        final_texts: list[str] = []
+        for cache_path in all_cache:
+            cache_text = cache_path.read_text(encoding="utf-8")
+            episode_id = cache_path.stem
+            if "冻结状态：已冻结" not in section(cache_text, "校验状态"):
+                raise SystemExit(f"{episode_id} 尚未冻结，不能组装玩家可见完整剧本")
+            final_text = section(cache_text, "当前集定稿").strip()
+            try:
+                validate_final_script_format(final_text)
+                validate_fields(build_storyboard_fields(cache_text, topology))
+            except ValueError as exc:
+                raise SystemExit(f"{episode_id} 不能组装：{exc}") from exc
+            final_texts.append(final_text)
+        combined = "\n\n---\n\n".join(final_texts)
         (root / "episode-script.md").write_text(combined + "\n", encoding="utf-8")
     return 0
 

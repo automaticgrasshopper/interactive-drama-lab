@@ -22,6 +22,7 @@ from validate_storyboard_fields import (
 NODE_HEADER = re.compile(r"^##\s+(episode-\d{3})\s*｜\s*(.+?)\s*$", re.MULTILINE)
 EPISODE_REF = re.compile(r"episode-\d{3}")
 PUBLIC_HEADER = re.compile(r"^#\s+第(\d+)集", re.MULTILINE)
+PUBLIC_ROOT_FILES = {"episode-flowchart.svg", "episode-structure.md", "episode-script.md"}
 PLACEHOLDER = re.compile(r"(?:已完成|见公开|与.*公开.*一致|同公开|略)$")
 DEFAULT_MIN_VISIBLE_CHARS = 850
 DEFAULT_MAX_VISIBLE_CHARS = 1300
@@ -414,6 +415,7 @@ def validate_v12_episode_audits(
     require_public: bool,
     limits: tuple[int, int, int, int],
     require_cold: bool = False,
+    require_public_episode_files: bool = True,
 ) -> None:
     for node_id in sorted(nodes):
         cache_path = cache_root / "episodes" / f"{node_id}.md"
@@ -509,12 +511,21 @@ def validate_v12_episode_audits(
             errors.append(f"{node_id} 度量记录判定与重新计算结果不一致")
 
         public_path = canvas_root / "episodes" / f"{node_id}.md"
-        if require_public:
+        if require_public and require_public_episode_files:
             if not public_path.is_file():
                 continue
             public_text = public_path.read_text(encoding="utf-8").strip()
             if public_text != final_text:
                 errors.append(f"{node_id} 公开逐集文件与通过复核的当前集定稿不一致")
+
+
+def validate_public_root(canvas_root: Path, errors: list[str]) -> None:
+    if not canvas_root.is_dir():
+        errors.append(f"公开 Canvas 目录不存在：{canvas_root}")
+        return
+    extras = sorted(path.name for path in canvas_root.iterdir() if path.name not in PUBLIC_ROOT_FILES)
+    if extras:
+        errors.append(f"公开 Canvas 根目录含未授权产物：{extras}")
 
 
 def validate(
@@ -553,20 +564,21 @@ def validate(
     is_v12 = "episode-cache-v0.1.12" in manifest
     is_v13 = "episode-cache-v0.1.13" in manifest
     is_v14 = "episode-cache-v0.1.14" in manifest
-    is_current_cache = is_v12 or is_v13 or is_v14
+    is_v17 = "episode-cache-v0.1.17" in manifest
+    is_current_cache = is_v12 or is_v13 or is_v14 or is_v17
     if is_current_cache:
         declared_canvas = section(manifest, "公开 Canvas").strip()
         if not declared_canvas:
             errors.append("manifest.md 缺少有效栏目：公开 Canvas")
         elif Path(declared_canvas).expanduser().resolve() != canvas_root.resolve():
             errors.append("manifest.md 的公开 Canvas 与当前校验项目不一致")
-    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12|13|14)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12|13|14|17)\b", manifest):
         branch_audit = read_text(cache / "branch-audit.md", errors)
         if branch_audit:
             validate_branch_audit(branch_audit, nodes, errors)
-    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12|13|14)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12|13|14|17)\b", manifest):
         manifest_headings = ["对白校验状态", "因果连续性校验状态"]
-        if is_v13 or is_v14:
+        if is_v13 or is_v14 or is_v17:
             manifest_headings.append("冷读校验状态")
         for heading in manifest_headings:
             if not section(manifest, heading):
@@ -606,12 +618,15 @@ def validate(
             errors,
             require_public,
             limits,
-            require_cold=is_v13 or is_v14,
+            require_cold=is_v13 or is_v14 or is_v17,
+            require_public_episode_files=not is_v17,
         )
 
     if require_public:
+        if is_v17:
+            validate_public_root(canvas_root, errors)
         structure = read_text(canvas_root / "episode-structure.md", errors)
-        if re.search(r"episode-cache-v0\.1\.(?:10|11|12|13|14)\b", manifest):
+        if re.search(r"episode-cache-v0\.1\.(?:10|11|12|13|14|17)\b", manifest):
             if "episode-flowchart.svg" not in structure:
                 errors.append("episode-structure.md 未引用静态流程图")
             if "<details>" not in structure or "```mermaid" not in structure:
@@ -628,13 +643,31 @@ def validate(
                 f"缺少 {sorted(expected_numbers - actual_numbers)}，"
                 f"多出 {sorted(actual_numbers - expected_numbers)}"
             )
-        validate_episode_files(canvas_root / "episodes", nodes, errors, public=True, limits=limits, stats=stats)
-        for node_id in sorted(nodes):
-            public_episode = canvas_root / "episodes" / f"{node_id}.md"
-            if public_episode.is_file():
-                episode_text = public_episode.read_text(encoding="utf-8").strip()
-                if episode_text and episode_text not in script:
-                    errors.append(f"完整剧本汇总未原样包含：{public_episode}")
+        if is_v17:
+            for node_id in sorted(nodes):
+                cache_path = cache / "episodes" / f"{node_id}.md"
+                if not cache_path.is_file():
+                    continue
+                final_text = section(
+                    cache_path.read_text(encoding="utf-8"), "当前集定稿"
+                ).strip()
+                if final_text and final_text not in script:
+                    errors.append(f"完整剧本汇总未原样包含私有定稿：{node_id}")
+        else:
+            validate_episode_files(
+                canvas_root / "episodes",
+                nodes,
+                errors,
+                public=True,
+                limits=limits,
+                stats=stats,
+            )
+            for node_id in sorted(nodes):
+                public_episode = canvas_root / "episodes" / f"{node_id}.md"
+                if public_episode.is_file():
+                    episode_text = public_episode.read_text(encoding="utf-8").strip()
+                    if episode_text and episode_text not in script:
+                        errors.append(f"完整剧本汇总未原样包含：{public_episode}")
 
     return errors, stats
 

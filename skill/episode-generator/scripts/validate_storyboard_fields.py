@@ -27,6 +27,15 @@ INTERACTION_FIELDS = (
     "默认下一分集编号",
 )
 OPTION_FIELDS = ("选项编号", "选项文字", "目标分集编号")
+DRAFT_LABEL = re.compile(
+    r"^\s*(?:#{1,6}\s*|\*\*)?"
+    r"(?:扩展|收束|补充|加写|返工|优化|润色)"
+    r"(?:场面|场景|段落|内容|后|版)?(?:\*\*)?\s*$"
+)
+MARKDOWN_HEADING = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+STANDALONE_BOLD = re.compile(r"^\s*\*\*[^*]+\*\*\s*$", re.MULTILINE)
+EPISODE_TITLE = re.compile(r"^#\s+第\d+集《.+?》\s*$")
+SCENE_HEADING = re.compile(r"^【场.+?·.+?·.+?·.+?】\s*$", re.MULTILINE)
 
 
 def section(text: str, heading: str) -> str:
@@ -80,6 +89,22 @@ def numeric_refs(value: str) -> list[int]:
     return [int(item) for item in refs]
 
 
+def validate_final_script_format(text: str) -> None:
+    lines = text.splitlines()
+    if not lines or not EPISODE_TITLE.fullmatch(lines[0].strip()):
+        raise ValueError("完整剧本缺少标准分集标题")
+    for line in lines:
+        if DRAFT_LABEL.fullmatch(line):
+            raise ValueError(f"完整剧本含修订标签：{line.strip()}")
+    headings = MARKDOWN_HEADING.findall(text)
+    if headings != ["# "]:
+        raise ValueError("完整剧本含非制片 Markdown 标题")
+    if STANDALONE_BOLD.search(text):
+        raise ValueError("完整剧本含粗体包装的追加段落标题")
+    if not SCENE_HEADING.search(text):
+        raise ValueError("完整剧本缺少标准场次标题")
+
+
 def build_storyboard_fields(cache_text: str, topology: str) -> dict[str, object]:
     header = re.search(r"^#\s+第(\d+)集《(.+?)》\s*$", cache_text, re.MULTILINE)
     if not header:
@@ -113,6 +138,7 @@ def build_storyboard_fields(cache_text: str, topology: str) -> dict[str, object]
     final_text = section(cache_text, "当前集定稿")
     if not final_text or final_text == "PENDING":
         raise ValueError(f"{episode_id} 尚无可传递的当前集定稿")
+    validate_final_script_format(final_text)
     synopsis = section(cache_text, "单集梗概")
     conflict = section(cache_text, "本集冲突与前后承接")
     if not synopsis or not conflict:

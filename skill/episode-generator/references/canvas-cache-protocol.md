@@ -16,18 +16,16 @@
 使用 `exec` 创建：
 
 ```text
-{canvas-root}/episodes/
 {workspace-root}/.episode-generator-cache/{slug}/episodes/
 ```
 
-使用 `write_file` 创建不存在的公开逐集文件和缓存文件；已有文件必须先 `read_file`，再使用 `edit_file`。
+使用 `write_file` 创建不存在的公开三文件和私有缓存文件；已有文件必须先 `read_file`，再使用 `edit_file`。
 
 公开文件：
 
 ```text
 {canvas-root}/episode-structure.md
 {canvas-root}/episode-flowchart.svg
-{canvas-root}/episodes/episode-NNN.md
 {canvas-root}/episode-script.md
 ```
 
@@ -46,7 +44,7 @@
 {workspace-root}/.episode-generator-cache/{slug}/episodes/episode-NNN.md
 ```
 
-Canvas 项目中只允许保留 `episode-flowchart.svg`、`episode-structure.md`、`episode-script.md` 和 `episodes/`。不得在 Canvas 内创建缓存目录、审计文件、生产卡、运行日志或 HTML 首页。
+Canvas 项目中只允许保留 `episode-flowchart.svg`、`episode-structure.md` 和 `episode-script.md`。不得在 Canvas 内创建 `episodes/`、`episode-delivery.md`、交接文件、缓存目录、审计文件、生产卡、运行日志或 HTML 首页。
 
 ## 三、缓存格式
 
@@ -89,7 +87,7 @@ Canvas 项目中只允许保留 `episode-flowchart.svg`、`episode-structure.md`
 ## 最近更新
 ```
 
-缓存版本使用 `episode-cache-v0.1.14`。
+缓存版本使用 `episode-cache-v0.1.17`。
 
 ### global.md
 
@@ -370,10 +368,10 @@ PASS
 - 结局无出边；
 - 非结局有默认推进或选择；
 - 分集缓存文件数量与节点数一致；
-- Canvas 完整稿节点数与拓扑一致。
+- Canvas 最终完整剧本节点数与拓扑一致，公开根目录不含规定三个文件之外的产物。
 - 每集可见字符数和动作段数达到 manifest 中记录的项目门槛；未记录时使用 850—1300 个去空白字符、16—24 个动作段。
 - 私有缓存保存真实初稿、真实定稿和度量记录，不接受事后引用公开稿的占位文字。
-- v0.1.14 每集因果、对白与冷读复核记录栏目完整、具体依据非空、未解决问题为“无”，且三项正文 SHA-256 均等于当前定稿与公开逐集文件的 SHA-256；冷读记录同时验证动作可拍门、对白可说门和冷读六问。
+- v0.1.17 每集因果、对白与冷读复核记录栏目完整、具体依据非空、未解决问题为“无”，且三项正文 SHA-256 均等于私有当前定稿的 SHA-256；完整剧本汇总逐字包含所有冻结定稿，正文不含修订标签。
 - `度量记录`中的数字和判定必须与当前定稿重新计算结果一致；定稿脚本不得硬编码 PASS。
 
 关键物件来源、钩子回收、中文对白和叙事连续性继续执行语义检查，不由确定性脚本替代。
@@ -384,26 +382,26 @@ PASS
 
 `episode-structure.md` 开头先写 `![分集流程图](./episode-flowchart.svg)`；随后将 Mermaid 源码放入 `<details>` 折叠区，供继续编辑。运行 `python3 {skill-root}/scripts/render_episode_flowchart.py {canvas-root} --title "《游戏标题》分集流程图"`，从同一 `topology.md` 生成静态 SVG。不得复制 Mermaid 源码充当视觉图，也不得依赖宿主页面运行 Mermaid JavaScript。
 
-每个私有分集缓存通过校验并冻结后，投射为公开的 `episodes/episode-NNN.md`。公开逐集文件只包含标题、梗概、完整剧本、玩家选择和结局正文，不包含生产卡、校验或下游参数。
+每个私有分集缓存通过校验并冻结后，继续作为该集唯一编辑源，不投射公开逐集文件。
 
-`episode-script.md` 由全部公开逐集文件按编号组装。组装阶段不重新生成全文，也不反向覆盖公开逐集文件。
+`episode-script.md` 由全部私有逐集缓存的已冻结 `当前集定稿` 按编号组装。组装阶段不重新生成全文，不从汇总稿反向拆集，也不创建任何九字段交付文件。
 
-将真实完整初稿直接写入私有分集的 `当前集初稿`，再使用 `python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --mode record-draft [--episodes episode-001,...]` 核验初稿并把定稿与三份复核状态重置为 PENDING。主 Agent 把修订候选写入 `当前集定稿`，完成因果、对白和独立冷读后，将三份带当前定稿 SHA-256 的具体记录写入缓存，再使用 `--mode finalize` 冻结、投射公开逐集文件并组装汇总稿。
+将真实完整初稿直接写入私有分集的 `当前集初稿`，再使用 `python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --mode record-draft [--episodes episode-001,...]` 核验初稿并把定稿与三份复核状态重置为 PENDING。主 Agent 把修订候选写入 `当前集定稿`，完成因果、对白和独立冷读后，将三份带当前定稿 SHA-256 的具体记录写入缓存，再使用 `--mode finalize` 冻结定稿并重新组装汇总稿。
 
-`finalize` 必须重新计算机械门禁并核对因果、对白和冷读三份记录；任何一项缺失、FAIL、PENDING、依据为空、遗留问题非“无”或正文 SHA-256 不一致时立即失败，不写定稿、不写语义 PASS、不组装汇总稿。该脚本只执行门禁与机械投射，不生成、摘要或改写剧情内容。
+`finalize` 必须重新计算机械门禁并核对因果、对白和冷读三份记录；任何一项缺失、FAIL、PENDING、依据为空、遗留问题非“无”或正文 SHA-256 不一致时立即失败，不写定稿、不写语义 PASS、不组装汇总稿。该脚本只执行门禁与机械组装，不生成、摘要或改写剧情内容。
 
-公开交付只使用 `episode-flowchart.svg`、`episode-structure.md`、`episodes/episode-NNN.md` 和 `episode-script.md`。不生成或维护 `index.html`，避免平台画布与本地 HTML 形成两套展示源。
+公开交付只使用 `episode-flowchart.svg`、`episode-structure.md` 和 `episode-script.md`。不生成 `episodes/`、`episode-delivery.md`、其它交接文件或 `index.html`。
 
 ## 八、单集修改与依赖传播
 
-收到单集修改请求时，以公开逐集文件为编辑入口，不从汇总稿中提取。
+收到单集修改请求时，以私有分集缓存的 `当前集定稿` 为编辑入口，不从玩家可见汇总稿中提取。
 
-1. 读取公开逐集文件、对应私有缓存、所有直接前置真实结尾和直接后续进入条件。
-2. 修改公开候选后，把同一正文写入私有缓存的 `当前集定稿`，旧复核指纹立即失效；随后重新运行因果、对白和独立冷读。
-3. 若真实结尾与缓存边界未变，三份复核通过后使用 `finalize --episodes episode-NNN` 从缓存定稿投射该集公开文件并更新汇总稿。
+1. 读取对应私有缓存、所有直接前置真实结尾和直接后续进入条件。
+2. 把修改候选写入私有缓存的 `当前集定稿`，旧复核指纹立即失效；随后重新运行因果、对白和独立冷读。
+3. 若真实结尾与缓存边界未变，三份复核通过后使用 `finalize --episodes episode-NNN` 从全部私有冻结定稿重新组装汇总稿。
 4. 若人物关系、已知信息、物件状态、钩子、选择或结局条件变化，使用 `grep` 和拓扑找出引用该状态的节点，解冻受影响节点及其直接后续。
-5. 重新校验受影响范围后，更新对应公开逐集文件和汇总稿。
-6. 未受影响的公开逐集文件保持冻结，不重新生成；修改后的正文指纹变化会使因果、对白和冷读三份旧复核记录全部失效，三项重跑后才可 finalize。
+5. 重新校验受影响范围后，更新对应私有逐集定稿和汇总稿。
+6. 未受影响的私有逐集定稿保持冻结，不重新生成；修改后的正文指纹变化会使因果、对白和冷读三份旧复核记录全部失效，三项重跑后才可 finalize。
 
 ## 九、恢复
 
