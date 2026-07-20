@@ -95,10 +95,19 @@ class RunStore:
         return record
 
     def request_stop(self, project_id: str, run_id: str) -> None:
+        record = self.read(project_id, run_id)
+        if not record or record.get("status") in {"completed", "failed", "stopped"}:
+            return
         path = self.stop_path(project_id, run_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(now(), encoding="utf-8")
         self.update(project_id, run_id, status="stopping")
+
+    def clear_stop(self, project_id: str, run_id: str) -> None:
+        """Clear a persisted cancellation marker before resuming a task."""
+        path = self.stop_path(project_id, run_id)
+        if path.is_file():
+            path.unlink()
 
     def should_stop(self, project_id: str, run_id: str) -> bool:
         return self.stop_path(project_id, run_id).exists()
@@ -113,5 +122,54 @@ class RunStore:
                 record = json.loads(path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 continue
-            records.append({key: record.get(key) for key in ("run_id", "title", "status", "phase", "progress", "created_at", "updated_at", "error")})
+            if record.get("status") == "stopping":
+                try:
+                    updated = dt.datetime.fromisoformat(str(record.get("updated_at") or ""))
+                    stale = (dt.datetime.now() - updated).total_seconds() >= 3
+                except ValueError:
+                    stale = True
+                if stale:
+                    record["status"] = "stopped"
+                    record["phase"] = "stopped"
+                    record["updated_at"] = now()
+                    self._atomic_json(path, record)
+            summary = {key: record.get(key) for key in ("run_id", "title", "status", "phase", "progress", "created_at", "updated_at", "error", "kind")}
+            checkpoint = record.get("result_data")
+            summary["resumable"] = bool(
+                record.get("kind") == "production"
+                and record.get("status") in {"failed", "stopped", "disconnected"}
+                and isinstance(checkpoint, dict)
+                and isinstance(checkpoint.get("nodes"), list)
+                and checkpoint.get("nodes")
+            )
+            records.append(summary)
         return records
+
+    def list_all_tasks(self) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        if not self.projects_root.is_dir():
+            return records
+        for project in self.projects_root.iterdir():
+            if not project.is_dir():
+                continue
+            for record in self.list_tasks(project.name):
+                record["project_id"] = project.name
+                records.append(record)
+        records.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+        return records
+
+    def delete(self, project_id: str, run_id: str) -> bool:
+        """Delete a finished task and its stop marker.
+
+        Active tasks must be stopped by the caller first so a worker cannot
+        recreate the task file immediately after it is removed.
+        """
+        path = self.task_path(project_id, run_id)
+        deleted = False
+        if path.is_file():
+            path.unlink()
+            deleted = True
+        stop = self.stop_path(project_id, run_id)
+        if stop.is_file():
+            stop.unlink()
+        return deleted

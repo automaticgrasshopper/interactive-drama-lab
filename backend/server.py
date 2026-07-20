@@ -13,10 +13,16 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
+import platform
 import re
+import shutil
 import subprocess
+import sys
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -24,6 +30,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from backend.production_worker import ProductionManager
 from backend.run_store import RunStore
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -99,6 +106,9 @@ def public_settings() -> dict[str, Any]:
     }
 
 
+PRODUCTION = ProductionManager(RUNS, load_settings)
+
+
 def project_dirs() -> list[dict[str, Any]]:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     projects: list[dict[str, Any]] = []
@@ -121,6 +131,157 @@ def project_dirs() -> list[dict[str, Any]]:
             }
         )
     return projects
+
+
+def datapack_stem(value: Any) -> str:
+    return re.sub(r"[^\w\u4e00-\u9fff\-]", "_", str(value or "rec"))[:40]
+
+
+def git_file_state(path: Path) -> str:
+    try:
+        rel = str(path.relative_to(ROOT))
+    except ValueError:
+        return "未提交"
+    if run_git("status", "--porcelain", "--", rel).stdout.strip():
+        return "待提交"
+    if run_git("ls-files", "--error-unmatch", "--", rel).returncode:
+        return "未提交"
+    remote = run_git("cat-file", "-e", f"@{{upstream}}:{rel}")
+    return "已在 Git" if remote.returncode == 0 else "已本地提交"
+
+
+def enrich_task(record: dict[str, Any]) -> dict[str, Any]:
+    item = dict(record)
+    project_id = safe_name(item.get("project_id"), "")
+    project_meta = read_json(DATA_DIR / project_id / "project.json", {})
+    project_title = str(project_meta.get("title") or project_id)
+    item["project_title"] = project_title
+    candidates = {datapack_stem(item.get("title")), datapack_stem(project_title), datapack_stem(project_id)}
+    item["has_cg"] = bool(item.get("has_cg")) or any((DATAPACKS_DIR / f"{stem}.sb.json").is_file() for stem in candidates if stem)
+    if not item.get("read_only"):
+        item["git_state"] = git_file_state(RUNS.task_path(project_id, str(item.get("run_id") or "")))
+    return item
+
+
+def git_tree_paths(ref: str, prefix: str) -> list[str]:
+    result = run_git("-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", ref, "--", prefix)
+    return result.stdout.splitlines() if result.returncode == 0 else []
+
+
+def git_blob_json(ref: str, path: str) -> dict[str, Any]:
+    result = run_git("show", f"{ref}:{path}")
+    if result.returncode:
+        return {}
+    try:
+        value = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def archive_time(value: Any) -> str:
+    text = str(value or "")
+    for fmt in ("%Y/%m/%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return dt.datetime.strptime(text, fmt).isoformat(timespec="seconds")
+        except ValueError:
+            pass
+    return text
+
+
+def git_archived_tasks(include_data: bool = False) -> list[dict[str, Any]]:
+    refs: list[tuple[str, str]] = [("HEAD", "已本地提交")]
+    if run_git("rev-parse", "--verify", "@{upstream}").returncode == 0:
+        refs.append(("@{upstream}", "已在 Git"))
+    selected: dict[str, tuple[str, str]] = {}
+    for ref, state in refs:
+        for prefix in ("data/projects", "h5/datapacks"):
+            for path in git_tree_paths(ref, prefix):
+                if path.endswith(".json"):
+                    selected[path] = (ref, state)
+
+    cg_stems = {Path(path).name.removesuffix(".sb.json") for path in selected if path.endswith(".sb.json")}
+    archives: dict[str, dict[str, Any]] = {}
+    raw_by_key: dict[str, dict[str, Any]] = {}
+
+    def upsert(path: str, ref: str, state: str, payload: dict[str, Any], *, kind: str) -> None:
+        title = str(payload.get("title") or payload.get("boundStory") or Path(path).stem)
+        when = str(payload.get("time") or payload.get("updated_at") or payload.get("created_at") or "")
+        project_match = re.match(r"data/projects/([^/]+)/", path)
+        project_id = project_match.group(1) if project_match else safe_name(payload.get("project_id") or title, "git-archive")
+        dedupe = f"{title}|{when}" if when else f"{project_id}|{path}"
+        record = archives.get(dedupe)
+        has_cg = datapack_stem(title) in cg_stems or datapack_stem(payload.get("boundStory")) in cg_stems or kind == "storyboard"
+        if record is None:
+            archive_id = "git-" + hashlib.sha1(dedupe.encode("utf-8")).hexdigest()[:14]
+            record = {
+                "project_id": project_id,
+                "run_id": archive_id,
+                "title": title,
+                "status": "archived",
+                "phase": "CG / 分镜归档" if kind == "storyboard" else "生成记录归档",
+                "progress": 100,
+                "created_at": archive_time(when),
+                "updated_at": archive_time(when),
+                "error": "",
+                "read_only": True,
+                "git_state": state,
+                "has_cg": has_cg,
+                "source_ref": ref,
+                "source_path": path,
+                "source_paths": [path],
+            }
+            archives[dedupe] = record
+        else:
+            record["has_cg"] = bool(record.get("has_cg")) or has_cg
+            if state == "已在 Git":
+                record["git_state"] = state
+            if kind == "storyboard":
+                record["phase"] = "CG / 分镜归档"
+            if path not in record["source_paths"]:
+                record["source_paths"].append(path)
+        raw_by_key[dedupe] = payload
+
+    for path, (ref, state) in selected.items():
+        match = re.match(r"data/projects/[^/]+/(tasks|runs)/[^/]+\.json$", path)
+        is_pack = path.startswith("h5/datapacks/") and (path.endswith(".script.json") or path.endswith(".sb.json"))
+        if not match and not is_pack:
+            continue
+        payload = git_blob_json(ref, path)
+        if not payload:
+            continue
+        kind = "storyboard" if path.endswith(".sb.json") else ("task" if match and match.group(1) == "tasks" else "run")
+        upsert(path, ref, state, payload, kind=kind)
+
+    result = list(archives.values())
+    if include_data:
+        for key, record in archives.items():
+            raw = dict(raw_by_key.get(key, {}))
+            images = raw.pop("images", None)
+            if isinstance(images, dict):
+                raw["image_summary"] = {"count": len(images), "note": "图片数据已省略，避免详情页加载大段 base64"}
+            record["archive_data"] = raw
+    result.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+    return result
+
+
+def all_tasks() -> list[dict[str, Any]]:
+    local = [enrich_task(task) for task in RUNS.list_all_tasks()]
+    seen = {(str(task.get("project_id")), str(task.get("run_id"))) for task in local}
+    for task in git_archived_tasks():
+        key = (str(task.get("project_id")), str(task.get("run_id")))
+        if key not in seen:
+            local.append(enrich_task(task))
+            seen.add(key)
+    local.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+    return local
+
+
+def find_git_archived_task(project_id: str, run_id: str) -> dict[str, Any] | None:
+    for task in git_archived_tasks(include_data=True):
+        if str(task.get("project_id")) == project_id and str(task.get("run_id")) == run_id:
+            return enrich_task(task)
+    return None
 
 
 def git_status() -> dict[str, Any]:
@@ -153,7 +314,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _cors(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "http://localhost:8000")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def _json(self, status: int, payload: Any) -> None:
@@ -179,7 +340,7 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         if path == "/api/health":
-            self._json(200, {"ok": True, "service": "interactive-drama-backend", "root": str(ROOT)})
+            self._json(200, {"ok": True, "service": "interactive-drama-backend", "api_version": 6, "system": platform.system(), "platform": platform.platform(), "capabilities": ["all_tasks", "git_archive_tasks", "task_delete", "git_task_delete", "project_delete", "production_resume", "precise_restart", "safe_git_sync"], "root": str(ROOT)})
             return
         if path == "/api/settings":
             self._json(200, {"ok": True, "settings": public_settings()})
@@ -204,19 +365,21 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/tasks":
             query = urllib.parse.parse_qs(parsed.query)
             project_id = safe_name((query.get("project_id") or [""])[0], "")
-            if not project_id:
-                self._json(400, {"ok": False, "error": "缺少 project_id"})
-                return
-            self._json(200, {"ok": True, "tasks": RUNS.list_tasks(project_id)})
+            tasks = RUNS.list_tasks(project_id) if project_id else all_tasks()
+            if project_id:
+                for task in tasks:
+                    task["project_id"] = project_id
+                tasks = [enrich_task(task) for task in tasks]
+            self._json(200, {"ok": True, "tasks": tasks})
             return
         task_match = re.fullmatch(r"/api/tasks/([^/]+)/([^/]+)", path)
         if task_match:
             project_id, run_id = map(urllib.parse.unquote, task_match.groups())
-            record = RUNS.read(project_id, run_id)
+            record = RUNS.read(project_id, run_id) or find_git_archived_task(project_id, run_id)
             if record is None:
                 self._json(404, {"ok": False, "error": "任务不存在"})
             else:
-                self._json(200, {"ok": True, "task": record})
+                self._json(200, {"ok": True, "task": enrich_task(record)})
             return
         if path == "/api/git/status":
             self._json(200, {"ok": True, "git": git_status()})
@@ -251,6 +414,126 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001
             self._json(400, {"ok": False, "error": str(exc)})
 
+    def do_DELETE(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        try:
+            task_match = re.fullmatch(r"/api/tasks/([^/]+)/([^/]+)", path)
+            if task_match:
+                project_id, run_id = map(urllib.parse.unquote, task_match.groups())
+                local_record = RUNS.read(project_id, run_id)
+                archive_record = find_git_archived_task(project_id, run_id)
+                record = local_record or archive_record
+                if record is None:
+                    self._json(404, {"ok": False, "error": "任务不存在"})
+                    return
+                if record and record.get("status") in {"running", "stopping"}:
+                    self._json(409, {"ok": False, "error": "运行中的任务不能直接删除，请先停止并等待状态变为已停止"})
+                    return
+                query = urllib.parse.parse_qs(parsed.query)
+                delete_git = (query.get("delete_git") or [""])[0] in {"1", "true", "yes"}
+                title = str(record.get("title") or run_id)
+                paths: set[str] = set(archive_record.get("source_paths") or []) if archive_record else set()
+                task_path = RUNS.task_path(project_id, run_id)
+                run_file = DATA_DIR / safe_name(project_id) / "runs" / f"{safe_name(run_id)}.json"
+                for candidate in (task_path, run_file):
+                    try:
+                        paths.add(str(candidate.relative_to(ROOT)))
+                    except ValueError:
+                        pass
+                stem = datapack_stem(title)
+                for suffix in (".script.json", ".sb.json"):
+                    candidate = DATAPACKS_DIR / f"{stem}{suffix}"
+                    if candidate.is_file() or run_git("ls-files", "--error-unmatch", "--", str(candidate.relative_to(ROOT))).returncode == 0:
+                        paths.add(str(candidate.relative_to(ROOT)))
+                deleted = RUNS.delete(project_id, run_id)
+                if run_file.is_file():
+                    run_file.unlink()
+                for rel in paths:
+                    if not (rel.startswith("data/projects/") or rel.startswith("h5/datapacks/")):
+                        continue
+                    target = ROOT / rel
+                    if target.is_file():
+                        target.unlink()
+                        deleted = True
+                git_result = None
+                if delete_git:
+                    git_paths = [rel for rel in sorted(paths) if run_git("ls-files", "--error-unmatch", "--", rel).returncode == 0]
+                    git_result = self.commit_paths(git_paths, f"删除任务 {title}") if git_paths else {"status": "clean", "message": "该任务没有 Git 文件"}
+                    if git_result.get("status") == "committed":
+                        push = run_git("push", "origin", "HEAD")
+                        if push.returncode:
+                            raise RuntimeError("删除已在本机提交，但推送 Git 失败：" + (push.stdout.strip() or "未知错误"))
+                        git_result["push"] = push.stdout.strip() or "已推送删除提交"
+                    elif archive_record:
+                        raise RuntimeError("未能生成 Git 删除提交；归档仍会保留，请检查仓库状态")
+                self._json(200, {"ok": True, "deleted": deleted, "run_id": safe_name(run_id), "git": git_result})
+                return
+
+            project_match = re.fullmatch(r"/api/projects/([^/]+)", path)
+            if project_match:
+                project_id = safe_name(urllib.parse.unquote(project_match.group(1)), "")
+                target = DATA_DIR / project_id
+                if not project_id or not target.is_dir():
+                    self._json(404, {"ok": False, "error": "项目不存在"})
+                    return
+                active = [t for t in RUNS.list_tasks(project_id) if t.get("status") in {"running", "stopping"}]
+                if active:
+                    self._json(409, {"ok": False, "error": "项目仍有运行中的任务，请先停止任务再删除项目"})
+                    return
+                meta = read_json(target / "project.json", {})
+                title = str(meta.get("title") or project_id)
+                shutil.rmtree(target)
+                removed_packs: list[str] = []
+                if DATAPACKS_DIR.is_dir():
+                    for pack_path in DATAPACKS_DIR.glob("*.script.json"):
+                        pack = read_json(pack_path, {})
+                        if str(pack.get("title") or "") == title:
+                            pack_path.unlink()
+                            removed_packs.append(pack_path.name)
+                self._json(200, {"ok": True, "deleted": True, "project_id": project_id, "removed_datapacks": removed_packs})
+                return
+
+            run_match = re.fullmatch(r"/api/runs/([^/]+)/([^/]+)", path)
+            if run_match:
+                project_id, run_id = map(urllib.parse.unquote, run_match.groups())
+                project_id = safe_name(project_id, "")
+                run_id = safe_name(run_id, "")
+                if not project_id or not run_id:
+                    self._json(400, {"ok": False, "error": "缺少项目或记录标识"})
+                    return
+                target = DATA_DIR / project_id / "runs" / f"{run_id}.json"
+                deleted = False
+                if target.is_file():
+                    target.unlink()
+                    deleted = True
+                self._json(200, {"ok": True, "deleted": deleted, "run_id": run_id})
+                return
+
+            pack_match = re.fullmatch(r"/api/datapacks/([^/]+)", path)
+            if pack_match:
+                name = safe_name(urllib.parse.unquote(pack_match.group(1)), "")
+                if not name or not name.endswith(".script.json"):
+                    self._json(400, {"ok": False, "error": "数据包名称无效"})
+                    return
+                target = DATAPACKS_DIR / name
+                expected_time = (urllib.parse.parse_qs(parsed.query).get("expected_time") or [""])[0]
+                if target.is_file() and expected_time:
+                    pack = read_json(target, {})
+                    if str(pack.get("time") or "") != expected_time:
+                        self._json(200, {"ok": True, "deleted": False, "reason": "数据包已属于较新的同名记录"})
+                        return
+                deleted = False
+                if target.is_file():
+                    target.unlink()
+                    deleted = True
+                self._json(200, {"ok": True, "deleted": deleted, "name": name})
+                return
+
+            self.send_error(404, "Not Found")
+        except Exception as exc:  # noqa: BLE001
+            self._json(500, {"ok": False, "error": str(exc)})
+
     def do_POST(self) -> None:
         path = self.path.split("?", 1)[0]
         try:
@@ -264,12 +547,22 @@ class Handler(SimpleHTTPRequestHandler):
                 self.save_run()
             elif re.fullmatch(r"/api/tasks/[^/]+/[^/]+/stop", path):
                 _, _, _, project_id, run_id, _ = path.split("/")
-                RUNS.request_stop(urllib.parse.unquote(project_id), urllib.parse.unquote(run_id))
-                self._json(200, {"ok": True, "status": "stopping"})
+                task = PRODUCTION.stop(urllib.parse.unquote(project_id), urllib.parse.unquote(run_id))
+                self._json(200, {"ok": True, "status": "stopping", "task": task})
+            elif re.fullmatch(r"/api/tasks/[^/]+/[^/]+/resume", path):
+                _, _, _, project_id, run_id, _ = path.split("/")
+                task = PRODUCTION.resume(urllib.parse.unquote(project_id), urllib.parse.unquote(run_id))
+                self._json(202, {"ok": True, "status": "running", "task": task})
+            elif path == "/api/production/start":
+                self.start_production()
+            elif path == "/api/system/restart":
+                self.restart_backend()
             elif path == "/api/git/commit":
                 self.git_commit("projects")
             elif path == "/api/git/push":
                 self.git_push()
+            elif path == "/api/git/sync":
+                self.git_sync()
             elif path == "/api/llm/chat":
                 self.llm_chat()
             elif path == "/api/llm/chat/stream":
@@ -278,6 +571,23 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_error(404, "Not Found")
         except Exception as exc:  # noqa: BLE001
             self._json(500, {"ok": False, "error": str(exc)})
+
+    def start_production(self) -> None:
+        payload = self._payload()
+        project_id = safe_name(payload.get("project_id"), "")
+        run_id = safe_name(payload.get("run_id"), "")
+        if not project_id or not run_id:
+            self._json(400, {"ok": False, "error": "缺少 project_id 或 run_id"})
+            return
+        title = str(payload.get("title") or project_id)
+        task = PRODUCTION.start(project_id, run_id, title, payload)
+        self._json(202, {"ok": True, "task": task})
+
+    def restart_backend(self) -> None:
+        port = int(self.server.server_address[1])
+        system = platform.system()
+        self._json(202, {"ok": True, "status": "restarting", "system": system, "port": port})
+        threading.Thread(target=restart_server_process, args=(self.server, port), name="backend-restart", daemon=False).start()
 
     def save_datapack(self) -> None:
         payload = self._payload()
@@ -349,13 +659,13 @@ class Handler(SimpleHTTPRequestHandler):
         self._json(200, {"ok": True, "project": meta, "run_id": run_id, "git": commit_result})
 
     def commit_paths(self, paths: list[str], message: str) -> dict[str, Any]:
-        changed = run_git("status", "--porcelain", "--", *paths).stdout.strip()
-        if not changed:
+        active_paths = [path for path in paths if run_git("status", "--porcelain", "--", path).stdout.strip()]
+        if not active_paths:
             return {"status": "clean", "message": "没有新的本机改动。"}
-        add = run_git("add", "--", *paths)
+        add = run_git("add", "--", *active_paths)
         if add.returncode:
             raise RuntimeError(add.stdout.strip() or "无法暂存项目文件")
-        commit = run_git("commit", "--only", "-m", message, "--", *paths)
+        commit = run_git("commit", "--only", "-m", message, "--", *active_paths)
         if commit.returncode:
             raise RuntimeError(commit.stdout.strip() or "无法创建本地提交")
         return {"status": "committed", "message": commit.stdout.strip()}
@@ -374,6 +684,95 @@ class Handler(SimpleHTTPRequestHandler):
         if push.returncode:
             raise RuntimeError(push.stdout.strip() or "推送失败")
         self._json(200, {"ok": True, "message": push.stdout.strip() or "已推送到远端。"})
+
+    def git_sync(self) -> None:
+        fetch = run_git("fetch", "origin")
+        if fetch.returncode:
+            raise RuntimeError(fetch.stdout.strip() or "无法获取远端状态")
+        commit = self.commit_paths(["data/projects", "h5/datapacks"], "同步工作台项目 " + dt.datetime.now().strftime("%Y-%m-%d %H:%M"))
+        before = git_status()
+        merge_result = None
+        if before["behind"] > 0:
+            merge = run_git("merge", "--no-edit", "@{upstream}")
+            if merge.returncode:
+                conflicts = [line.strip() for line in run_git("diff", "--name-only", "--diff-filter=U").stdout.splitlines() if line.strip()]
+                if not conflicts:
+                    run_git("merge", "--abort")
+                    raise RuntimeError("远端有更新，但当前工作区无法安全合并：" + (merge.stdout.strip() or "未知原因"))
+                try:
+                    resolved = self.resolve_git_conflicts(conflicts)
+                    merge_commit = run_git("commit", "--no-edit")
+                    if merge_commit.returncode:
+                        raise RuntimeError(merge_commit.stdout.strip() or "冲突解决后无法创建合并提交")
+                    merge_result = {"status": "model-resolved", "files": resolved, "message": merge_commit.stdout.strip()}
+                except Exception as exc:  # noqa: BLE001
+                    run_git("merge", "--abort")
+                    raise RuntimeError(f"有冲突，自动解决失败，提交失败：{exc}") from exc
+            else:
+                merge_result = {"status": "merged", "message": merge.stdout.strip()}
+        after_commit = git_status()
+        if after_commit["ahead"] == 0:
+            self._json(200, {"ok": True, "message": "远端已是最新，项目数据也没有新的改动。", "commit": commit, "merge": merge_result, "git": after_commit})
+            return
+        push = run_git("push", "origin", "HEAD")
+        if push.returncode:
+            raise RuntimeError("本地提交已创建，但推送失败：" + (push.stdout.strip() or "未知错误"))
+        final = git_status()
+        self._json(200, {"ok": True, "message": "已检查远端、提交项目数据并推送到 Git。", "commit": commit, "merge": merge_result, "push": push.stdout.strip(), "git": final})
+
+    def resolve_git_conflicts(self, paths: list[str]) -> list[str]:
+        settings = load_settings()
+        if not settings.get("config_locked") or not settings.get("api_key") or not settings.get("model"):
+            raise RuntimeError("生产后台没有已锁定的模型和 Key，无法调用 OpenRouter 解决冲突")
+        allowed = {".json", ".txt", ".md", ".markdown", ".html", ".css", ".js", ".py", ".yml", ".yaml"}
+        resolved: list[str] = []
+        for rel in paths:
+            target = ROOT / rel
+            if target.resolve().is_relative_to(RUNTIME_DIR.resolve()) or target.suffix.lower() not in allowed:
+                raise RuntimeError(f"冲突文件 {rel} 不是可安全自动合并的文本文件")
+            versions = []
+            for stage in (1, 2, 3):
+                result = run_git("show", f":{stage}:{rel}")
+                versions.append(result.stdout if result.returncode == 0 else "")
+            if sum(len(text) for text in versions) > 240_000:
+                raise RuntimeError(f"冲突文件 {rel} 过大，未调用模型以避免额度失控")
+            prompt = (
+                "你是 Git 三方合并器。请合并同一文件的 BASE、OURS、THEIRS。"
+                "保留双方所有不冲突修改；冲突时优先保持当前工作台功能完整和数据不丢失。"
+                "不得解释，不得使用 Markdown 代码围栏，只输出 ===MERGED=== 后的完整最终文件。\n\n"
+                f"文件：{rel}\n===BASE===\n{versions[0]}\n===OURS===\n{versions[1]}\n===THEIRS===\n{versions[2]}\n"
+            )
+            req = self._openrouter_request(
+                {"temperature": 0, "max_tokens": 20000, "messages": [{"role": "system", "content": "精确执行 Git 三方合并，输出完整文件。"}, {"role": "user", "content": prompt}]},
+                stream=False,
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=360) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                quota = "额度不足或限额" if exc.code in {402, 429} else "模型请求失败"
+                raise RuntimeError(f"{quota}（HTTP {exc.code}）：{detail[:500]}") from exc
+            try:
+                text = str(data["choices"][0]["message"]["content"])
+            except (KeyError, IndexError, TypeError) as exc:
+                raise RuntimeError("模型没有返回可用的冲突合并结果") from exc
+            marker = "===MERGED==="
+            merged = text.split(marker, 1)[1].lstrip("\r\n") if marker in text else text.strip()
+            if target.suffix.lower() == ".json":
+                try:
+                    json.loads(merged)
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError(f"模型合并后的 {rel} 不是合法 JSON：{exc}") from exc
+            atomic_write(target, merged)
+            added = run_git("add", "--", rel)
+            if added.returncode:
+                raise RuntimeError(added.stdout.strip() or f"无法暂存已解决的冲突 {rel}")
+            resolved.append(rel)
+        remaining = run_git("diff", "--name-only", "--diff-filter=U").stdout.strip()
+        if remaining:
+            raise RuntimeError("仍有未解决冲突：" + remaining.replace("\n", "、"))
+        return resolved
 
     def _openrouter_request(self, payload: dict[str, Any], stream: bool) -> urllib.request.Request:
         settings = load_settings()
@@ -479,6 +878,26 @@ class Handler(SimpleHTTPRequestHandler):
         return
 
 
+def restart_server_process(server: ThreadingHTTPServer, port: int) -> None:
+    """Restart exactly this workspace backend with the same interpreter and port."""
+    time.sleep(0.35)
+    server.shutdown()
+    server.server_close()
+    command = [sys.executable, str(ROOT / "serve.py"), str(port)]
+    options: dict[str, Any] = {
+        "cwd": str(ROOT),
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "env": os.environ.copy(),
+    }
+    if platform.system() == "Windows":
+        options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+    else:
+        options["start_new_session"] = True
+    subprocess.Popen(command, **options)
+
+
 def run(port: int = 8000) -> None:
     DATAPACKS_DIR.mkdir(parents=True, exist_ok=True)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -490,6 +909,8 @@ def run(port: int = 8000) -> None:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        server.server_close()
 
 
 if __name__ == "__main__":
