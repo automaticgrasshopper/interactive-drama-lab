@@ -1,11 +1,11 @@
 # Canvas 公开层、私有缓存与滚动窗口协议
 
-规定 Canvas 公开文件、Canvas 外私有缓存、滚动窗口和校验回写方法。运行环境须开放 `ls / glob / read_file / write_file / edit_file / grep / exec`。文件工具没有隐藏标记，隔离依靠目录边界完成。
+规定 Canvas 公开文件、Canvas 外私有缓存、滚动窗口和校验回写方法。运行环境须开放 `ls / glob / read_file / write_file / edit_file / grep / exec`。文件工具没有隐藏标记，隔离依靠目录边界与 `public-output-and-progress.md` 的对外封装协议共同完成。
 
 ## 一、项目定位
 
 1. 用 `ls` 查看当前 workspace。
-2. 用 `glob` 查找 `**/.episode-generator-cache/*/manifest.md`，以缓存目录名作为 slug，并确认对应 `canvas/{slug}/episode-structure.md` 存在或已预留。
+2. 用 `glob` 查找 `**/.episode-generator-cache/*/manifest.md`，以缓存目录名作为 slug，并确认 manifest 声明的公开路径是当前 workspace 的共享 `canvas/` 根目录。
 3. 唯一候选先核对 manifest 项目标题；内容不匹配时视为无候选。
 4. 多个候选依次核对游戏标题 slug、任务关联文件、结构稿标题和 manifest，只保留内容匹配项；最近更新时间只用于匹配项之间的排序。
 5. 没有匹配候选时，在当前 workspace 的 `canvas/` 下创建游戏标题 slug 目录和基础文件。
@@ -19,21 +19,23 @@
 {workspace-root}/.episode-generator-cache/{slug}/episodes/
 ```
 
-使用 `write_file` 创建不存在的公开三文件和私有缓存文件；已有文件必须先 `read_file`，再使用 `edit_file`。
+使用 `write_file` 创建不存在的三个公开文件和私有缓存文件；已有文件必须先 `read_file`，再使用 `edit_file`。
 
 公开文件：
 
 ```text
-{canvas-root}/episode-structure.md
 {canvas-root}/episode-flowchart.svg
+{canvas-root}/episode-synopsis.md
 {canvas-root}/episode-script.md
 ```
 
-缓存文件：
+缓存文件与凭证：
 
 ```text
 {workspace-root}/.episode-generator-cache/{slug}/manifest.md
 {workspace-root}/.episode-generator-cache/{slug}/input.md
+{workspace-root}/.episode-generator-cache/{slug}/upstream-packet.md
+{workspace-root}/.episode-generator-cache/{slug}/upstream-reference.md
 {workspace-root}/.episode-generator-cache/{slug}/global.md
 {workspace-root}/.episode-generator-cache/{slug}/branch-audit.md
 {workspace-root}/.episode-generator-cache/{slug}/topology.md
@@ -41,10 +43,11 @@
 {workspace-root}/.episode-generator-cache/{slug}/props.md
 {workspace-root}/.episode-generator-cache/{slug}/hooks.md
 {workspace-root}/.episode-generator-cache/{slug}/validation.md
+{workspace-root}/.episode-generator-cache/{slug}/.reference-receipts/
 {workspace-root}/.episode-generator-cache/{slug}/episodes/episode-NNN.md
 ```
 
-Canvas 项目中只允许保留 `episode-flowchart.svg`、`episode-structure.md` 和 `episode-script.md`。不得在 Canvas 内创建 `episodes/`、`episode-delivery.md`、交接文件、缓存目录、审计文件、生产卡、运行日志或 HTML 首页。
+本 Skill 只在共享 Canvas 根目录直接保留一级文件 `episode-synopsis.md`、`episode-flowchart.svg` 和 `episode-script.md`，不创建项目子目录。Canvas 中其它模块已有文件不受影响；不得创建 `episode-structure.md`、`episodes/`、`episode-delivery.md`、交接文件、缓存目录、审计文件、生产卡、运行日志或 HTML 首页。
 
 ## 三、缓存格式
 
@@ -66,6 +69,33 @@ Canvas 项目中只允许保留 `episode-flowchart.svg`、`episode-structure.md`
 
 二级标题必须且只能是以上四项；每项必须含实际描述，不能只有名称或标识。交给故事版的九个输出字段不得写入本文件。
 
+`input.md`是原始证据，不是语义阅读上下文。写入后先运行`prepare_upstream_packet.py`生成`upstream-packet.md`；当前主 Agent只读取阅读包，再按`upstream-input-translation.md`生成`upstream-reference.md`。后续不得为了补充故事重新读取本文件或资产非白名单字段。
+
+### upstream-packet.md
+
+由`input.md`确定性生成，完整保留游戏企划，只抽取角色六字段、场景二字段和道具三字段。不得手工编辑；`validate_upstream_reference.py`会重新生成并逐字比对。它只服务阶段0.5阅读，阶段一以后不再读取。
+
+### upstream-reference.md
+
+四项输入通过门禁后、任何情绪脊或拓扑生成前建立。固定一级栏目：
+
+```text
+# 上游制作参考
+## 来源指纹
+## 整理后游戏企划
+## 人物制作事实
+## 场景制作事实
+## 道具制作事实
+## 结构简化结论
+## 主干情绪脊
+## 核心因果链
+## 转译校验
+```
+
+整理后游戏企划沿用上游十五项原字段名；结构信息沿用五个原子字段名。资产设计材料在原企划存在时沿用七个原字段名。人物只保存角色名称、身份定位、人物驱动力、人物弧光、外貌特征、人物关系；场景只保存场景名称、场景描述；道具只保存道具名称、道具形象描述、道具意义。
+
+来源指纹等于`input.md`去除首尾空白后的 SHA-256。转译校验中的结构简化、主干情绪脊、核心因果链和固定事实一致必须由当前主 Agent写入具体 PASS 依据，未解决问题必须为`无`；确定性脚本只核验记录结构、字段白名单与来源指纹。通过`validate_upstream_reference.py`前不得建立`global.md`、候选互动、拓扑或生产卡。
+
 ### manifest.md
 
 固定栏目：
@@ -81,13 +111,14 @@ Canvas 项目中只允许保留 `episode-flowchart.svg`、`episode-structure.md`
 ## 执行组计划
 ## 当前执行组
 ## 已完成分集
-## 对白校验状态
-## 因果连续性校验状态
-## 冷读校验状态
+## 场面事实复核状态
+## 人物交流复核状态
+## 隔离观众复核状态
+## 机械冻结状态
 ## 最近更新
 ```
 
-缓存版本使用 `episode-cache-v0.1.17`。
+缓存版本使用 `episode-cache-v0.1.27`。
 
 ### global.md
 
@@ -133,6 +164,17 @@ Canvas 项目中只允许保留 `episode-flowchart.svg`、`episode-structure.md`
 - 核心任务目标：
 - 当前情绪：
 - 题材权重：
+
+## 反俗套候选
+### novelty-001｜开场钩子
+- 候选一：模型第一直觉方案
+- 候选二：实质不同方案
+- 候选三：实质不同方案
+- 第一候选处理：丢弃
+- 采用方案：候选二/候选三
+- 采用依据：本项目专属因果、人物关系、规则或代价
+
+依次记录`开场钩子`、`首次释放`、`中段反噬`和`高潮解法`四组；每组候选一都必须丢弃。
 
 ## 候选岔点
 ### fork-001｜来源事件
@@ -208,6 +250,7 @@ PASS
 # 第N集《标题》
 
 ## 生产卡
+## 题材透镜记录
 ## 单集梗概
 ## 本集冲突与前后承接
 ## 前置节点
@@ -216,10 +259,11 @@ PASS
 ## 当前集定稿
 ## 观众摘要
 ## 入口硬状态
+## 语义触发登记
 ## 度量记录
-## 因果复核记录
-## 对白复核记录
-## 冷读复核记录
+## 场面事实复核记录
+## 人物交流复核记录
+## 隔离观众复核记录
 ## 真实结尾状态
 ## 关联角色
 ## 关联场景
@@ -228,6 +272,18 @@ PASS
 ```
 
 三个资产栏目必须使用逐项 Markdown 列表，值只能是上游 `角色名称`、`场景名称`、`道具名称` 的原文。资产状态写入人物、物件或真实结尾缓存，不得混入资产名称。
+
+`题材透镜记录`在单集梗概冻结前由当前主 Agent写入：
+
+```text
+- 具体事件：可拍的事件与人物行动
+- 题材反差物：依赖本题材或项目规则的改变因素
+- 题材内升级：结果如何沿同一题材逻辑升级
+- 后续催化剂或结局余波：直接推动下一节点的行动口，或由结局选择造成的具体余波
+- 判定：PASS
+```
+
+四项不得写`无`、`符合题材`、主题词、氛围词或作者评价。确定性脚本只验证字段、覆盖与候选淘汰结构；语义是否真正题材化由当前主 Agent判断。
 
 ### 故事版字段映射
 
@@ -260,35 +316,47 @@ PASS
 
 不允许新增、删除、改名、换序或自定义嵌套字段。脚本只在内存中验证候选字段；正文、拓扑或资产字段变化后，旧校验立即失效，受影响分集复核重新通过后才能直接向故事版传参。
 
-三份复核记录固定使用以下格式。`正文 SHA-256` 必须是当前候选定稿去除首尾空白后的 SHA-256；每个 PASS 后必须有针对本集的具体依据，不能只写 PASS 或套用通用句。
+`语义触发登记`在写正文前由生产卡生成，固定为：
 
 ```text
-## 因果复核记录
+- 首次出现人物：无/角色名@场N
+- 核心关系触发：无/人物A↔人物B@场N
+- 关键事件：事件简述@场N
+- 关键干预：无/类型@场N
+- 互动选择：无/选择问题@场N
+```
+
+不得在复核失败后把已发生的触发项改成`无`来规避检查。三份语义复核记录使用以下格式。`正文 SHA-256` 必须是当前候选定稿去除首尾空白后的 SHA-256；场面事实与隔离观众的每个 PASS 依据固定写成`PASS｜场次｜正文证据及判断`。人物交流改用确定性覆盖凭证和仅问题记录，不写逐句 PASS。
+
+```text
+## 场面事实复核记录
 - 状态：PASS/FAIL/PENDING
 - 正文 SHA-256：64位十六进制/PENDING
-- 上游事实：PASS｜具体依据
-- 地点与权限：PASS｜具体依据
-- 事件与反应链：PASS｜具体依据
-- 物件与状态：PASS｜具体依据
-- 后续进入条件：PASS｜具体依据
+- 触发登记覆盖：PASS｜场次｜具体依据
+- 地点权限与首次出场：PASS｜场次｜具体依据
+- 事件感知与第一反应：PASS｜场次｜具体依据
+- 行动阻力与可见结果：PASS｜场次｜具体依据
+- 物件路径与后续入口：PASS｜场次｜具体依据
 - 未解决问题：无/具体问题
 
-## 对白复核记录
+## 人物交流复核记录
 - 状态：PASS/FAIL/PENDING
 - 正文 SHA-256：64位十六进制/PENDING
-- 话茬与当下目的：PASS｜具体依据
-- 人物声音：PASS｜具体依据
-- 设定发布与承重句：PASS｜具体依据
-- 朴素中文：PASS｜具体依据
+- 台词包 SHA-256：64位十六进制/PENDING
+- 台词总数：整数/PENDING
+- 覆盖状态：COMPLETE/PENDING
+- 问题项：无/SNN-LNN｜问题类型｜简短原因
 - 未解决问题：无/具体问题
 
-## 冷读复核记录
+## 隔离观众复核记录
 - 状态：PASS/FAIL/PENDING
 - 隔离方式：独立冷读/最小上下文复检/PENDING
 - 正文 SHA-256：64位十六进制/PENDING
-- 动作可拍门：PASS｜具体依据
-- 对白可说门：PASS｜具体依据
-- 冷读六问：PASS｜具体依据
+- 新人物可识别：PASS｜场次｜具体依据
+- 事件顺序可见：PASS｜场次｜具体依据
+- 关系证据可见：PASS｜场次｜具体依据
+- 对白现场性：PASS｜场次｜具体依据
+- 结果与下一行动：PASS｜场次｜具体依据
 - 一句话复述：具体复述/PENDING
 - 未解决问题：无/具体问题/PENDING
 ```
@@ -308,7 +376,7 @@ PASS
 
 ### 容量控制
 
-每组开始前估算当前模型上下文，给输入缓存、剧本正文、因果与对白复核、独立冷读和自动修复分别保留空间。不得把上下文全部用于正文。
+每组开始前估算当前模型上下文，给输入缓存、剧本正文、场面事实、人物交流、隔离观众和自动修复分别保留空间。不得把上下文全部用于正文。
 
 超出稳定容量时，只在以下边界拆分：
 
@@ -359,7 +427,7 @@ PASS
 
 ## 六、确定性校验
 
-使用 `exec` 运行 `python3 {skill-root}/scripts/validate_episode_cache.py {canvas-root}`，其中`{skill-root}`为当前 `SKILL.md` 所在目录；最终投射后追加 `--require-public`。脚本检查：
+使用 `exec` 运行 `python3 {skill-root}/scripts/validate_episode_cache.py {canvas-root} --cache-root {cache-root}`，其中`{skill-root}`为当前 `SKILL.md` 所在目录；最终投射后追加 `--require-public`。脚本检查：
 
 - 节点编号唯一；
 - 所有目标节点存在；
@@ -368,40 +436,40 @@ PASS
 - 结局无出边；
 - 非结局有默认推进或选择；
 - 分集缓存文件数量与节点数一致；
-- Canvas 最终完整剧本节点数与拓扑一致，公开根目录不含规定三个文件之外的产物。
+- Canvas 各集梗概与最终完整剧本节点数均与拓扑一致；本 Skill 没有在根目录创建三个规定文件之外的分集产物，不把其它模块文件判为异常。
 - 每集可见字符数和动作段数达到 manifest 中记录的项目门槛；未记录时使用 850—1300 个去空白字符、16—24 个动作段。
 - 私有缓存保存真实初稿、真实定稿和度量记录，不接受事后引用公开稿的占位文字。
-- v0.1.17 每集因果、对白与冷读复核记录栏目完整、具体依据非空、未解决问题为“无”，且三项正文 SHA-256 均等于私有当前定稿的 SHA-256；完整剧本汇总逐字包含所有冻结定稿，正文不含修订标签。
+- v0.1.27 继承 v0.1.26，并强制情绪脊四个关键拍位生成三个候选、丢弃候选一，同时要求每个节点保存包子原则四项题材透镜记录。v0.1.26 增加只含分集标题与单集梗概的一级公开文件 `episode-synopsis.md`；流程字段不得进入该文件。v0.1.25 以确定性台词编号、台词包指纹、总数和覆盖状态替代人物交流层逐句 PASS 证词。旧缓存继续按各自版本规则兼容读取。
 - `度量记录`中的数字和判定必须与当前定稿重新计算结果一致；定稿脚本不得硬编码 PASS。
 
 关键物件来源、钩子回收、中文对白和叙事连续性继续执行语义检查，不由确定性脚本替代。
 
 ## 七、公开层更新
 
-`episode-structure.md` 由冻结的 `topology.md` 和生产卡投射生成，并在后续完整剧本阶段持续保留。
-
-`episode-structure.md` 开头先写 `![分集流程图](./episode-flowchart.svg)`；随后将 Mermaid 源码放入 `<details>` 折叠区，供继续编辑。运行 `python3 {skill-root}/scripts/render_episode_flowchart.py {canvas-root} --title "《游戏标题》分集流程图"`，从同一 `topology.md` 生成静态 SVG。不得复制 Mermaid 源码充当视觉图，也不得依赖宿主页面运行 Mermaid JavaScript。
+运行 `python3 {skill-root}/scripts/render_episode_flowchart.py {canvas-root} --cache-root {cache-root} --title "《游戏标题》分集流程图"`，从私有冻结 `topology.md` 直接生成 Canvas 一级静态 SVG。不得复制 Mermaid 源码充当视觉图，也不得依赖宿主页面运行 Mermaid JavaScript；Mermaid 和选项源只留在私有缓存。
 
 每个私有分集缓存通过校验并冻结后，继续作为该集唯一编辑源，不投射公开逐集文件。
 
 `episode-script.md` 由全部私有逐集缓存的已冻结 `当前集定稿` 按编号组装。组装阶段不重新生成全文，不从汇总稿反向拆集，也不创建任何九字段交付文件。
 
-将真实完整初稿直接写入私有分集的 `当前集初稿`，再使用 `python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --mode record-draft [--episodes episode-001,...]` 核验初稿并把定稿与三份复核状态重置为 PENDING。主 Agent 把修订候选写入 `当前集定稿`，完成因果、对白和独立冷读后，将三份带当前定稿 SHA-256 的具体记录写入缓存，再使用 `--mode finalize` 冻结定稿并重新组装汇总稿。
+`episode-synopsis.md` 由同一批私有逐集缓存的冻结 `单集梗概` 按编号组装，只写分集标题和一段梗概。不得复制拓扑边、前后节点、选择问题、选项、状态或审计字段。
 
-`finalize` 必须重新计算机械门禁并核对因果、对白和冷读三份记录；任何一项缺失、FAIL、PENDING、依据为空、遗留问题非“无”或正文 SHA-256 不一致时立即失败，不写定稿、不写语义 PASS、不组装汇总稿。该脚本只执行门禁与机械组装，不生成、摘要或改写剧情内容。
+将真实完整初稿直接写入私有分集的 `当前集初稿`，再使用 `python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --cache-root {cache-root} --mode record-draft [--episodes episode-001,...]` 核验初稿并把定稿与三份复核状态重置为 PENDING。主 Agent 把修订候选写入 `当前集定稿`；人物交流记录保存正文指纹、台词包指纹、台词总数、覆盖状态和问题项，不保存逐句 PASS 解释；完成三层复核后再使用 `--mode finalize` 冻结定稿并重新组装汇总稿。
 
-公开交付只使用 `episode-flowchart.svg`、`episode-structure.md` 和 `episode-script.md`。不生成 `episodes/`、`episode-delivery.md`、其它交接文件或 `index.html`。
+`finalize` 必须重新计算机械指标并核对三份语义记录；人物交流层另重新计算台词包指纹与总数。任何一项缺失、FAIL、PENDING、覆盖不完整、遗留问题非“无”或指纹不一致时立即失败，不写定稿、不写语义 PASS、不组装汇总稿。该脚本只执行记录完整性验证与机械组装，不生成、摘要、改写或裁定剧情内容。
+
+公开交付只使用 `episode-synopsis.md`、`episode-flowchart.svg` 和 `episode-script.md`。不生成 `episode-structure.md`、`episodes/`、`episode-delivery.md`、其它交接文件或 `index.html`。
 
 ## 八、单集修改与依赖传播
 
 收到单集修改请求时，以私有分集缓存的 `当前集定稿` 为编辑入口，不从玩家可见汇总稿中提取。
 
 1. 读取对应私有缓存、所有直接前置真实结尾和直接后续进入条件。
-2. 把修改候选写入私有缓存的 `当前集定稿`，旧复核指纹立即失效；随后重新运行因果、对白和独立冷读。
+2. 把修改候选写入私有缓存的 `当前集定稿`，旧复核指纹立即失效；随后按职责重新运行场面事实、人物交流和隔离观众复核。
 3. 若真实结尾与缓存边界未变，三份复核通过后使用 `finalize --episodes episode-NNN` 从全部私有冻结定稿重新组装汇总稿。
 4. 若人物关系、已知信息、物件状态、钩子、选择或结局条件变化，使用 `grep` 和拓扑找出引用该状态的节点，解冻受影响节点及其直接后续。
 5. 重新校验受影响范围后，更新对应私有逐集定稿和汇总稿。
-6. 未受影响的私有逐集定稿保持冻结，不重新生成；修改后的正文指纹变化会使因果、对白和冷读三份旧复核记录全部失效，三项重跑后才可 finalize。
+6. 未受影响的私有逐集定稿保持冻结，不重新生成；修改后的正文指纹变化会使三份旧语义复核记录全部失效，受影响层及其后续层重跑后才可 finalize。
 
 ## 九、恢复
 
@@ -410,7 +478,7 @@ PASS
 1. 定位并重新核验 Canvas。
 2. 读取 `manifest.md`，再核对缓存文件、公开文件和拓扑中的实际状态。
 3. manifest 与文件状态不一致时，以通过格式和完整性校验的实际文件为准，并修正 manifest。
-4. 运行 `python3 {skill-root}/scripts/validate_episode_cache.py {canvas-root}`；确定性校验失败时先修复缓存，不继续写作。
+4. 运行 `python3 {skill-root}/scripts/validate_episode_cache.py {canvas-root} --cache-root {cache-root}`；确定性校验失败时先修复缓存，不继续写作。
 5. 文件证据仍不足以唯一判断可信状态时，使用 `ask_user` 请求最小必要信息，不猜测或覆盖已冻结正文。
 6. 读取对应全局缓存和未完成节点，从第一个未冻结节点继续。
 7. 不重做已冻结节点，除非其文件不完整、校验状态无效或全剧校验确定其在受影响范围内。

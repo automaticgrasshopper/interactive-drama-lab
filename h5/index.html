@@ -140,6 +140,8 @@
       frames[k].wrap.classList.toggle('active', k === key);
     });
     tabs.forEach(function(t){ t.classList.toggle('active', t.dataset.key === key); });
+    // 常驻 iframe 不会在切回页签时重新初始化；主动通知目标页核对跨台状态。
+    try{ f.iframe.contentWindow.postMessage({type:'idl-tab-visible',key:key}, location.origin); }catch(e){}
     try{ location.hash = key; }catch(e){}
   }
 

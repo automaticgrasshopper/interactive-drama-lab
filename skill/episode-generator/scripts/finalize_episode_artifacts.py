@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 from cache_paths import cache_root_for
@@ -14,25 +16,73 @@ from validate_storyboard_fields import (
     validate_fields,
     validate_final_script_format,
 )
+from load_reference_bundle import verify_receipts
+from prepare_dialogue_review import build_dialogue_packet
 
 
-CAUSAL_FIELDS = (
+REQUIRED_REFERENCE_PHASES = (
+    "upstream",
+    "topology",
+    "production-cards",
+    "episode-writing",
+    "scene-review",
+    "dialogue-review",
+    "isolated-audience",
+    "state-writeback",
+    "whole-play-review",
+)
+
+
+LEGACY_CAUSAL_FIELDS = (
     "上游事实",
     "地点与权限",
     "事件与反应链",
     "物件与状态",
     "后续进入条件",
 )
-DIALOGUE_FIELDS = (
+LEGACY_DIALOGUE_FIELDS = (
     "话茬与当下目的",
     "人物声音",
     "设定发布与承重句",
     "朴素中文",
 )
-COLD_FIELDS = (
+LEGACY_COLD_FIELDS = (
     "动作可拍门",
     "对白可说门",
     "冷读六问",
+)
+SCENE_FACT_FIELDS = (
+    "触发登记覆盖",
+    "地点权限与首次出场",
+    "事件感知与第一反应",
+    "行动阻力与可见结果",
+    "物件路径与后续入口",
+)
+CHARACTER_EXCHANGE_FIELDS_V18 = (
+    "关系触发与行动优先级",
+    "话茬与当下目的",
+    "人物声音与关系距离",
+    "设定发布与朴素中文",
+)
+CHARACTER_EXCHANGE_FIELDS_V19 = (
+    "台词抽取与原位写回",
+    "话茬与朴素表达",
+    "姓名知情与关系距离",
+    "人物声音与承重句",
+)
+AUDIENCE_FIELDS = (
+    "新人物可识别",
+    "事件顺序可见",
+    "关系证据可见",
+    "对白现场性",
+    "结果与下一行动",
+)
+TRIGGER_FIELDS = (
+    "首次出现人物",
+    "核心关系触发",
+    "关键事件",
+    "关键干预",
+    "互动选择",
 )
 
 
@@ -80,15 +130,51 @@ def pending_audit(fields: tuple[str, ...]) -> str:
     return "\n".join(lines)
 
 
-def pending_cold_audit() -> str:
+def pending_audience_audit(fields: tuple[str, ...]) -> str:
     lines = [
         "- 状态：PENDING",
         "- 隔离方式：PENDING",
         "- 正文 SHA-256：PENDING",
     ]
-    lines.extend(f"- {name}：PENDING｜待独立冷读" for name in COLD_FIELDS)
+    lines.extend(f"- {name}：PENDING｜待隔离观众复核" for name in fields)
     lines.extend(("- 一句话复述：PENDING", "- 未解决问题：待复核"))
     return "\n".join(lines)
+
+
+def pending_dialogue_audit_v25() -> str:
+    return "\n".join(
+        (
+            "- 状态：PENDING",
+            "- 正文 SHA-256：PENDING",
+            "- 台词包 SHA-256：PENDING",
+            "- 台词总数：PENDING",
+            "- 覆盖状态：PENDING",
+            "- 问题项：待复核",
+            "- 未解决问题：待复核",
+        )
+    )
+
+
+def validate_genre_lens(cache_text: str, episode_id: str) -> None:
+    block = section(cache_text, "题材透镜记录")
+    if not block:
+        raise SystemExit(f"{episode_id} 缺少题材透镜记录")
+    for name in (
+        "具体事件",
+        "题材反差物",
+        "题材内升级",
+        "后续催化剂或结局余波",
+    ):
+        value = field(block, name).strip()
+        if len(re.sub(r"\s+", "", value)) < 8 or value in {
+            "无",
+            "符合题材",
+            "已完成",
+            "见梗概",
+        }:
+            raise SystemExit(f"{episode_id} 的题材透镜记录缺少具体内容：{name}")
+    if field(block, "判定").strip() != "PASS":
+        raise SystemExit(f"{episode_id} 的题材透镜记录未通过")
 
 
 def validate_audit(
@@ -97,6 +183,7 @@ def validate_audit(
     required_fields: tuple[str, ...],
     expected_digest: str,
     episode_id: str,
+    scene_names: set[str] | None = None,
 ) -> None:
     block = section(cache_text, heading)
     if not block:
@@ -107,26 +194,138 @@ def validate_audit(
         raise SystemExit(f"{episode_id} 的{heading}正文指纹已失效，必须重跑复核")
     for name in required_fields:
         value = field(block, name)
-        match = re.fullmatch(r"PASS[｜|]\s*(\S.*)", value)
-        if not match or len(re.sub(r"\s+", "", match.group(1))) < 8:
-            raise SystemExit(f"{episode_id} 的{heading}缺少具体依据：{name}")
+        if scene_names is None:
+            match = re.fullmatch(r"PASS[｜|]\s*(\S.*)", value)
+            if not match or len(re.sub(r"\s+", "", match.group(1))) < 8:
+                raise SystemExit(f"{episode_id} 的{heading}缺少具体依据：{name}")
+        else:
+            match = re.fullmatch(r"PASS[｜|]\s*([^｜|]+?)[｜|]\s*(\S.*)", value)
+            if not match or len(re.sub(r"\s+", "", match.group(2))) < 12:
+                raise SystemExit(
+                    f"{episode_id} 的{heading}依据必须使用 PASS｜场次｜具体证据：{name}"
+                )
+            locator = match.group(1).strip()
+            locator_scenes = set(
+                re.findall(r"场(?:[一二三四五六七八九十百零〇两\d]+|[A-Za-z]+)", locator)
+            )
+            located = scene_names & locator_scenes
+            if not located:
+                raise SystemExit(
+                    f"{episode_id} 的{heading}引用了正文不存在的场次：{name}={locator}"
+                )
     if field(block, "未解决问题") != "无":
         raise SystemExit(f"{episode_id} 的{heading}仍有未解决问题")
 
 
-def validate_cold_audit(cache_text: str, expected_digest: str, episode_id: str) -> None:
+def scene_names(text: str) -> set[str]:
+    return {
+        match.strip()
+        for match in re.findall(r"^【\s*(场[^·】]+?)\s*·", text, re.MULTILINE)
+    }
+
+
+def dialogue_by_scene(text: str) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    current = ""
+    for line in text.splitlines():
+        scene = re.match(r"^【\s*(场[^·】]+?)\s*·", line)
+        if scene:
+            current = scene.group(1).strip()
+            result.setdefault(current, [])
+            continue
+        if not current or line.startswith(("△", "#", "【")):
+            continue
+        match = re.match(r"^([^：\n]{1,30})：\s*(\S.*)$", line)
+        if match and match.group(1).strip() not in ("单集梗概", "出场", "选择"):
+            result[current].append(match.group(2).strip())
+    return result
+
+
+def validate_v19_dialogue_evidence(
+    cache_text: str, final_text: str, episode_id: str
+) -> None:
+    block = section(cache_text, "人物交流复核记录")
+    dialogue_map = dialogue_by_scene(final_text)
+    all_dialogue = [line for lines in dialogue_map.values() for line in lines]
+    covered: set[str] = set()
+    for name in CHARACTER_EXCHANGE_FIELDS_V19:
+        value = field(block, name)
+        quotes = re.findall(r"[“\"]([^”\"]{2,})[”\"]", value)
+        if not quotes or not any(
+            quote in dialogue for quote in quotes for dialogue in all_dialogue
+        ):
+            raise SystemExit(
+                f"{episode_id} 的人物交流证据未逐字引用真实台词：{name}"
+            )
+        covered.update(
+            re.findall(r"场(?:[一二三四五六七八九十百零〇两\d]+|[A-Za-z]+)", value)
+        )
+
+
+def validate_v25_dialogue_audit(
+    cache_text: str, final_text: str, expected_digest: str, episode_id: str
+) -> None:
+    block = section(cache_text, "人物交流复核记录")
+    packet = build_dialogue_packet(final_text)
+    if field(block, "状态") != "PASS":
+        raise SystemExit(f"{episode_id} 的人物交流复核记录未 PASS")
+    if field(block, "正文 SHA-256") != expected_digest:
+        raise SystemExit(f"{episode_id} 的人物交流正文指纹已失效")
+    if field(block, "台词包 SHA-256") != packet["dialogue_sha256"]:
+        raise SystemExit(f"{episode_id} 的人物交流台词包指纹已失效")
+    if field(block, "台词总数") != str(packet["dialogue_count"]):
+        raise SystemExit(f"{episode_id} 的人物交流台词总数与当前定稿不一致")
+    if field(block, "覆盖状态") != "COMPLETE":
+        raise SystemExit(f"{episode_id} 的人物交流复核未覆盖全部台词")
+    if field(block, "问题项") != "无" or field(block, "未解决问题") != "无":
+        raise SystemExit(f"{episode_id} 的人物交流复核仍有未解决问题")
+    required = {scene for scene, lines in dialogue_map.items() if lines}
+    if not required <= covered:
+        raise SystemExit(
+            f"{episode_id} 的人物交流证据未覆盖对白场次：{sorted(required - covered)}"
+        )
+
+
+def validate_trigger_registry(cache_text: str, script_text: str, episode_id: str) -> None:
+    block = section(cache_text, "语义触发登记")
+    if not block:
+        raise SystemExit(f"{episode_id} 缺少语义触发登记")
+    known_scenes = scene_names(script_text)
+    for name in TRIGGER_FIELDS:
+        value = field(block, name)
+        if not value:
+            raise SystemExit(f"{episode_id} 的语义触发登记缺少字段：{name}")
+        if name == "关键事件" and value == "无":
+            raise SystemExit(f"{episode_id} 的关键事件不得为无")
+        for locator in re.findall(r"@\s*(场[^；;，,\s]+)", value):
+            if locator not in known_scenes:
+                raise SystemExit(
+                    f"{episode_id} 的语义触发登记引用了正文不存在的场次：{locator}"
+                )
+
+
+def validate_audience_audit(
+    cache_text: str,
+    heading: str,
+    fields: tuple[str, ...],
+    expected_digest: str,
+    episode_id: str,
+    scenes: set[str] | None = None,
+) -> None:
     validate_audit(
-        cache_text, "冷读复核记录", COLD_FIELDS, expected_digest, episode_id
+        cache_text, heading, fields, expected_digest, episode_id, scenes
     )
-    block = section(cache_text, "冷读复核记录")
+    block = section(cache_text, heading)
     if field(block, "隔离方式") not in ("独立冷读", "最小上下文复检"):
-        raise SystemExit(f"{episode_id} 的冷读复核记录缺少有效隔离方式")
+        raise SystemExit(f"{episode_id} 的{heading}缺少有效隔离方式")
     if len(re.sub(r"\s+", "", field(block, "一句话复述"))) < 12:
-        raise SystemExit(f"{episode_id} 的冷读复核记录缺少具体一句话复述")
+        raise SystemExit(f"{episode_id} 的{heading}缺少具体一句话复述")
 
 
-def selected_paths(root: Path, selection: str | None) -> list[Path]:
-    cache_dir = cache_root_for(root) / "episodes"
+def selected_paths(
+    root: Path, selection: str | None, cache_root: Path | None = None
+) -> list[Path]:
+    cache_dir = (cache_root or cache_root_for(root)) / "episodes"
     all_paths = sorted(cache_dir.glob("episode-*.md"))
     if not all_paths:
         raise SystemExit("未找到 Canvas 外私有分集缓存")
@@ -143,6 +342,7 @@ def selected_paths(root: Path, selection: str | None) -> list[Path]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("canvas_root", type=Path)
+    parser.add_argument("--cache-root", type=Path)
     parser.add_argument("--mode", choices=("record-draft", "finalize"), required=True)
     parser.add_argument("--episodes", help="逗号分隔的 episode-NNN；省略时处理全部")
     parser.add_argument("--min-visible-chars", type=int, default=850)
@@ -152,35 +352,116 @@ def main() -> int:
     args = parser.parse_args()
 
     root = args.canvas_root.resolve()
-    cache_root = cache_root_for(root)
+    cache_root = args.cache_root.resolve() if args.cache_root else cache_root_for(root)
+    manifest = (cache_root / "manifest.md").read_text(encoding="utf-8")
+    is_v27 = "episode-cache-v0.1.27" in manifest
+    is_v25 = (
+        "episode-cache-v0.1.25" in manifest
+        or "episode-cache-v0.1.26" in manifest
+        or is_v27
+    )
+    is_v24 = "episode-cache-v0.1.24" in manifest or is_v25
+    is_v23 = "episode-cache-v0.1.23" in manifest or is_v24
+    is_v21 = (
+        "episode-cache-v0.1.21" in manifest
+        or "episode-cache-v0.1.22" in manifest
+        or is_v23
+    )
+    is_v19 = "episode-cache-v0.1.19" in manifest or is_v21
+    is_v18 = "episode-cache-v0.1.18" in manifest or is_v19
+    if is_v23:
+        required_phases = (
+            REQUIRED_REFERENCE_PHASES
+            if args.mode == "finalize"
+            else REQUIRED_REFERENCE_PHASES[:4]
+        )
+        receipt_errors = verify_receipts(
+            cache_root / ".reference-receipts", required_phases
+        )
+        if receipt_errors:
+            raise SystemExit("reference 装载门禁失败：\n" + "\n".join(receipt_errors))
+    if is_v21:
+        upstream_check = subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("validate_upstream_reference.py")), str(cache_root)],
+            capture_output=True,
+            text=True,
+        )
+        if upstream_check.returncode:
+            raise SystemExit("上游制作参考校验失败：\n" + (upstream_check.stdout or upstream_check.stderr).strip())
+    if is_v27:
+        creative_check = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).with_name("validate_episode_cache.py")),
+                str(root),
+                "--cache-root",
+                str(cache_root),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if creative_check.returncode:
+            raise SystemExit(
+                "反俗套与题材透镜门禁失败：\n"
+                + (creative_check.stdout or creative_check.stderr).strip()
+            )
+    character_exchange_fields = (
+        CHARACTER_EXCHANGE_FIELDS_V19 if is_v19 else CHARACTER_EXCHANGE_FIELDS_V18
+    )
     topology = (cache_root / "topology.md").read_text(encoding="utf-8")
-    targets = selected_paths(root, args.episodes)
+    targets = selected_paths(root, args.episodes, cache_root)
 
     for cache_path in targets:
         episode_id = cache_path.stem
         cache_text = cache_path.read_text(encoding="utf-8")
+        if is_v27:
+            validate_genre_lens(cache_text, episode_id)
 
         if args.mode == "record-draft":
             draft_text = section(cache_text, "当前集初稿")
             if len(re.sub(r"\s+", "", draft_text)) < 300:
                 raise SystemExit(f"{episode_id} 当前集初稿不是实际完整正文")
+            if is_v18:
+                validate_trigger_registry(cache_text, draft_text, episode_id)
             cache_text = replace_section(cache_text, "当前集定稿", "PENDING")
             cache_text = replace_section(cache_text, "度量记录", "- 判定：PENDING")
-            cache_text = replace_section(
-                cache_text, "因果复核记录", pending_audit(CAUSAL_FIELDS)
-            )
-            cache_text = replace_section(
-                cache_text, "对白复核记录", pending_audit(DIALOGUE_FIELDS)
-            )
-            cache_text = replace_section(
-                cache_text, "冷读复核记录", pending_cold_audit()
-            )
-            cache_text = replace_section(
-                cache_text,
-                "校验状态",
-                "- 机械完整度：PENDING\n- 因果连续性：PENDING\n"
-                "- 中文对白：PENDING\n- 独立冷读：PENDING\n- 冻结状态：未冻结",
-            )
+            if is_v18:
+                cache_text = replace_section(
+                    cache_text, "场面事实复核记录", pending_audit(SCENE_FACT_FIELDS)
+                )
+                cache_text = replace_section(
+                    cache_text,
+                    "人物交流复核记录",
+                    pending_dialogue_audit_v25()
+                    if is_v25
+                    else pending_audit(character_exchange_fields),
+                )
+                cache_text = replace_section(
+                    cache_text,
+                    "隔离观众复核记录",
+                    pending_audience_audit(AUDIENCE_FIELDS),
+                )
+                status_text = (
+                    "- 机械完整度：PENDING\n- 场面事实：PENDING\n"
+                    "- 人物交流：PENDING\n- 隔离观众：PENDING\n- 冻结状态：未冻结"
+                )
+            else:
+                cache_text = replace_section(
+                    cache_text, "因果复核记录", pending_audit(LEGACY_CAUSAL_FIELDS)
+                )
+                cache_text = replace_section(
+                    cache_text, "对白复核记录", pending_audit(LEGACY_DIALOGUE_FIELDS)
+                )
+                cache_text = replace_section(
+                    cache_text,
+                    "冷读复核记录",
+                    pending_audience_audit(LEGACY_COLD_FIELDS),
+                )
+                status_text = (
+                    "- 机械完整度：PENDING\n- 因果连续性：PENDING\n"
+                    "- 中文对白：PENDING\n- 独立冷读：PENDING\n- 冻结状态：未冻结"
+                )
+            cache_text = replace_section(cache_text, "校验状态", status_text)
         else:
             candidate_text = section(cache_text, "当前集定稿").strip()
             if len(re.sub(r"\s+", "", candidate_text)) < 300:
@@ -205,13 +486,62 @@ def main() -> int:
                     f"{args.min_action_beats}—{args.max_action_beats}"
                 )
             current_digest = digest(candidate_text)
-            validate_audit(
-                cache_text, "因果复核记录", CAUSAL_FIELDS, current_digest, episode_id
-            )
-            validate_audit(
-                cache_text, "对白复核记录", DIALOGUE_FIELDS, current_digest, episode_id
-            )
-            validate_cold_audit(cache_text, current_digest, episode_id)
+            if is_v18:
+                scenes = scene_names(candidate_text)
+                validate_trigger_registry(cache_text, candidate_text, episode_id)
+                validate_audit(
+                    cache_text,
+                    "场面事实复核记录",
+                    SCENE_FACT_FIELDS,
+                    current_digest,
+                    episode_id,
+                    scenes,
+                )
+                if is_v25:
+                    validate_v25_dialogue_audit(
+                        cache_text, candidate_text, current_digest, episode_id
+                    )
+                else:
+                    validate_audit(
+                        cache_text,
+                        "人物交流复核记录",
+                        character_exchange_fields,
+                        current_digest,
+                        episode_id,
+                        scenes,
+                    )
+                validate_audience_audit(
+                    cache_text,
+                    "隔离观众复核记录",
+                    AUDIENCE_FIELDS,
+                    current_digest,
+                    episode_id,
+                    scenes,
+                )
+                if is_v19 and not is_v25:
+                    validate_v19_dialogue_evidence(cache_text, candidate_text, episode_id)
+            else:
+                validate_audit(
+                    cache_text,
+                    "因果复核记录",
+                    LEGACY_CAUSAL_FIELDS,
+                    current_digest,
+                    episode_id,
+                )
+                validate_audit(
+                    cache_text,
+                    "对白复核记录",
+                    LEGACY_DIALOGUE_FIELDS,
+                    current_digest,
+                    episode_id,
+                )
+                validate_audience_audit(
+                    cache_text,
+                    "冷读复核记录",
+                    LEGACY_COLD_FIELDS,
+                    current_digest,
+                    episode_id,
+                )
             record = (
                 f"- 可见字符数：{visible_chars}\n"
                 f"- 动作段数：{action_beats}\n"
@@ -220,15 +550,24 @@ def main() -> int:
                 "- 判定：PASS"
             )
             cache_text = replace_section(cache_text, "度量记录", record)
-            cache_text = replace_section(
-                cache_text,
-                "校验状态",
-                "- 机械完整度：PASS\n"
-                "- 因果连续性：PASS（见当前正文指纹对应的因果复核记录）\n"
-                "- 中文对白：PASS（见当前正文指纹对应的对白复核记录）\n"
-                "- 独立冷读：PASS（见当前正文指纹对应的冷读复核记录）\n"
-                "- 冻结状态：已冻结",
-            )
+            if is_v18:
+                status_text = (
+                    "- 机械完整度：PASS\n"
+                    "- 场面事实：PASS（语义判定见当前正文指纹对应记录）\n"
+                    "- 人物交流：PASS（语义判定见当前正文指纹对应记录）\n"
+                    "- 隔离观众：PASS（语义判定见当前正文指纹对应记录）\n"
+                    "- 机械脚本职责：仅验证记录结构、场次定位与一致性\n"
+                    "- 冻结状态：已冻结"
+                )
+            else:
+                status_text = (
+                    "- 机械完整度：PASS\n"
+                    "- 因果连续性：PASS（见当前正文指纹对应的因果复核记录）\n"
+                    "- 中文对白：PASS（见当前正文指纹对应的对白复核记录）\n"
+                    "- 独立冷读：PASS（见当前正文指纹对应的冷读复核记录）\n"
+                    "- 冻结状态：已冻结"
+                )
+            cache_text = replace_section(cache_text, "校验状态", status_text)
         cache_path.write_text(cache_text.rstrip() + "\n", encoding="utf-8")
         if args.mode == "finalize":
             validate_fields(build_storyboard_fields(cache_text, topology))
@@ -236,6 +575,7 @@ def main() -> int:
     if args.mode == "finalize":
         all_cache = sorted((cache_root / "episodes").glob("episode-*.md"))
         final_texts: list[str] = []
+        synopsis_texts: list[str] = []
         for cache_path in all_cache:
             cache_text = cache_path.read_text(encoding="utf-8")
             episode_id = cache_path.stem
@@ -248,8 +588,17 @@ def main() -> int:
             except ValueError as exc:
                 raise SystemExit(f"{episode_id} 不能组装：{exc}") from exc
             final_texts.append(final_text)
+            title_match = re.search(r"^#\s+(第\d+集[^\n]*)$", final_text, re.MULTILINE)
+            if not title_match:
+                raise SystemExit(f"{episode_id} 当前集定稿缺少标准分集标题")
+            synopsis = section(cache_text, "单集梗概").strip()
+            if not synopsis:
+                raise SystemExit(f"{episode_id} 缺少冻结单集梗概")
+            synopsis_texts.append(f"## {title_match.group(1).strip()}\n\n{synopsis}")
         combined = "\n\n---\n\n".join(final_texts)
         (root / "episode-script.md").write_text(combined + "\n", encoding="utf-8")
+        synopsis_combined = "# 各集梗概\n\n" + "\n\n".join(synopsis_texts) + "\n"
+        (root / "episode-synopsis.md").write_text(synopsis_combined, encoding="utf-8")
     return 0
 
 

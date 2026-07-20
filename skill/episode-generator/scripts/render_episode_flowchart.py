@@ -199,12 +199,14 @@ def render_svg(nodes: dict[str, Node], title: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("canvas_root", type=Path)
+    parser.add_argument("--cache-root", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--title")
     args = parser.parse_args()
 
     root = args.canvas_root.resolve()
-    topology_path = cache_root_for(root) / "topology.md"
+    cache_root = args.cache_root.resolve() if args.cache_root else cache_root_for(root)
+    topology_path = cache_root / "topology.md"
     nodes = parse_topology(topology_path.read_text(encoding="utf-8"))
     title = args.title or f"{root.name} 分集流程图"
     output = args.output.resolve() if args.output else root / "episode-flowchart.svg"

@@ -11,6 +11,7 @@
   .head { display:flex; align-items:center; gap:8px; margin-bottom:20px; }
   .head h1 { font-size:22px; font-weight:700; margin:0 auto 0 0; letter-spacing:.5px; display:flex; align-items:center; gap:9px; }
   .head h1 .tico { font-size:24px; }
+  .head h1 .skill-version { margin-left:8px; padding:5px 10px; border:1px solid #c7d7fe; border-radius:999px; background:#eaf2ff; color:#2563eb; font-size:11px; font-weight:750; letter-spacing:0; white-space:nowrap; }
   .head span { font-size:12px; font-weight:600; color:#fff; background:#3b82f6; padding:2px 8px; border-radius:6px; }
 
   .grid { display:flex; gap:18px; align-items:flex-start; }
@@ -169,7 +170,7 @@
 <body>
 <div class="wrap">
   <div class="head">
-    <h1><span class="tico">📝</span>大纲编剧台</h1>
+    <h1><span class="tico">📝</span>大纲编剧台 <span id="episodeSkillVersion" class="skill-version">分集 Skill 读取中</span></h1>
     <button id="openext" style="height:34px;padding:0 14px;border:1px solid #dfe2ea;border-radius:10px;background:#fff;color:#3a4255;font-size:13px;font-weight:600;cursor:pointer;margin-left:8px;">➕ 拓展</button>
     <button id="openhist" style="height:34px;padding:0 14px;border:1px solid #dfe2ea;border-radius:10px;background:#fff;color:#3a4255;font-size:13px;font-weight:600;cursor:pointer;margin-left:8px;">📜 记录</button>
   </div>
@@ -289,7 +290,7 @@
       </div>
 
       <div class="pane" id="pane-script">
-        <div class="meta">分集剧本：拓扑通过后先生成全量正文，再逐集执行机械、因果、对白与隔离冷读验收；未通过会自动返工，全部锁稿后才交付。</div>
+        <div class="meta">分集剧本：拓扑通过后按戏剧执行组滚动生成；每组依次通过机械、场面事实、人物交流与隔离观众复核并回写状态，才进入下一组。</div>
         <div style="padding:10px 18px 0;"><button id="scriptcopy" class="hbtn">复制全部剧本</button></div>
         <div class="canvas" style="max-height:640px;"><div id="scriptwrap"><div class="empty">（一键生成后，这里显示逐场剧本）</div></div></div>
       </div>
@@ -322,7 +323,7 @@
 
     <div id="progbox" class="pipeline">
       <div class="pipeline-head">
-        <div><div class="pipeline-kicker">Production pipeline</div><div class="pipeline-title">完整生产流程</div><div class="pipeline-note">任务在本地后台持续运行，刷新页面不会中断；只有三关全部通过，才会标记为交付。</div></div>
+        <div><div class="pipeline-kicker">Production pipeline</div><div class="pipeline-title">完整生产流程</div><div class="pipeline-note">任务在本地后台持续运行，刷新页面不会中断；这里只显示规范化制作状态。</div></div>
         <span id="pipelineState" class="pipeline-state">准备中</span>
       </div>
       <div class="pipeline-steps">
@@ -332,13 +333,13 @@
           <div class="pipe-track"><div id="topologyBar" class="pipe-fill"></div></div>
         </div>
         <div id="pipe-scripts" class="pipe-step">
-          <div class="pipe-top"><span class="pipe-num">02</span><span class="pipe-name">全量剧本生成</span><span id="scriptsPct" class="pipe-pct">0%</span></div>
-          <div id="scriptsLabel" class="pipe-label">拓扑通过后，按依赖顺序逐集写作</div>
+          <div class="pipe-top"><span class="pipe-num">02</span><span class="pipe-name">执行组滚动生产</span><span id="scriptsPct" class="pipe-pct">0%</span></div>
+          <div id="scriptsLabel" class="pipe-label">按原子组生成、复核、冻结并回写状态</div>
           <div class="pipe-track"><div id="scriptsBar" class="pipe-fill"></div></div>
         </div>
         <div id="pipe-audit" class="pipe-step">
-          <div class="pipe-top"><span class="pipe-num">03</span><span class="pipe-name">校验与自动返工</span><span id="auditPct" class="pipe-pct">0%</span></div>
-          <div id="auditLabel" class="pipe-label">同摘要机械、因果、对白与冷读验收</div>
+          <div class="pipe-top"><span class="pipe-num">03</span><span class="pipe-name">全剧压缩校验</span><span id="auditPct" class="pipe-pct">0%</span></div>
+          <div id="auditLabel" class="pipe-label">人物、道具、钩子、分支汇合与九字段终检</div>
           <div class="pipe-track"><div id="auditBar" class="pipe-fill"></div></div>
         </div>
       </div>
@@ -1577,7 +1578,7 @@ flowchart TD
   }
   function initBackend(){
     if(location.protocol==='file:'){ document.getElementById('orview_state').textContent='请用启动脚本打开'; return Promise.resolve(false); }
-    return fetch('/api/settings').then(function(r){ return r.json().then(function(j){ if(!r.ok||!j.ok) throw new Error(j.error||'后端不可用'); return j.settings; }); })
+    return fetch('/api/health').then(function(r){return r.json();}).then(function(h){if(h&&h.episode_skill_version)document.getElementById('episodeSkillVersion').textContent='分集 Skill '+h.episode_skill_version;return fetch('/api/settings');}).then(function(r){ return r.json().then(function(j){ if(!r.ok||!j.ok) throw new Error(j.error||'后端不可用'); return j.settings; }); })
       .then(function(s){ backendSettings=s; backendReady=!!(s.config_locked&&s.api_key_configured&&s.model); applyModelSlug(s.model); document.getElementById('orview_state').textContent=backendReady?'生产后台已锁定':'生产后台未锁定'; document.getElementById('orview_key').textContent=s.api_key_configured?'后端已配置':'未配置'; document.getElementById('orview_model').textContent=s.model||'未配置'; return backendReady; })
       .catch(function(){ backendReady=false; document.getElementById('orview_state').textContent='后端未连接'; return false; });
   }
@@ -1602,24 +1603,45 @@ flowchart TD
   }
   function recoverBackendTask(){
     var saved=rememberedBackendTask(); if(!saved||!saved.project_id||!saved.run_id) return;
+    if(genBusy&&activeBackendTask&&activeBackendTask.project_id===saved.project_id&&activeBackendTask.run_id===saved.run_id)return;
     activeBackendTask=saved;genBusy=true;genStopped=false;document.getElementById('stopgen').style.display='inline-block';document.getElementById('gen').disabled=true;document.getElementById('gen').textContent='后台生产中…';
     var box=document.getElementById('outbox'), tries=0;
     function poll(){
       fetch('/api/tasks/'+encodeURIComponent(saved.project_id)+'/'+encodeURIComponent(saved.run_id)).then(function(r){ return r.json().then(function(j){ if(!r.ok||!j.ok) throw new Error(j.error||'任务读取失败'); return j.task; }); }).then(function(task){
         tries++; if(task.status==='completed'){ parseRecoveredTask(task); return; }
         if(['failed','stopped'].indexOf(task.status)>=0){ progShow();applyTaskPipeline(task);box.innerHTML='<div class="hint" style="color:#d97706">后端任务 '+esc(task.status)+'：'+esc(task.error||'没有可恢复结果')+'</div>';genBusy=false;activeBackendTask=null;document.getElementById('stopgen').style.display='none';document.getElementById('gen').disabled=false;document.getElementById('gen').textContent='✦ 一键生成'; rememberBackendTask(null); return; }
-        box.innerHTML='<div class="hint" style="color:#2563eb">后台仍在生产：'+esc(task.phase||'生成中')+' · '+(task.progress||0)+'%（刷新页面不会中断）</div>'; progShow(); if(task.kind==='production'){applyTaskPipeline(task);logReset();logEl.textContent=String(task.response_text||'');logHead=logEl.textContent+(logEl.textContent?'\n':'');}else progSet(task.progress||5,'后端任务继续运行…');
+        box.innerHTML='<div class="hint" style="color:#2563eb">后台仍在生产：'+esc(task.phase||'生成中')+' · '+(task.progress||0)+'%（刷新页面不会中断）</div>'; progShow(); if(task.kind==='production'){applyTaskPipeline(task);logReset();logEl.textContent=taskPublicLog(task);logHead=logEl.textContent+(logEl.textContent?'\n':'');}else progSet(task.progress||5,'后端任务继续运行…');
         if(tries<900) setTimeout(poll,2000);
       }).catch(function(e){ box.innerHTML='<div class="hint" style="color:#d97706">任务恢复暂时失败：'+esc(e.message)+'</div>'; });
     }
     poll();
+  }
+  var backendDiscoveryBusy=false;
+  function recoverOrDiscoverBackendTask(){
+    if(rememberedBackendTask()){recoverBackendTask();return;}
+    if(genBusy||backendDiscoveryBusy)return;
+    backendDiscoveryBusy=true;
+    var currentProject='';
+    try{var current=JSON.parse(sessionStorage.getItem('idl_current_project')||'null');currentProject=current&&current.id||'';}catch(e){}
+    fetch('/api/tasks').then(function(r){return r.json().then(function(j){if(!r.ok||!j.ok)throw new Error(j.error||'任务列表读取失败');return j.tasks||[];});}).then(function(tasks){
+      var running=tasks.filter(function(task){return task.kind==='production'&&(task.status==='running'||task.status==='stopping')&&(!currentProject||task.project_id===currentProject);});
+      running.sort(function(a,b){return String(b.updated_at||'').localeCompare(String(a.updated_at||''));});
+      if(!running.length)return;
+      var task=running[0];rememberBackendTask({project_id:task.project_id,run_id:task.run_id});recoverBackendTask();
+    }).catch(function(){}).then(function(){backendDiscoveryBusy=false;});
   }
   function getModel(){ return backendSettings&&backendSettings.model||''; }
   function modelLabel(){ return getModel()||'未配置'; }
   function setLocked(){ document.getElementById('oredit').style.display='none'; document.getElementById('orview').style.display='block'; }
   function isLocked(){ return backendReady; }
   setLocked();
-  initBackend().then(function(ok){ if(ok) recoverBackendTask(); });
+  initBackend().then(function(ok){ if(ok) recoverOrDiscoverBackendTask(); });
+  function syncResumedBackendTask(){
+    if(backendReady){recoverOrDiscoverBackendTask();return;}
+    initBackend().then(function(ok){if(ok)recoverOrDiscoverBackendTask();});
+  }
+  window.addEventListener('storage',function(ev){if(ev.key===BACKEND_TASK_KEY&&ev.newValue)syncResumedBackendTask();});
+  window.addEventListener('message',function(ev){if(ev.origin===location.origin&&ev.data&&ev.data.type==='idl-tab-visible')syncResumedBackendTask();});
 
   // ===== 三段式生产进度 =====
   var progTimer=null;
@@ -1635,15 +1657,25 @@ flowchart TD
     box.className='pipe-step '+(state||''); bar.style.width=pct+'%'; num.textContent=pct+'%'; if(label)txt.textContent=label;
   }
   function pipelineReset(){
-    pipelineOverall('准备中','active');
-    pipelineSet('topology',0,'等待生成与硬规则验证','active');
-    pipelineSet('scripts',0,'拓扑通过后，按依赖顺序逐集写作','');
-    pipelineSet('audit',0,'同摘要机械、因果、对白与冷读验收','');
+    pipelineOverall('正在整理上游资料','active');
+    pipelineSet('topology',0,'正在生成分集流程图','active');
+    pipelineSet('scripts',0,'正在组装最终剧本','');
+    pipelineSet('audit',0,'正在检查人物与道具连续性','');
   }
   function applyTaskPipeline(task){
     var p=task&&task.pipeline||{};
     ['topology','scripts','audit'].forEach(function(step){var s=p[step]||{};pipelineSet(step,s.pct||0,s.label||'',s.state||'');});
     var overall=p.overall||{};pipelineOverall(overall.label||(task&&task.phase)||'后台生产中',overall.state||((task&&task.status)==='failed'?'fail':'active'));
+  }
+  function taskPublicLog(task){
+    var text=String(task&&task.response_text||'');if(text.trim())return text;
+    var p=task&&task.pipeline||{},overall=p.overall||{},scripts=p.scripts||{},audit=p.audit||{};
+    var lines=['▸ 后台生产持续运行（内部推理与装载凭证不公开）'];
+    if(overall.label)lines.push('  当前阶段：'+overall.label);
+    if(scripts.label)lines.push('  分集生产：'+(scripts.pct||0)+'% · '+scripts.label);
+    if(audit.label)lines.push('  全剧校验：'+(audit.pct||0)+'% · '+audit.label);
+    if(task&&task.updated_at)lines.push('  最近检查点：'+task.updated_at);
+    return lines.join('\n');
   }
   function progSet(pct,stage){
     pct=Math.max(0,Math.min(100,Math.round(pct)));
@@ -2423,7 +2455,7 @@ flowchart TD
     function pollBackgroundProduction(){
       if(!activeBackendTask)return;
       fetch('/api/tasks/'+encodeURIComponent(activeBackendTask.project_id)+'/'+encodeURIComponent(activeBackendTask.run_id)).then(function(r){return r.json().then(function(j){if(!r.ok||!j.ok)throw new Error(j.error||'任务读取失败');return j.task;});}).then(function(task){
-        applyTaskPipeline(task);logEl.style.display='block';logEl.textContent=String(task.response_text||'');logHead=logEl.textContent+(logEl.textContent?'\n':'');logEl.scrollTop=logEl.scrollHeight;
+        applyTaskPipeline(task);logEl.style.display='block';logEl.textContent=taskPublicLog(task);logHead=logEl.textContent+(logEl.textContent?'\n':'');logEl.scrollTop=logEl.scrollHeight;
         if(task.status==='completed'){finishBackgroundProduction(task);return;}
         if(task.status==='failed'||task.status==='stopped'){box.innerHTML='<div class="hint" style="color:#d97706">'+esc(task.status==='stopped'?'后台生产已停止':('后台生产中断：'+(task.error||'未知错误')))+'</div>';rememberBackendTask(null);done();return;}
         setTimeout(pollBackgroundProduction,1200);
