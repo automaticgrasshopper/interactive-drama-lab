@@ -1046,10 +1046,7 @@ class ProductionManager:
             self._update_pipeline(project_id, run_id, pipeline, phase="scripts", result_data=data)
 
         for node in nodes:
-            digest = script_digest(node.get("script"))
-            reviews = self._audit_map(node)
-            if any(not reviews.get(name, {}).get("pass") or reviews.get(name, {}).get("digest") != digest for name in ("mechanical", "causal", "dialogue", "cold")):
-                raise RuntimeError(f"{node.get('id')} 冻结前复核记录未绑定当前正文")
+            self._ensure_current_reviews(project_id, run_id, data, node, predecessors, topology)
             node["episode_audit"]["locked"] = True
         self._group_state(group, "机械冻结")
         for node in nodes:
@@ -1057,6 +1054,25 @@ class ProductionManager:
         self._group_state(group, "状态已回写")
         self._sync_episodes(data, predecessors)
         self._log(project_id, run_id, f"  ✓ {group['id']} 全组冻结并完成状态回写")
+
+    def _ensure_current_reviews(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]]) -> None:
+        """Reconcile stale layer receipts before freezing a recovered node."""
+        kinds = ("mechanical", "causal", "dialogue", "cold")
+        for _ in range(8):
+            changed = False
+            for kind in kinds:
+                before = script_digest(node.get("script"))
+                self._ensure_layer(project_id, run_id, data, node, predecessors, topology, kind)
+                if script_digest(node.get("script")) != before:
+                    changed = True
+                    break
+            if changed:
+                continue
+            digest = script_digest(node.get("script"))
+            reviews = self._audit_map(node)
+            if all(reviews.get(name, {}).get("pass") and reviews.get(name, {}).get("digest") == digest for name in kinds):
+                return
+        raise RuntimeError(f"{node.get('id')} 冻结前复核记录无法稳定绑定当前正文")
 
     def _whole_play_review(self, project_id: str, run_id: str, data: dict[str, Any], kind: str) -> dict[str, Any]:
         specs = {

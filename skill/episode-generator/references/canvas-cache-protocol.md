@@ -19,7 +19,7 @@
 {workspace-root}/.episode-generator-cache/{slug}/episodes/
 ```
 
-使用 `write_file` 创建不存在的三个公开文件和私有缓存文件；已有文件必须先 `read_file`，再使用 `edit_file`。
+初始化时只创建私有缓存，不创建或占位三个公开文件。三个公开文件只能在全部私有阶段封印后由最终组装脚本一次生成。
 
 公开文件：
 
@@ -36,6 +36,8 @@
 {workspace-root}/.episode-generator-cache/{slug}/input.md
 {workspace-root}/.episode-generator-cache/{slug}/upstream-packet.md
 {workspace-root}/.episode-generator-cache/{slug}/upstream-reference.md
+{workspace-root}/.episode-generator-cache/{slug}/emotional-spine.md
+{workspace-root}/.episode-generator-cache/{slug}/causal-graph.md
 {workspace-root}/.episode-generator-cache/{slug}/global.md
 {workspace-root}/.episode-generator-cache/{slug}/branch-audit.md
 {workspace-root}/.episode-generator-cache/{slug}/topology.md
@@ -44,6 +46,7 @@
 {workspace-root}/.episode-generator-cache/{slug}/hooks.md
 {workspace-root}/.episode-generator-cache/{slug}/validation.md
 {workspace-root}/.episode-generator-cache/{slug}/.reference-receipts/
+{workspace-root}/.episode-generator-cache/{slug}/.stage-receipts/
 {workspace-root}/.episode-generator-cache/{slug}/episodes/episode-NNN.md
 ```
 
@@ -118,7 +121,9 @@
 ## 最近更新
 ```
 
-缓存版本使用 `episode-cache-v0.1.27`。
+缓存版本使用 `episode-cache-v0.1.28`。
+
+`.stage-receipts/`由`seal_pipeline_stage.py`确定性生成。每个阶段凭证同时绑定当前产物、必需 reference 凭证和上一阶段凭证；不得手工编辑。修改任一上游产物后，从最早变化阶段重新封印全部下游。
 
 ### global.md
 
@@ -136,6 +141,8 @@
 ## 全局未解决冲突
 ```
 
+`global.md`只保存冻结后的事实压缩，不再兼任情绪脊来源。完整情绪事件独立保存于`emotional-spine.md`，完整因果事件独立保存于`causal-graph.md`；格式与门禁见`stage-dependency-contract.md`。
+
 ### topology.md
 
 每个节点使用以下固定格式，流程图从此文件生成，不从梗概重新推断：
@@ -145,8 +152,12 @@
 - 前置节点：无
 - 后续节点：episode-002, episode-003
 - 互动类型：调剂选择
+- 情绪事件：ES-001
+- 因果事件：CG-001
 - 选择：动作文字 -> episode-002
 - 选择：动作文字 -> episode-003
+- 选择后果：episode-002｜ES-002｜CG-002｜具体不可逆结果
+- 选择后果：episode-003｜ES-003｜CG-003｜具体不可逆结果
 - 结局：否
 ```
 
@@ -270,6 +281,8 @@ PASS
 ## 关联道具
 ## 校验状态
 ```
+
+`生产卡`首部必须用`拓扑节点`、`情绪事件`和`因果事件`三个字段逐项继承拓扑引用；不一致时不能封印 production-cards。
 
 三个资产栏目必须使用逐项 Markdown 列表，值只能是上游 `角色名称`、`场景名称`、`道具名称` 的原文。资产状态写入人物、物件或真实结尾缓存，不得混入资产名称。
 
@@ -439,22 +452,22 @@ PASS
 - Canvas 各集梗概与最终完整剧本节点数均与拓扑一致；本 Skill 没有在根目录创建三个规定文件之外的分集产物，不把其它模块文件判为异常。
 - 每集可见字符数和动作段数达到 manifest 中记录的项目门槛；未记录时使用 850—1300 个去空白字符、16—24 个动作段。
 - 私有缓存保存真实初稿、真实定稿和度量记录，不接受事后引用公开稿的占位文字。
-- v0.1.27 继承 v0.1.26，并强制情绪脊四个关键拍位生成三个候选、丢弃候选一，同时要求每个节点保存包子原则四项题材透镜记录。v0.1.26 增加只含分集标题与单集梗概的一级公开文件 `episode-synopsis.md`；流程字段不得进入该文件。v0.1.25 以确定性台词编号、台词包指纹、总数和覆盖状态替代人物交流层逐句 PASS 证词。旧缓存继续按各自版本规则兼容读取。
+- v0.1.28 在 v0.1.27 之上增加情绪脊、因果图、拓扑、生产卡、初稿、复核、状态回写和公开组装的内容指纹链；公开文件只允许 finalizer 生成。旧缓存继续按各自版本规则兼容读取。
 - `度量记录`中的数字和判定必须与当前定稿重新计算结果一致；定稿脚本不得硬编码 PASS。
 
 关键物件来源、钩子回收、中文对白和叙事连续性继续执行语义检查，不由确定性脚本替代。
 
 ## 七、公开层更新
 
-运行 `python3 {skill-root}/scripts/render_episode_flowchart.py {canvas-root} --cache-root {cache-root} --title "《游戏标题》分集流程图"`，从私有冻结 `topology.md` 直接生成 Canvas 一级静态 SVG。不得复制 Mermaid 源码充当视觉图，也不得依赖宿主页面运行 Mermaid JavaScript；Mermaid 和选项源只留在私有缓存。
+拓扑阶段不得向 Canvas 运行流程图渲染；如需布局检查，只把 SVG 输出到私有缓存路径。全部 state-writeback 封印后，由 finalizer 调用 `render_episode_flowchart.py` 从冻结拓扑生成 Canvas 一级静态 SVG。脚本在 v0.1.28 项目中拒绝未封印状态写入公开路径。
 
-每个私有分集缓存通过校验并冻结后，继续作为该集唯一编辑源，不投射公开逐集文件。
+每个私有分集缓存通过校验并冻结后，继续作为该集唯一编辑源，不投射任何公开文件。
 
 `episode-script.md` 由全部私有逐集缓存的已冻结 `当前集定稿` 按编号组装。组装阶段不重新生成全文，不从汇总稿反向拆集，也不创建任何九字段交付文件。
 
 `episode-synopsis.md` 由同一批私有逐集缓存的冻结 `单集梗概` 按编号组装，只写分集标题和一段梗概。不得复制拓扑边、前后节点、选择问题、选项、状态或审计字段。
 
-将真实完整初稿直接写入私有分集的 `当前集初稿`，再使用 `python3 {skill-root}/scripts/finalize_episode_artifacts.py {canvas-root} --cache-root {cache-root} --mode record-draft [--episodes episode-001,...]` 核验初稿并把定稿与三份复核状态重置为 PENDING。主 Agent 把修订候选写入 `当前集定稿`；人物交流记录保存正文指纹、台词包指纹、台词总数、覆盖状态和问题项，不保存逐句 PASS 解释；完成三层复核后再使用 `--mode finalize` 冻结定稿并重新组装汇总稿。
+将真实完整初稿直接写入私有分集的 `当前集初稿`，再使用 `--mode record-draft` 核验初稿并把定稿与三份复核状态重置为 PENDING。主 Agent 完成三层复核后使用 `--mode freeze` 只冻结私有逐集文件；封印 reviews、完成状态回写并封印 state-writeback 后，才使用 `--mode finalize` 只读私有冻结内容并组装三个公开成果。
 
 `finalize` 必须重新计算机械指标并核对三份语义记录；人物交流层另重新计算台词包指纹与总数。任何一项缺失、FAIL、PENDING、覆盖不完整、遗留问题非“无”或指纹不一致时立即失败，不写定稿、不写语义 PASS、不组装汇总稿。该脚本只执行记录完整性验证与机械组装，不生成、摘要、改写或裁定剧情内容。
 

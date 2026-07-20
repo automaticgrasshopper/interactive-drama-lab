@@ -1,0 +1,18 @@
+{
+  "created_at": "2026-07-20T08:13:54.982291+00:00",
+  "files": {
+    "BACKUP_INFO.md": "61382d632588df8f554b872067723f8c2fffa5cc1f7b80bcedaf06c8f53e507a",
+    "SKILL.md": "9840c1f6eca47d407a34414b59b50ff1eee9aad427a77c01917ea1ece4c2254c",
+    "agents/openai.yaml": "2a073379f620fff156ce137c3538d8e44bfdd5148f78bdb2ee5e19106de628b7",
+    "references/causal-clarity-and-suspense.md": "9570f44b8c5b87a2e46ea3fc69a7e0e3b2b76f5d3446a530bdeda76f6f8dd3be",
+    "references/chinese-dialogue-craft.md": "f26afeca1fce3abbb327ad216e26c12ad258b284a6fac5fa6c4f9af9c6579234",
+    "references/emotional-spine-and-branching.md": "c5ebd43c8da8ba11d8d2cdf547b652a686150e86210a32a70bab6060f130536c",
+    "references/gold-sample-episode.md": "c6d6d0f3571fa7c85bdc66a7dc5a9aae54410f880c6a4f74d99fbc89c24d2a04",
+    "references/production-protocol.md": "391fc5778a6572d18a3b7d6728c1c7bcd4b7d21149b8b1ed4368ad32c57a6159"
+  },
+  "parent": null,
+  "skill_marker": null,
+  "source": "/Users/automaticgrasshopper/Documents/CodeXWork/interactive-drama-lab/skill-backups/episode-generator/v0.2",
+  "summary": "导入既有历史快照",
+  "version": "v0.2"
+}

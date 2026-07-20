@@ -1,0 +1,25 @@
+{
+  "created_at": "2026-07-20T08:11:59.689459+00:00",
+  "files": {
+    "SKILL.md": "eba22e0e17b634d9b1f4b89a8951bf49e4b3a2bb530b820c4046c5b69ecdf020",
+    "agents/openai.yaml": "743b7ee979945d2784983f2ccca1dd58621d4d7972416e71a537100b5d301667",
+    "references/canvas-cache-protocol.md": "03f7fdd815f2997ac3664544d6dd0105a29007e7aab87d74219c0006bf0f8dc8",
+    "references/causal-clarity-and-suspense.md": "159ab4e1616c2c34cad964759aeb81c007b1f8932374e242d0c15ac934980d51",
+    "references/chinese-dialogue-craft.md": "bc8ee89c34a0ca265cc5f54bb1f3de08b1af1a507a5d54eb4660f08f0cae50bd",
+    "references/emotional-spine-and-branching.md": "7378e1b4918abe4a2296cdccbeb08e331909582a67a34883582af04c6706b42b",
+    "references/gold-sample-episode.md": "c1254dbc6820ce95841bcd31047abe4d0f4b90b21d7380b5302e1af970b4e587",
+    "references/per-episode-memory-and-cold-read.md": "d1cf8e12f8b30cb55be0719a7d41bdcc3e17c33761be6aec66a9e4fdc0c1ba08",
+    "references/production-protocol.md": "a6163066db5b4e23943f5dc8b9170e93fafa44e842d02610e91dc6259362f755",
+    "references/screenplay-forging-bridge.md": "925385e38b6eeed9a3870d6d783003bc63e0a0e9ee78f96350466ef75c464bcb",
+    "references/script-execution-and-validation.md": "d76ead4bf00ac4fab5e08f68ba9a97ea8f040be1935d1761d86bb68e1e28b9f2",
+    "scripts/cache_paths.py": "9c4676f54d476793bab5b5d9a6399dd6caa6b86bdeec19d0e434bd7664bd52ac",
+    "scripts/finalize_episode_artifacts.py": "246f0934a57575c64c4fbc6ce019b0d994ae962cdded3180d1d3f3ff2f7646d3",
+    "scripts/render_episode_flowchart.py": "7e6bcccefbf9237809e80b7fa02edb89025829d66761301deda1b4000b2d54f8",
+    "scripts/validate_episode_cache.py": "fc560307c91ed5947032c81a6d099a6c9e61a0daade6af2b4d5dfd0556c819ca",
+    "scripts/validate_storyboard_fields.py": "9932a61eb9ec07a523a2adea23c9b00d1a5a953e5c3131303aa4a45bab475762"
+  },
+  "parent": "v0.1.19",
+  "source": "/Users/automaticgrasshopper/Documents/CodeXWork/interactive-drama-lab/skill/episode-generator",
+  "summary": "统一阶段状态机、字段所有权、修改影响矩阵、执行组状态和动作骨架保全确认",
+  "version": "v0.1.20"
+}

@@ -1,0 +1,25 @@
+{
+  "created_at": "2026-07-20T08:13:55.384426+00:00",
+  "files": {
+    "SHA256SUMS.txt": "da47d4a9cf5c0bb3fdba29ba7e07b20db4143fdea88aa88a47fd03c729e66875",
+    "SKILL.md": "ee083cb6cbe108fd74b6cb8ef5ec093721fc7736039698df4cbe71a37f98a351",
+    "agents/openai.yaml": "03b151ea4fce024b6b4e353d3ea9d16dcb0673fdc962482041ee9ea13b470b5c",
+    "references/canvas-cache-protocol.md": "91fb5e768d2b31753696d1e4a3218b298321246f5bf73c920b226bda90560c3a",
+    "references/causal-clarity-and-suspense.md": "d2cdff4c38df929d6ef87bf3cec2397fe184c1e58a303182ccd80e4a31e4da84",
+    "references/chinese-dialogue-craft.md": "229be65dd4475f0867625556638eac10d6203dd97bb473aaeac2a78e7391eadf",
+    "references/emotional-spine-and-branching.md": "7378e1b4918abe4a2296cdccbeb08e331909582a67a34883582af04c6706b42b",
+    "references/gold-sample-episode.md": "c1254dbc6820ce95841bcd31047abe4d0f4b90b21d7380b5302e1af970b4e587",
+    "references/production-protocol.md": "244b4c559366e1cf7c5424da31df281d25d4ff7009b73db2275a521be6d3d3b3",
+    "references/script-execution-and-validation.md": "552db46625536bf554c83a8ac180cc9edd2824435132be9eeb0204af8625710f",
+    "scripts/cache_paths.py": "9c4676f54d476793bab5b5d9a6399dd6caa6b86bdeec19d0e434bd7664bd52ac",
+    "scripts/finalize_episode_artifacts.py": "92d91c6bb743b3e6a7563c9fea60ab3f8fcef0cc4a9310c50afcba7f2b5a20f8",
+    "scripts/render_episode_flowchart.py": "7e6bcccefbf9237809e80b7fa02edb89025829d66761301deda1b4000b2d54f8",
+    "scripts/validate_episode_cache.py": "7a347c7f27c702522f7a295c32ab779b7880896e71ec91a60430e3bf504fed44",
+    "scripts/validate_storyboard_fields.py": "5aeaf84cd48b26d886f806e619e667a13bd0a8c79ee7d2647e2777285a210c9c"
+  },
+  "parent": null,
+  "skill_marker": null,
+  "source": "/Users/automaticgrasshopper/Documents/CodeXWork/interactive-drama-lab/skill-backups/episode-generator/v0.1.12",
+  "summary": "导入既有历史快照",
+  "version": "v0.1.12"
+}

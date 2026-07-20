@@ -141,7 +141,7 @@ PAD/VAD、力度阈值、实现概率、互动预算和路径统计只服务本�
 - 各主要路径情绪轨迹；
 - 下游字段覆盖表。
 
-运行 `scripts/render_episode_flowchart.py` 生成 `episode-flowchart.svg`，再运行其它确定性脚本和同一主 Agent 的顺序语义复核。Mermaid 只作为私有拓扑辅助，不进入公开层；不得假设宿主平台原生支持 Mermaid。公开交付只以各集梗概、流程图和完整剧本三种源文件为准，不生成结构页或 HTML 阅读页。发现问题时确定依赖范围，只解冻并修复受影响节点及其直接后续。修复后重跑相关逐集与全剧校验，不公开问题细节。
+先完成全剧语义复核与 state-writeback 封印，再由 `finalize_episode_artifacts.py` 一次生成 `episode-flowchart.svg`、各集梗概和完整剧本。Mermaid 只作为私有拓扑辅助，不进入公开层。发现问题时确定最早受影响阶段，重新封印该阶段及全部下游；不得直接修补公开文件。
 
 ## 九、最终投射与交付
 

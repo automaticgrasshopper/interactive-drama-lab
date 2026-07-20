@@ -1,0 +1,25 @@
+{
+  "created_at": "2026-07-20T08:13:34.475820+00:00",
+  "files": {
+    "SKILL.md": "96231e4e35a3f122f9b23dd53769113cdd7ee744ec4a43e79ef3613aac9d7a18",
+    "agents/openai.yaml": "743b7ee979945d2784983f2ccca1dd58621d4d7972416e71a537100b5d301667",
+    "references/canvas-cache-protocol.md": "b37c782fcdd2ec7320dd8ae4986d682dadca88b29216780622c814031af25abd",
+    "references/causal-clarity-and-suspense.md": "159ab4e1616c2c34cad964759aeb81c007b1f8932374e242d0c15ac934980d51",
+    "references/chinese-dialogue-craft.md": "bc8ee89c34a0ca265cc5f54bb1f3de08b1af1a507a5d54eb4660f08f0cae50bd",
+    "references/emotional-spine-and-branching.md": "7378e1b4918abe4a2296cdccbeb08e331909582a67a34883582af04c6706b42b",
+    "references/gold-sample-episode.md": "c1254dbc6820ce95841bcd31047abe4d0f4b90b21d7380b5302e1af970b4e587",
+    "references/per-episode-memory-and-cold-read.md": "1b4de73009c1a5f1356721bf35d33db0042dee421b40c76d4aa7c12356253301",
+    "references/production-protocol.md": "51f4d4f4a1ebc2f387b2763250057451cf6c827eff9aae0873104920c53314de",
+    "references/screenplay-forging-bridge.md": "925385e38b6eeed9a3870d6d783003bc63e0a0e9ee78f96350466ef75c464bcb",
+    "references/script-execution-and-validation.md": "d9ff185652127287e4d721cfcd2c7ae2cc7542f7a9c2f1d4636d946a95be3616",
+    "scripts/cache_paths.py": "9c4676f54d476793bab5b5d9a6399dd6caa6b86bdeec19d0e434bd7664bd52ac",
+    "scripts/finalize_episode_artifacts.py": "e6279f9c70e0a3542f3eabb96567e774873b8f91f8f2aa0a9e3bfec6c837ea44",
+    "scripts/render_episode_flowchart.py": "7e6bcccefbf9237809e80b7fa02edb89025829d66761301deda1b4000b2d54f8",
+    "scripts/validate_episode_cache.py": "2da591f3028ad361b32629a65d604dddc3443261bc852e1ff78b607491dd5dd6",
+    "scripts/validate_storyboard_fields.py": "9932a61eb9ec07a523a2adea23c9b00d1a5a953e5c3131303aa4a45bab475762"
+  },
+  "parent": "v0.1.18",
+  "source": "/private/tmp/episode-generator-v19-recover",
+  "summary": "真实台词抽取、原位润色、姓名知情与关系距离复检；v0.1.20 状态机加入前的完整版本",
+  "version": "v0.1.19"
+}

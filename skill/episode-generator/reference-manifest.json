@@ -1,9 +1,10 @@
 {
-  "skill_version": "v0.1.27",
+  "skill_version": "v0.1.28",
   "phases": {
     "upstream": [
       "public-output-and-progress.md",
-      "upstream-input-translation.md"
+      "upstream-input-translation.md",
+      "stage-dependency-contract.md"
     ],
     "topology": [
       "public-output-and-progress.md",
@@ -11,14 +12,16 @@
       "production-protocol.md",
       "canvas-cache-protocol.md",
       "emotional-spine-and-branching.md",
-      "creative-novelty-and-genre-lens.md"
+      "creative-novelty-and-genre-lens.md",
+      "stage-dependency-contract.md"
     ],
     "production-cards": [
       "public-output-and-progress.md",
       "production-protocol.md",
       "canvas-cache-protocol.md",
       "emotional-spine-and-branching.md",
-      "creative-novelty-and-genre-lens.md"
+      "creative-novelty-and-genre-lens.md",
+      "stage-dependency-contract.md"
     ],
     "episode-writing": [
       "public-output-and-progress.md",
@@ -27,7 +30,8 @@
       "script-execution-and-validation.md",
       "per-episode-memory-and-cold-read.md",
       "chinese-dialogue-craft.md",
-      "screenplay-forging-bridge.md"
+      "screenplay-forging-bridge.md",
+      "stage-dependency-contract.md"
     ],
     "scene-review": [
       "public-output-and-progress.md",
@@ -46,14 +50,16 @@
     "state-writeback": [
       "public-output-and-progress.md",
       "per-episode-memory-and-cold-read.md",
-      "canvas-cache-protocol.md"
+      "canvas-cache-protocol.md",
+      "stage-dependency-contract.md"
     ],
     "whole-play-review": [
       "public-output-and-progress.md",
       "script-execution-and-validation.md",
       "per-episode-memory-and-cold-read.md",
       "canvas-cache-protocol.md",
-      "creative-novelty-and-genre-lens.md"
+      "creative-novelty-and-genre-lens.md",
+      "stage-dependency-contract.md"
     ]
   },
   "profiles": {

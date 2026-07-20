@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import subprocess
 import sys
@@ -20,6 +21,7 @@ from validate_storyboard_fields import (
 )
 from load_reference_bundle import verify_receipts
 from prepare_dialogue_review import build_dialogue_packet
+from seal_pipeline_stage import verify_stage
 
 
 NODE_HEADER = re.compile(r"^##\s+(episode-\d{3})\s*｜\s*(.+?)\s*$", re.MULTILINE)
@@ -871,7 +873,8 @@ def validate(
     is_v13 = "episode-cache-v0.1.13" in manifest
     is_v14 = "episode-cache-v0.1.14" in manifest
     is_v17 = "episode-cache-v0.1.17" in manifest
-    is_v27 = "episode-cache-v0.1.27" in manifest
+    is_v28 = "episode-cache-v0.1.28" in manifest
+    is_v27 = "episode-cache-v0.1.27" in manifest or is_v28
     is_v26 = "episode-cache-v0.1.26" in manifest or is_v27
     is_v25 = "episode-cache-v0.1.25" in manifest or is_v26
     is_v24 = "episode-cache-v0.1.24" in manifest or is_v25
@@ -881,6 +884,14 @@ def validate(
     is_v19 = "episode-cache-v0.1.19" in manifest or is_v21
     is_v18 = "episode-cache-v0.1.18" in manifest or is_v19
     is_current_cache = is_v12 or is_v13 or is_v14 or is_v17 or is_v18
+    if is_v28:
+        for name in ("emotional-spine.md", "causal-graph.md"):
+            read_text(cache / name, errors)
+        if require_public:
+            try:
+                verify_stage(cache, canvas_root, "final")
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                errors.append(f"阶段依赖链校验失败：{exc}")
     if is_current_cache:
         declared_canvas = section(manifest, "公开 Canvas").strip()
         if not declared_canvas:
@@ -902,7 +913,7 @@ def validate(
                 REQUIRED_REFERENCE_PHASES if require_public else REQUIRED_REFERENCE_PHASES[:2],
             )
         )
-    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12|13|14|17|18|19|21|22|23|24|25|26|27)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:8|9|10|11|12|13|14|17|18|19|21|22|23|24|25|26|27|28)\b", manifest):
         branch_audit = read_text(cache / "branch-audit.md", errors)
         if branch_audit:
             validate_branch_audit(
@@ -911,7 +922,7 @@ def validate(
                 errors,
                 require_creative_gates=is_v27,
             )
-    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12|13|14|17|18|19|21|22|23|24|25|26|27)\b", manifest):
+    if re.search(r"episode-cache-v0\.1\.(?:9|10|11|12|13|14|17|18|19|21|22|23|24|25|26|27|28)\b", manifest):
         if is_v18:
             manifest_headings = [
                 "场面事实复核状态",

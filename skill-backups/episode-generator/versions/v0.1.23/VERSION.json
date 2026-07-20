@@ -1,0 +1,32 @@
+{
+  "created_at": "2026-07-20T11:18:45.201754+00:00",
+  "files": {
+    "SKILL.md": "ccbb1a153d958c0f19c55687d7e0535e4757fde88ad5db7862a907d13d57f79b",
+    "agents/openai.yaml": "c13be74a8b7eb6e4cf6e2378a05faed84647e84ab45617a1338a7f0a36aa5dcb",
+    "reference-manifest.json": "91675728187311628157e7acd85274e7fb0059170a68b01c5ca7b440f5d4749f",
+    "references/canvas-cache-protocol.md": "d615e8af1f8bab7fdf433d639fcb7ae19dbbbaac77d4ae8e0222be91441ca069",
+    "references/causal-clarity-and-suspense.md": "159ab4e1616c2c34cad964759aeb81c007b1f8932374e242d0c15ac934980d51",
+    "references/chinese-dialogue-craft.md": "43713fc99a8512aead956ad3a06c1901182c2470ad92dd705bce8902d8454d40",
+    "references/emotional-spine-and-branching.md": "8fe5c8cc1f5ea8c18fd451dc2ff984eb051936628112b44be1ca388fd516ece9",
+    "references/gold-sample-episode.md": "c1254dbc6820ce95841bcd31047abe4d0f4b90b21d7380b5302e1af970b4e587",
+    "references/per-episode-memory-and-cold-read.md": "8e9f9cbef6120b7d7d7ee4e4c3d1efbf8822de287786a913a2231bc26d8f48ae",
+    "references/production-protocol.md": "f303b5961d97af2194c31d5abf9f578e039ffee0e84175968ea5182839640223",
+    "references/public-output-and-progress.md": "d846f4bc9f96f135079966009745f7a8093b00c34e63650be6944776f846af3f",
+    "references/screenplay-forging-bridge.md": "925385e38b6eeed9a3870d6d783003bc63e0a0e9ee78f96350466ef75c464bcb",
+    "references/script-execution-and-validation.md": "f5efcab4e4b62bcf89632a6933be94a753b8d7516cf90428e236951c1d39d49f",
+    "references/upstream-input-translation.md": "a07acf8c073b42f46e78644e3d6fa451a47f63d1d31b89a45273986376f506fd",
+    "scripts/cache_paths.py": "9c4676f54d476793bab5b5d9a6399dd6caa6b86bdeec19d0e434bd7664bd52ac",
+    "scripts/finalize_episode_artifacts.py": "39987fe9d638a06097dc8df75b4afd982acf999d540b02bb79c3e1009fd44327",
+    "scripts/load_reference_bundle.py": "33c316d72acca79a329ea44466d31ffa6b365dc0c1b79bdd26dcc025aa5a47f2",
+    "scripts/prepare_upstream_packet.py": "ac534cbf63c2dff6aebdd6aea7162ec74eb72f90554b322af08918b2dd689f80",
+    "scripts/render_episode_flowchart.py": "7e6bcccefbf9237809e80b7fa02edb89025829d66761301deda1b4000b2d54f8",
+    "scripts/validate_episode_cache.py": "4c809e249dab4332cbc8e3e6386c905aee4a59fcacd5325b6e4fb4fcc67f852b",
+    "scripts/validate_storyboard_fields.py": "9932a61eb9ec07a523a2adea23c9b00d1a5a953e5c3131303aa4a45bab475762",
+    "scripts/validate_upstream_reference.py": "97bcf6f36bc929d7b109874f3caa9240c136a41cd5d15bca11af959fdcb476f2"
+  },
+  "parent": "v0.1.22",
+  "skill_marker": "v0.1.23",
+  "source": "/Users/automaticgrasshopper/Documents/CodeXWork/interactive-drama-lab/skill/episode-generator",
+  "summary": "以 reference-manifest 驱动阶段装载；脚本直接向模型上下文注入 reference 原文并签发私有哈希凭证；缺凭证或文件变化时拒绝定稿；后台可见日志与进度统一为安全状态。",
+  "version": "v0.1.23"
+}

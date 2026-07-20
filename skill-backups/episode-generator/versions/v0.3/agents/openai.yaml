@@ -1,0 +1,4 @@
+interface:
+  display_name: "NXP-分集规划师"
+  short_description: "把游戏企划和角色、场景、道具描述展开成完整的分集互动影视剧本"
+  default_prompt: "Use $episode-generator 把完整游戏企划和资产描述写入画布缓存，生成并校验分集拓扑、梗概和全部剧本，自动修复连续性与中文对白问题，最终把公开完整稿交付到画布。"

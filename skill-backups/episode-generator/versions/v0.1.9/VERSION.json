@@ -1,0 +1,21 @@
+{
+  "created_at": "2026-07-20T08:13:55.260746+00:00",
+  "files": {
+    "SKILL.md": "58ed9931dad3d6457b548eddbd76f6e5d833aca2b3b2ad359ff63fac0166d33f",
+    "agents/openai.yaml": "f976f394bf9780bef63e0de1b3ea9888fcc3a6d394e4726a6764ddec6d5b1bea",
+    "references/canvas-cache-protocol.md": "dc1329dfaef0e64caf3f2d2e2d105c38802a36bf58500ed427f2ffa1b653cc90",
+    "references/causal-clarity-and-suspense.md": "163feb6a10392c0da24fadb746322058bd3fca8751248e6080b1882c4df71968",
+    "references/chinese-dialogue-craft.md": "eeeb081f0f3cddeb0a6871b7affa97e9e7ef206d265182ff9e928205d990562d",
+    "references/emotional-spine-and-branching.md": "5358825536e0d4a25592721305d16f2dfc37d1b804383b62b03020b4c0a17edd",
+    "references/gold-sample-episode.md": "6729b1bee8e1d84e6fb9efd9aae730093ae8068d9b4bc0a56f1fee0d339a9bca",
+    "references/production-protocol.md": "510fff23e7a0e1b1104653074095cc1a53c21b6df931c6c970145e3b5b3f6843",
+    "references/script-execution-and-validation.md": "6999825cb87c8d02041d30e5203670bbe325fd46ad9ed4150533d9ef50e45eaa",
+    "scripts/finalize_episode_artifacts.py": "7eb1ed7dad4d30d1020f57993dd392548f7db6ccd2f375a591dfdc6d96286918",
+    "scripts/validate_episode_cache.py": "ad92d5819d3694605ad35fa968846fd95c6f473c2918c9048b09f11e39e5e80e"
+  },
+  "parent": null,
+  "skill_marker": null,
+  "source": "/Users/automaticgrasshopper/Documents/CodeXWork/interactive-drama-lab/skill-backups/episode-generator/v0.1.9",
+  "summary": "导入既有历史快照",
+  "version": "v0.1.9"
+}

@@ -1,0 +1,32 @@
+{
+  "created_at": "2026-07-20T11:26:57.000498+00:00",
+  "files": {
+    "SKILL.md": "97dc3919ae00c9e0ecd5cdfd6d5301e4e85e07231b6ef3acf83577af7c07bec3",
+    "agents/openai.yaml": "34753f75ce8947641262b272cf40f8e7163618e63e4cc3a32be04b076ababead",
+    "reference-manifest.json": "eea695296540b3ce00dcba127d6f042b103861ebc3acb817286632939adecf58",
+    "references/canvas-cache-protocol.md": "63546834c39b317050b21d232b7f7f46cafed549bff0aeb7555f82a7d2552164",
+    "references/causal-clarity-and-suspense.md": "159ab4e1616c2c34cad964759aeb81c007b1f8932374e242d0c15ac934980d51",
+    "references/chinese-dialogue-craft.md": "43713fc99a8512aead956ad3a06c1901182c2470ad92dd705bce8902d8454d40",
+    "references/emotional-spine-and-branching.md": "8fe5c8cc1f5ea8c18fd451dc2ff984eb051936628112b44be1ca388fd516ece9",
+    "references/gold-sample-episode.md": "c1254dbc6820ce95841bcd31047abe4d0f4b90b21d7380b5302e1af970b4e587",
+    "references/per-episode-memory-and-cold-read.md": "8e9f9cbef6120b7d7d7ee4e4c3d1efbf8822de287786a913a2231bc26d8f48ae",
+    "references/production-protocol.md": "1c466728fdd5d35b000736cb822238d7f6c61be37642cde78abcbc3639f39b82",
+    "references/public-output-and-progress.md": "f8ad13528f0a0812a31d886de6c0882e171a87f8322699735f9525705046ef1a",
+    "references/screenplay-forging-bridge.md": "925385e38b6eeed9a3870d6d783003bc63e0a0e9ee78f96350466ef75c464bcb",
+    "references/script-execution-and-validation.md": "f5efcab4e4b62bcf89632a6933be94a753b8d7516cf90428e236951c1d39d49f",
+    "references/upstream-input-translation.md": "a07acf8c073b42f46e78644e3d6fa451a47f63d1d31b89a45273986376f506fd",
+    "scripts/cache_paths.py": "e3eb35c59c0605a28dd744b0559bb626bd7dd61d75353f97f438762319cdca26",
+    "scripts/finalize_episode_artifacts.py": "d85c878e2268cc7bdd999c133dac8c9822b2f26953c19249124122ac928635f1",
+    "scripts/load_reference_bundle.py": "33c316d72acca79a329ea44466d31ffa6b365dc0c1b79bdd26dcc025aa5a47f2",
+    "scripts/prepare_upstream_packet.py": "ac534cbf63c2dff6aebdd6aea7162ec74eb72f90554b322af08918b2dd689f80",
+    "scripts/render_episode_flowchart.py": "762034c0ea9eb33ff22e1f703d996a76376116cba03d5d0f2a16c6948047a977",
+    "scripts/validate_episode_cache.py": "11e3c93d6135409243a06e14b9a202fbd353c82a08d33a5b659ebd997401d0c1",
+    "scripts/validate_storyboard_fields.py": "9932a61eb9ec07a523a2adea23c9b00d1a5a953e5c3131303aa4a45bab475762",
+    "scripts/validate_upstream_reference.py": "97bcf6f36bc929d7b109874f3caa9240c136a41cd5d15bca11af959fdcb476f2"
+  },
+  "parent": "v0.1.23",
+  "skill_marker": "v0.1.24",
+  "source": "/Users/automaticgrasshopper/Documents/CodeXWork/interactive-drama-lab/skill/episode-generator",
+  "summary": "流程图与完整剧本直接写入共享 Canvas 根目录并显示为一级文件；私有缓存继续按项目 slug 隔离；共享根目录校验允许其它模块文件共存并拒绝旧分集结构产物。",
+  "version": "v0.1.24"
+}

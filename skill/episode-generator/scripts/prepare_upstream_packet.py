@@ -31,7 +31,7 @@ def sections(text: str) -> dict[str, str]:
 
 def value(block: str, field: str) -> str:
     match = re.search(
-        rf"(?m)^\s*(?:[-*]\s*)?{re.escape(field)}\s*[:：]\s*(\S.*)$",
+        rf"(?m)^\s*(?:[-*]\s*)?`?{re.escape(field)}`?\s*[:：]\s*(\S.*)$",
         block,
     )
     if not match:
@@ -41,7 +41,7 @@ def value(block: str, field: str) -> str:
 
 def records(text: str, name_field: str, fields: tuple[str, ...]) -> list[dict[str, str]]:
     starts = list(re.finditer(
-        rf"(?m)^\s*(?:[-*]\s*)?{re.escape(name_field)}\s*[:：]\s*(\S.*)$",
+        rf"(?m)^\s*(?:[-*]\s*)?`?{re.escape(name_field)}`?\s*[:：]\s*(\S.*)$",
         text,
     ))
     if not starts:

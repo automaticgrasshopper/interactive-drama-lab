@@ -1,0 +1,30 @@
+{
+  "created_at": "2026-07-20T10:04:18.114261+00:00",
+  "files": {
+    "SKILL.md": "c1cb46fc901b4ab709a7ee2269fdba0ee82e0d16107456f9e6395156ccfb2a53",
+    "agents/openai.yaml": "5a9f616f2d1f1205fb4ba345c9b001351091ba8a2849f9244e7cabf7e76a3499",
+    "references/canvas-cache-protocol.md": "dda3ea34fa24c56aa30e01cfdd62b9b81307999a3e850fef470a3d5a3b6609f5",
+    "references/causal-clarity-and-suspense.md": "159ab4e1616c2c34cad964759aeb81c007b1f8932374e242d0c15ac934980d51",
+    "references/chinese-dialogue-craft.md": "bc8ee89c34a0ca265cc5f54bb1f3de08b1af1a507a5d54eb4660f08f0cae50bd",
+    "references/emotional-spine-and-branching.md": "8fe5c8cc1f5ea8c18fd451dc2ff984eb051936628112b44be1ca388fd516ece9",
+    "references/gold-sample-episode.md": "c1254dbc6820ce95841bcd31047abe4d0f4b90b21d7380b5302e1af970b4e587",
+    "references/per-episode-memory-and-cold-read.md": "8e9f9cbef6120b7d7d7ee4e4c3d1efbf8822de287786a913a2231bc26d8f48ae",
+    "references/production-protocol.md": "2eb7b0c0f6c8fb83f85fdad975f7f7aba0c256ee1bd4a3e7b2ae5d5ca22ef7db",
+    "references/public-output-and-progress.md": "a1e93140ed91e4e08981b411f2aee3a94bfe43b45d3137568b9f21336b891edd",
+    "references/screenplay-forging-bridge.md": "925385e38b6eeed9a3870d6d783003bc63e0a0e9ee78f96350466ef75c464bcb",
+    "references/script-execution-and-validation.md": "404296022a03b8ab61f0f0f0cda364d62122d9b3cfb9003779e0e198ddd2eb95",
+    "references/upstream-input-translation.md": "a07acf8c073b42f46e78644e3d6fa451a47f63d1d31b89a45273986376f506fd",
+    "scripts/cache_paths.py": "9c4676f54d476793bab5b5d9a6399dd6caa6b86bdeec19d0e434bd7664bd52ac",
+    "scripts/finalize_episode_artifacts.py": "c71b499c9d861f0d8961c9dfc16aaf03ff25b0a562703deebf3b623e03204528",
+    "scripts/prepare_upstream_packet.py": "ac534cbf63c2dff6aebdd6aea7162ec74eb72f90554b322af08918b2dd689f80",
+    "scripts/render_episode_flowchart.py": "7e6bcccefbf9237809e80b7fa02edb89025829d66761301deda1b4000b2d54f8",
+    "scripts/validate_episode_cache.py": "f1fa2072f1b50d1b78f0a4e1d01aa882ad713beb093e39feb80150dde3a086a7",
+    "scripts/validate_storyboard_fields.py": "9932a61eb9ec07a523a2adea23c9b00d1a5a953e5c3131303aa4a45bab475762",
+    "scripts/validate_upstream_reference.py": "97bcf6f36bc929d7b109874f3caa9240c136a41cd5d15bca11af959fdcb476f2"
+  },
+  "parent": "v0.1.21",
+  "skill_marker": "v0.1.22",
+  "source": "/Users/automaticgrasshopper/Documents/CodeXWork/interactive-drama-lab/skill/episode-generator",
+  "summary": "私有缓存与内部规划字段绝不外显；公开层仅保留分集流程图和完整剧本；系统要求进度时仅使用规范化状态句；禁止以草案、缺口或下一步说明提前结束。",
+  "version": "v0.1.22"
+}

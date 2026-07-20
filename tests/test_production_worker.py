@@ -201,6 +201,29 @@ class ProductionWorkerTests(unittest.TestCase):
         manager._ensure_layer("p", "r", {"nodes": [node]}, node, {"1": []}, [], "causal")
         self.assertEqual(manager.review_calls, [])
 
+    def test_freeze_reconciles_stale_review_digests_after_resume(self):
+        manager = FakeManager()
+        script = valid_script()
+        digest = script_digest(script)
+        node = {
+            "id": "1",
+            "script": script,
+            "episode_audit": {
+                "digest": digest,
+                "locked": False,
+                "reviews": [
+                    {"name": "mechanical", "pass": True, "digest": digest},
+                    {"name": "causal", "pass": True, "digest": "stale"},
+                    {"name": "dialogue", "pass": True, "digest": "stale"},
+                    {"name": "cold", "pass": True, "digest": digest},
+                ],
+            },
+        }
+        manager._ensure_current_reviews("p", "r", {"nodes": [node]}, node, {"1": []}, [])
+        reviews = manager._audit_map(node)
+        self.assertEqual(manager.review_calls, ["causal", "dialogue"])
+        self.assertTrue(all(reviews[name]["digest"] == digest for name in ("mechanical", "causal", "dialogue", "cold")))
+
     def test_public_error_hides_provider_payload_but_keeps_status(self):
         message = public_error_message('OpenRouter 请求失败：429 {"error":{"message":"secret provider payload"}}')
         self.assertEqual(message, "OpenRouter 请求失败（HTTP 429）")

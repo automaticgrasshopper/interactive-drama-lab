@@ -1,0 +1,11 @@
+163feb6a10392c0da24fadb746322058bd3fca8751248e6080b1882c4df71968  skill-backups/episode-generator/v0.5/references/causal-clarity-and-suspense.md
+318cfd5f277e36ee185720bfb7ef9e274b8f994b173b4bf279730b79936b18d5  skill-backups/episode-generator/v0.5/SKILL.md
+385d507ef2182d4c45a576e21da5bbb8ac872a66f138c004fd9b22679949a10f  skill-backups/episode-generator/v0.5/references/canvas-cache-protocol.md
+6729b1bee8e1d84e6fb9efd9aae730093ae8068d9b4bc0a56f1fee0d339a9bca  skill-backups/episode-generator/v0.5/references/gold-sample-episode.md
+98f13daeb8819c9c630fc8b1e4ad3eb9fcb6f0211c1b4b2b3ab3befe59d379cc  skill-backups/episode-generator/v0.5/references/script-execution-and-validation.md
+a3029e8ddb00659740ae53faf5337c5348c07a355cb1b4762d7178712432f805  skill-backups/episode-generator/v0.5/scripts/validate_episode_cache.py
+b139c3496c03242ebec2ba0089eb332444a7f8c5daea2d48b70aaee14e728ed2  skill-backups/episode-generator/v0.5/references/chinese-dialogue-craft.md
+bb00b04fca400be6a1af7d48e0e640b252e3ee516f8d26921b8bf6c7f54446c1  skill-backups/episode-generator/v0.5/references/emotional-spine-and-branching.md
+c6f559cc36c13b2fe250cb47647d27fc0283a02ecb85ddd30af3f73c922dc52a  skill-backups/episode-generator/v0.5/references/production-protocol.md
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  skill-backups/episode-generator/v0.5/SHA256SUMS.txt
+f976f394bf9780bef63e0de1b3ea9888fcc3a6d394e4726a6764ddec6d5b1bea  skill-backups/episode-generator/v0.5/agents/openai.yaml

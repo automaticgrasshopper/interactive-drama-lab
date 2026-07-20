@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cache_paths import cache_root_for
+from seal_pipeline_stage import verify_stage
 
 
 NODE_HEADER = re.compile(r"^##\s+(episode-\d{3})\s*｜\s*(.+?)\s*$", re.MULTILINE)
@@ -210,6 +211,15 @@ def main() -> int:
     nodes = parse_topology(topology_path.read_text(encoding="utf-8"))
     title = args.title or f"{root.name} 分集流程图"
     output = args.output.resolve() if args.output else root / "episode-flowchart.svg"
+    manifest = (cache_root / "manifest.md").read_text(encoding="utf-8")
+    if "episode-cache-v0.1.28" in manifest:
+        try:
+            output.relative_to(root)
+            is_public_output = True
+        except ValueError:
+            is_public_output = False
+        if is_public_output:
+            verify_stage(cache_root, root, "state-writeback")
     output.write_text(render_svg(nodes, title), encoding="utf-8")
     print(output)
     return 0

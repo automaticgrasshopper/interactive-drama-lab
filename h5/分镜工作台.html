@@ -42,6 +42,18 @@
   #progbox{display:none;margin-top:12px;}
   #progbar{height:100%;width:0%;background:linear-gradient(90deg,#0891b2,#7c3aed);border-radius:999px;transition:width .4s ease;}
   .hint{font-size:11.5px;color:#9aa1b1;margin-top:8px;line-height:1.6;}
+  .style-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .style-card{min-width:0;border:1.5px solid #e4e7ee;border-radius:12px;background:#fafbfc;padding:9px;text-align:left;cursor:pointer;color:#343b4d;transition:border-color .15s,box-shadow .15s,background .15s;}
+  .style-card:hover{border-color:#a8b0c0;background:#fff;}
+  .style-card.on{border-color:#0891b2;background:#f0fbfd;box-shadow:0 0 0 2px rgba(8,145,178,.1);}
+  .style-card[data-style-id="smart_recommendation_v1"]{grid-column:1/-1;}
+  .style-card .swatches{display:flex;height:24px;border-radius:7px;overflow:hidden;margin-bottom:7px;border:1px solid rgba(15,23,42,.08);}
+  .style-card .swatches i{display:block;flex:1;}
+  .style-card b{display:block;font-size:12px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .style-card small{display:block;margin-top:2px;color:#949bad;font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .style-detail{margin-top:9px;padding:10px 11px;border:1px solid #e1e8ee;border-radius:11px;background:#f8fbfc;font-size:11px;line-height:1.65;color:#667085;}
+  .style-detail b{color:#0e7490;font-size:12px;}
+  .style-detail .skilltag{display:inline-block;margin-top:6px;padding:2px 7px;border-radius:999px;background:#e0f2fe;color:#0369a1;font-weight:600;}
   .rbar{display:flex;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid #eef0f4;flex-wrap:wrap;}
   .rtitle{font-size:15px;font-weight:700;}
   .rtabs{display:flex;gap:6px;margin-left:auto;}
@@ -157,8 +169,10 @@
       </div>
 
       <div style="margin-top:16px;border-top:1px solid #eef0f4;padding-top:16px;">
-        <div style="font-size:14px;font-weight:700;margin-bottom:10px;">全片画风锁点 <em style="font-style:normal;font-size:11px;color:#aab0bf;font-weight:500;">（可选，人物/场景/分镜共用一句）</em></div>
-        <div class="field"><input id="orstyle" class="ctl" type="text" placeholder="如：low-saturation muted palette, 35mm film grain, grounded realism"></div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px;">全片画风预设</div>
+        <div style="font-size:11px;color:#9aa1b1;line-height:1.55;margin-bottom:10px;">选一次，自动贯穿人物、场景、分镜静帧与视频稳定规则。</div>
+        <div id="stylegrid" class="style-grid"></div>
+        <div id="styledetail" class="style-detail"></div>
       </div>
       <div id="genlog"></div>
     </div>
@@ -315,6 +329,7 @@ Photorealistic live-action film still style, wide 16:9 character reference sheet
 Photorealistic live-action film still style, wide 16:9 clean environment concept / location reference image of {SCENE NAME}, {TIME}, {IN/OUT}. {ART STYLE}, believable practical realism, cinematic production design. Show the stable spatial layout clearly: {LAYOUT — entrances, doors, windows, key furniture relative positions, focal point, foreground/midground/background}. Lighting and atmosphere: {LIGHT}. Empty establishing shot, no people, no active drama; consistent world, coherent geography, strong visual anchors so later shots do not drift. Wide 16:9. No text, no labels, no captions, no signage words, no annotations, no arrows, no UI, no title, no logo, no watermark in the image.
 </script>
 
+<script src="style-presets.js"></script>
 <script>
 (function(){
   var EXEC=(document.getElementById('execcard').textContent||'').trim();
@@ -322,14 +337,64 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   var SCENECARD=(document.getElementById('scenecard').textContent||'').trim();
   // 上游传来的场景、人物总表与用户参考图；无上游时为空数组
   var upstreamChars=[], upstreamScenes=[], upstreamRefs=[];
-  // 锤点图（三视图/场景图）存 IndexedDB，键为 hammer|char|<name> / hammer|scene|<name>；localStorage 只存已生成 key 清单
+  // 画风卡是 Preset；同一套“互动影游视觉导演”流程读取当前 Preset，不把每张卡误当成一个独立 Skill。
+  var STYLE_KEY='sb_style_id', STYLE_PREF_VERSION_KEY='sb_style_pref_version', STYLE_PREF_VERSION='2', DEFAULT_STYLE_ID='smart_recommendation_v1', FALLBACK_STYLE_ID='filmic_realism_v1';
+  function styleList(){ return Array.isArray(window.SB_STYLE_PRESETS)?window.SB_STYLE_PRESETS:[]; }
+  function styleById(id){ var a=styleList(); for(var i=0;i<a.length;i++) if(a[i].id===id) return a[i]; return null; }
+  function selectedStyleId(){ var id=''; try{id=localStorage.getItem(STYLE_KEY)||'';}catch(e){} return styleById(id)?id:DEFAULT_STYLE_ID; }
+  function currentStylePreset(){ return styleById(selectedStyleId())||styleById(DEFAULT_STYLE_ID)||styleList()[0]||null; }
+  function styleSnapshot(p){ return p?JSON.parse(JSON.stringify(p)):null; }
+  function styleForRecord(r){ return (r&&r.stylePreset)||styleById(r&&r.styleId)||currentStylePreset(); }
+  function initStylePreference(){ try{ if(localStorage.getItem(STYLE_PREF_VERSION_KEY)!==STYLE_PREF_VERSION){ localStorage.setItem(STYLE_KEY,DEFAULT_STYLE_ID); localStorage.setItem(STYLE_PREF_VERSION_KEY,STYLE_PREF_VERSION); } }catch(e){} }
+  function setSelectedStyle(id){ var p=styleById(id)||styleById(DEFAULT_STYLE_ID); if(!p)return; try{localStorage.setItem(STYLE_KEY,p.id);localStorage.setItem(STYLE_PREF_VERSION_KEY,STYLE_PREF_VERSION);}catch(e){} renderStylePicker(); }
+  function renderStylePicker(){
+    var grid=document.getElementById('stylegrid'),detail=document.getElementById('styledetail'); if(!grid||!detail)return;
+    var cur=currentStylePreset();
+    grid.innerHTML=styleList().map(function(p){ return '<button type="button" class="style-card'+(cur&&cur.id===p.id?' on':'')+'" data-style-id="'+esc(p.id)+'" title="'+esc(p.summary)+'">'
+      +'<span class="swatches">'+p.colors.map(function(c){return '<i style="background:'+esc(c)+'"></i>';}).join('')+'</span>'
+      +'<b>'+esc(p.name)+'</b><small>'+esc(p.en)+'</small></button>'; }).join('');
+    if(cur) detail.innerHTML=cur.isRecommendation
+      ? '<b>'+esc(cur.name)+'</b>：'+esc(cur.summary)+'<br>生成前会先读剧本信号，再锁定最终 Preset；不会逐镜乱换画风。<span class="skilltag">已设为默认</span>'
+      : '<b>'+esc(cur.name)+'</b>：'+esc(cur.summary)+'<br>内部强度 '+esc(cur.intensity)+'/100；只改渲染、材质、色彩和光照，不改人物、服装、场景、道具与镜头。<span class="skilltag">视觉导演规则已自动接管</span>';
+    [].forEach.call(grid.querySelectorAll('[data-style-id]'),function(b){ b.addEventListener('click',function(){ setSelectedStyle(this.getAttribute('data-style-id')); }); });
+  }
+  function styleGuard(p){ return 'Apply the style only to '+(p.styleScope||'rendering, linework, texture, palette relationship and lighting treatment')+'. Preserve '+((p.preserve||['character identity','wardrobe','location','props','action','camera','composition']).join(', '))+'.'; }
+  function recommendStyle(text){
+    text=String(text||'').toLowerCase();
+    var candidates=[
+      {id:'pixel_narrative_v1',re:/(像素|pixel|8[- ]?bit|16[- ]?bit|地牢游戏|游戏实机|横版过关|角色扮演)/g,w:4},
+      {id:'neo_chinese_wuxia_v1',re:/(武侠|仙侠|江湖|门派|剑客|侠客|古装|王朝|宫廷|水墨|国风)/g,w:3},
+      {id:'cel_anime_v1',re:/(动漫|二次元|番剧|赛璐璐|anime|少年漫|乙游|心动乙游)/g,w:3},
+      {id:'stylized_3d_v1',re:/(奇幻|魔法|精灵|巨龙|怪兽|巫师|魔王|异世界|童话|fantasy)/g,w:2},
+      {id:'gothic_mystery_v1',re:/(哥特|古堡|教堂|吸血鬼|诡异|灵异|恐怖|诅咒|墓园|亡灵|惊悚)/g,w:3},
+      {id:'neo_noir_v1',re:/(悬疑|犯罪|谋杀|侦探|警察|黑帮|阴谋|追凶|谍战|赛博朋克|noir)/g,w:2},
+      {id:'retro_cinematic_film_v1',re:/(80年代|90年代|上世纪|怀旧|复古|老电影|胶片|民国|年代剧|伪纪录片)/g,w:2}
+    ];
+    var best={id:FALLBACK_STYLE_ID,score:0};
+    candidates.forEach(function(c){ var m=text.match(c.re),score=(m?m.length:0)*c.w; if(score>best.score)best={id:c.id,score:score}; });
+    return styleById(best.id)||styleById(FALLBACK_STYLE_ID);
+  }
+  function resolveSelectedStyle(text){ var selected=currentStylePreset(); return selected&&selected.isRecommendation?recommendStyle(text):selected; }
+  function legacyStyleSnapshot(){
+    var old=''; try{old=(localStorage.getItem('sb_style')||'').trim();}catch(e){}
+    if(!old)return styleSnapshot(styleById(FALLBACK_STYLE_ID));
+    return {id:'legacy_custom_v1',version:1,name:'旧版自定义',en:'Legacy Custom',summary:'从旧版“画风锁点”保留',colors:['#64748b','#94a3b8','#cbd5e1'],stylePrompt:old,videoTemporalPrompt:'keep palette, material treatment, linework and texture stable across frames',negativeStylePrompt:'automatic wardrobe, location, prop, character identity or camera changes',styleScope:'rendering, linework, texture, palette relationship and lighting treatment only',preserve:['character identity','wardrobe','location','props','action','camera','composition'],intensity:35};
+  }
+  function compileStillPrompt(base,r){ var p=styleForRecord(r); if(!p)return String(base||'')+IMG_NEG; return '[SHOT_CONTENT]\n'+String(base||'')+'\n\n[ART_STYLE_ONLY]\n'+p.stylePrompt+'\n\n[STYLE_SCOPE]\n'+styleGuard(p)+'\n\n[NEGATIVE_STYLE_LEAK]\n'+p.negativeStylePrompt+IMG_NEG; }
+  function compileVideoPrompt(base,r){ var p=styleForRecord(r); if(!p)return String(base||''); return '[SHOT_CONTENT_AND_MOTION]\n'+String(base||'')+'\n\n[ART_STYLE_ONLY]\n'+p.stylePrompt+'\n\n[VIDEO_TEMPORAL_STYLE]\n'+p.videoTemporalPrompt+'\n\n[STYLE_SCOPE]\n'+styleGuard(p)+'\n\n[NEGATIVE_STYLE_LEAK]\n'+p.negativeStylePrompt; }
+  initStylePreference();
+  renderStylePicker();
+  // 锤点图（三视图/场景图）按 Preset 版本隔离，避免切换画风后误复用上一种画风的人物/场景图。
   var HAMKEY='sb_hammer_v1';
   function hamAll(){ try{ return JSON.parse(localStorage.getItem(HAMKEY)||'{}'); }catch(e){ return {}; } }
   function hamCache(){ return __imgCache['__hammer__']||(__imgCache['__hammer__']={}); }
-  function hamKey(kind,name){ return 'hammer|'+kind+'|'+String(name||''); }
+  function hamStyleKey(){ var pr=promptRec(),p=styleForRecord(pr&&pr.rec); return (p&&p.id||DEFAULT_STYLE_ID)+'@v'+(p&&p.version||1); }
+  function hamPrefix(kind){ return 'hammer|'+hamStyleKey()+'|'+(kind?(kind+'|'):''); }
+  function hamKey(kind,name){ return hamPrefix(kind)+String(name||''); }
   function hamGet(kind,name){ return hamCache()[hamKey(kind,name)]; }
   function hamSet(kind,name,url){ var k=hamKey(kind,name); hamCache()[k]=url; var m=hamAll(); m[k]=1; try{ localStorage.setItem(HAMKEY,JSON.stringify(m)); }catch(e){} return idbPut(k,url); }
-  function hamPreload(){ var m=hamAll(),ks=Object.keys(m),c=hamCache(); return Promise.all(ks.map(function(k){ if(c[k]) return null; return idbGet(k).then(function(u){ if(u)c[k]=u; }); })); }
+  function hamPreload(){ var m=hamAll(),prefix=hamPrefix(),ks=Object.keys(m).filter(function(k){return k.indexOf(prefix)===0;}),c=hamCache(); return Promise.all(ks.map(function(k){ if(c[k]) return null; return idbGet(k).then(function(u){ if(u)c[k]=u; }); })); }
+  function hamCountForStyle(){ var prefix=hamPrefix(),m=hamAll(); return Object.keys(m).filter(function(k){return k.indexOf(prefix)===0;}).length; }
   // ===== 健壮的 JSON 提取与修复（治“JSON 格式错”的根）=====
   function extractJson(raw){
     var s=String(raw||'');
@@ -400,7 +465,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     return t;
   }
 
-  var boundStory='';  // 当前输入绑定的故事剧本标题（来自节奏验证）；空=用户单传
+  var boundStory='', generationStylePreset=null;  // 当前输入绑定的故事剧本标题；生成期间锁定智能推荐的最终 Preset
   // 用户手动改了 JSON 输入则视为单传（解除绑定）
   var HSKEY='sb_history_v1';
   function sbHistAll(){ try{ return JSON.parse(localStorage.getItem(HSKEY)||'[]'); }catch(e){ return []; } }
@@ -429,20 +494,21 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   // 删除记录时清掉它在 IDB 的所有图
   function idbDropRec(r){ if(!r||!r.id) return; (r.imgNos||[]).forEach(function(no){ idbDel(r.id+'|'+no); }); delete __imgCache[r.id]; delete __imgLoaded[r.id]; }
   // 一次性迁移：旧记录把 base64(存在 localStorage 的 r.images) 挪进 IDB 并从 localStorage 删除，减负
-  function sbMigrateOnce(){ var a=sbHistAll(),changed=false; a.forEach(function(r){ if(!r.id){ r.id=newRecId(); changed=true; } if(r.images && Object.keys(r.images).length){ r.imgNos=r.imgNos||[]; Object.keys(r.images).forEach(function(no){ idbPut(r.id+'|'+no,r.images[no]); if(r.imgNos.indexOf(no)<0) r.imgNos.push(no); }); delete r.images; changed=true; } }); if(changed){ try{ localStorage.setItem(HSKEY,JSON.stringify(a)); }catch(e){} } }
+  function sbMigrateOnce(){ var a=sbHistAll(),changed=false; a.forEach(function(r){ if(!r.id){ r.id=newRecId(); changed=true; } if(!r.stylePreset){ r.stylePreset=legacyStyleSnapshot(); r.styleId=r.stylePreset&&r.stylePreset.id; changed=true; } if(r.images && Object.keys(r.images).length){ r.imgNos=r.imgNos||[]; Object.keys(r.images).forEach(function(no){ idbPut(r.id+'|'+no,r.images[no]); if(r.imgNos.indexOf(no)<0) r.imgNos.push(no); }); delete r.images; changed=true; } }); if(changed){ try{ localStorage.setItem(HSKEY,JSON.stringify(a)); }catch(e){} } }
   try{ sbMigrateOnce(); }catch(e){}
   function sbEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   // 同剧本合并键：优先 boundStory；否则用 grammar/title + 首节点集号前缀，尽量把同一剧本的多批归一起
-  function sbMergeKey(board, nodes, boundStoryName){
-    if(boundStoryName) return 'bs:'+boundStoryName;
+  function sbMergeKey(board, nodes, boundStoryName, styleId){
+    if(boundStoryName) return 'bs:'+boundStoryName+'|style:'+(styleId||DEFAULT_STYLE_ID);
     var g=(board&&board.grammar)||'';
     var ep=''; if(nodes&&nodes[0]&&nodes[0].id){ var m=String(nodes[0].id).match(/^(\d+)/); ep=m?m[1]:''; }
-    return 'g:'+g+'|ep:'+ep;
+    return 'g:'+g+'|ep:'+ep+'|style:'+(styleId||DEFAULT_STYLE_ID);
   }
   // 把本次 board+nodes 合并到同剧本的已有记录；无则新建。返回 {rec, idx, merged}
   function mergeStoryboardRecord(board, pickedNodes, srcSnap){
     var a=sbHistAll();
-    var key=sbMergeKey(board, pickedNodes, boundStory);
+    var chosenStyle=generationStylePreset||resolveSelectedStyle('');
+    var key=sbMergeKey(board, pickedNodes, boundStory, chosenStyle&&chosenStyle.id);
     var idx=-1; for(var i=0;i<a.length;i++){ if(a[i] && a[i].mergeKey===key){ idx=i; break; } }
     var nowStr=new Date().toLocaleString('zh-CN',{hour12:false});
     if(idx<0){
@@ -450,6 +516,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       var shotCount=0; (board.beats||[]).forEach(function(bt){ shotCount+=(bt.shots||[]).length; });
       var rec={ time:nowStr, title:(boundStory||board.grammar||'分镜'), boundStory:boundStory||'', mergeKey:key,
         shots:shotCount, sceneCount:(pickedNodes||[]).length, board:board, nodes:pickedNodes||[], src:srcSnap,
+        styleId:chosenStyle&&chosenStyle.id, stylePreset:styleSnapshot(chosenStyle),
         upstreamChars:(upstreamChars&&upstreamChars.length?upstreamChars:undefined), upstreamScenes:(upstreamScenes&&upstreamScenes.length?upstreamScenes:undefined), upstreamRefs:(upstreamRefs&&upstreamRefs.length?upstreamRefs:undefined) };
       sbHistSave(rec);   // unshift 到开头
       return { rec:rec, idx:0, merged:false };
@@ -508,8 +575,9 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       var imgN=recImgCount(r);
       var promptN=(r.board&&Array.isArray(r.board.prompts))?r.board.prompts.length:0;
       var cgTag=imgN>0?'<span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#cffafe;color:#0e7490;">🎬 CG '+imgN+'/'+promptN+'</span>':'';
+      var rp=styleForRecord(r), styleTag=rp?'<span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#ede9fe;color:#6d28d9;">🎨 '+sbEsc(rp.name)+'</span>':'';
       return '<div style="border:1px solid #eef0f4;border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fafbfc;">'
-        +'<div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;flex-wrap:wrap;"><span>'+sbEsc(r.title||('分镜 '+(i+1)))+'</span>'+bound+cgTag+'</div>'
+        +'<div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;flex-wrap:wrap;"><span>'+sbEsc(r.title||('分镜 '+(i+1)))+'</span>'+bound+styleTag+cgTag+'</div>'
         +'<div style="font-size:11.5px;color:#8a92a6;margin:4px 0 8px;">'+sbEsc(r.time)+'　'+(r.shots||0)+' 镜头　'+(r.sceneCount||0)+' 场次</div>'
         +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
         +'<button class="hbtn" data-sbact="load" data-i="'+i+'">载入查看</button>'
@@ -526,7 +594,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     var i=+b.getAttribute('data-i'), a=sbHistAll(), r=a[i]; if(!r) return;
     var act=b.getAttribute('data-sbact');
     if(act==='del'){ if(!confirm('删除这条分镜记录？')) return; idbDropRec(r); a.splice(i,1); try{localStorage.setItem(HSKEY,JSON.stringify(a));}catch(e){} sbHistRender(); return; }
-    if(act==='load'){ window.__lastBoard=r.board; window.__lastNodes=r.nodes||[]; boundStory=r.boundStory||''; window.__promptRecIdx=i; if(r.upstreamChars)upstreamChars=r.upstreamChars; if(r.upstreamScenes)upstreamScenes=r.upstreamScenes; if(r.upstreamRefs)upstreamRefs=r.upstreamRefs;
+    if(act==='load'){ window.__lastBoard=r.board; window.__lastNodes=r.nodes||[]; boundStory=r.boundStory||''; window.__promptRecIdx=i; if(r.upstreamChars)upstreamChars=r.upstreamChars; if(r.upstreamScenes)upstreamScenes=r.upstreamScenes; if(r.upstreamRefs)upstreamRefs=r.upstreamRefs; if(r.styleId&&styleById(r.styleId))setSelectedStyle(r.styleId);
       // 回填左侧输入区（免再从上游重点）：优先用记录里存的 src 快照，老记录降级用 nodes 反推 JSON
       try{
         if(r.src && r.src.mode==='text'){ setSrc('text'); document.getElementById('textin').value=r.src.text||''; document.getElementById('moodin').value=r.src.mood||''; }
@@ -606,11 +674,10 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   }
   // 静帧出图统一的强负向约束：图像模型对中文负向遵守弱，必须补一串英文 no text/subtitles 才能治住“图里冒字幕”
   var IMG_NEG='。画面里绝对不能出现任何文字、字幕、台词、水印。Wide 16:9 cinematic still. Absolutely no text, no subtitles, no captions, no letters, no words, no dialogue text, no watermark, no logo, no signature, no timestamp, no UI, no on-screen text of any kind.';
-  // 取各镜的 img 提示词（按节点/镜号），带上画风锁点
+  // 取各镜的 img 提示词（按节点/镜号），由视觉导演规则编译当前记录的画风 Preset。
   function sbImgPrompts(r){
     var ps=(r.board&&Array.isArray(r.board.prompts))?r.board.prompts:[];
-    var style=(localStorage.getItem('sb_style')||'').trim();
-    return ps.map(function(p){ return { no:String(p.no), prompt:(style?style+'，':'')+(p.img||p.video||p.text||'')+IMG_NEG }; });
+    return ps.map(function(p){ return { no:String(p.no), prompt:compileStillPrompt(p.img||p.video||p.text||'',r) }; });
   }
   // ===== 锤点驱动：按本镜 refChar/refScene 取已生成的三视图/场景图当参考图（图生图锁一致性）=====
   // @id 归一：去掉 @char_/@scene_ 前缀、空白，与锤点图的 name 键对齐
@@ -629,7 +696,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     return out;
   }
   // 容错：refChar 写的名字与锤点图键不严格相等时，做一次包含匹配
-  function matchHamName(kind,frag){ var m=hamAll(); var keys=Object.keys(m); for(var i=0;i<keys.length;i++){ var pr='hammer|'+kind+'|'; if(keys[i].indexOf(pr)===0){ var nm=keys[i].slice(pr.length); if(nm&&(nm.indexOf(frag)>=0||frag.indexOf(nm)>=0)) return nm; } } return ''; }
+  function matchHamName(kind,frag){ var m=hamAll(); var keys=Object.keys(m); for(var i=0;i<keys.length;i++){ var pr=hamPrefix(kind); if(keys[i].indexOf(pr)===0){ var nm=keys[i].slice(pr.length); if(nm&&(nm.indexOf(frag)>=0||frag.indexOf(nm)>=0)) return nm; } } return ''; }
   function renderCgPanel(i){
     var a=sbHistAll(), r=a[i]; if(!r) return;
     var panel=document.querySelector('.cgpanel[data-cg="'+i+'"]'); if(!panel) return;
@@ -765,12 +832,6 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       .catch(function(){backendReady=false;document.getElementById('orview_state').textContent='后端未连接';return false;});
   }
   initBackend();
-  // 画风锁点仍属于当前作品，而不是全局模型设置。
-  (function(){ var st=document.getElementById('orstyle');
-    try{ st.value=localStorage.getItem('sb_style')||''; }catch(e){}
-    st.addEventListener('input',function(){ try{ if(this.value.trim())localStorage.setItem('sb_style',this.value.trim()); else localStorage.removeItem('sb_style'); }catch(e){} });
-  })();
-
   // ---- 结果页签 ----
   var RTABS=['char','scene','board','prompt','storyboard','script'];
   document.querySelectorAll('.rtab').forEach(function(b){ b.addEventListener('click',function(){
@@ -853,8 +914,11 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     logReset(); logLine(boardOnly?'▸ 重新生成分镜（只出分镜表+分镜提示词，不动图像）':'▸ 一键生成：分镜→三视图→场景图→CG→故事版');
     logLine('▸ 输入：'+(srcMode==='text'?'手填一场戏':'剧本 JSON '+(scene.split('场次 ').length-1)+' 个场次'));
     logLine('▸ 镜头风格：'+camNote);
+    var requestedStyle=currentStylePreset(), chosenStyle=resolveSelectedStyle(scene); generationStylePreset=chosenStyle;
+    logLine('▸ 全片画风：'+(requestedStyle&&requestedStyle.isRecommendation?('智能推荐 → '+chosenStyle.name+' / '+chosenStyle.en):(chosenStyle?(chosenStyle.name+' / '+chosenStyle.en):'未配置')));
     logLine('▸ 调用 '+getModel()+'，按导演分镜执行卡出分镜…\n──────────────────────────────');
-    var user=scene+'\n\n【镜头风格约束】'+camNote+'\n\n请按导演分镜执行卡出分镜：先诊断戏剧问题(内部)、挑导演语法、锚定全场相机、逐镜填表、再逐镜出分镜提示词。只返回 ===JSON=== 之后的 JSON。';
+    var stylePlanning=chosenStyle?('\n\n【已选全片画风 Preset】'+chosenStyle.name+' / '+chosenStyle.en+'\n风格概要：'+chosenStyle.summary+'\n画风只影响渲染、线条、材质、色彩关系与光照处理；不得改人物、服装、场景、道具、动作、剧情或镜头设计。') : '';
+    var user=scene+'\n\n【镜头风格约束】'+camNote+stylePlanning+'\n\n请按导演分镜执行卡出分镜：先诊断戏剧问题(内部)、挑导演语法、锚定全场相机、逐镜填表、再逐镜出分镜提示词。只返回 ===JSON=== 之后的 JSON。';
     logHead=logEl.textContent;
     var acc='', JSON_EXP=6000; var HI=boardOnly?100:30;
     progScaled(33,0,HI,'模型输出中…');
@@ -973,7 +1037,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         var no=todo.shift();
         progScaled(done/total*100,lo,hi,'CG 分镜 '+(done+1)+'/'+total+'：镜'+no);
         var p=ps.filter(function(x){return String(x.no)===String(no);})[0];
-        var prompt=promptImgText(no,p.img||'',p.video||p.text||'');
+        var prompt=promptImgText(no,p.img||'',p.video||p.text||'',pr.rec);
         sbGenImage(prompt,function(err,url){
           done++;
           if(err){ logLine('  ✗ CG 镜'+no+'：'+err.message); next(); return; }
@@ -986,7 +1050,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       else { progSet(100,'完成 ✓'); logLine('\n✓ 一键生成完成：三视图/场景图/分镜表/分镜提示词(含CG)/故事版 均已就绪，切页签查看。'); }
       done();
     }
-    function done(){ busy=false; gAbort=null; document.getElementById('stopgen').style.display='none'; btn.textContent=old; btn.disabled=false; try{ updateGenBtnLabel(); }catch(e){} }
+    function done(){ busy=false; gAbort=null; generationStylePreset=null; document.getElementById('stopgen').style.display='none'; btn.textContent=old; btn.disabled=false; try{ updateGenBtnLabel(); }catch(e){} }
   }
 
   var COLS=[['no','镜号'],['dur','时长'],['size','景别'],['lens','焦段'],['pos','机位'],['move','运镜'],['space','空间站位'],['link','接续'],['dial','台词'],['refScene','场景'],['refChar','人物'],['comp','构图'],['desc','画面描述'],['act','动作'],['micro','微表情'],['emo','情绪'],['emoshift','情绪变化'],['rhythm','节奏'],['cut','剪辑点'],['sound','声音']];
@@ -1039,8 +1103,8 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   }
   // 当前分镜提示词面板对应的记录索引（生成后=0；载入查看时为对应索引），生成的图写回该记录 images
   window.__promptRecIdx=0;
-  // 取当前 prompts 面板对应的记录的出图提示词（带画风锁点，与 sbImgPrompts 同口径）
-  function promptImgText(no,img,video){ var style=(localStorage.getItem('sb_style')||'').trim(); return (style?style+'，':'')+(img||video||'')+IMG_NEG; }
+  // 取当前 prompts 面板对应的记录的出图提示词，静帧/视频分别注入 Preset 规则。
+  function promptImgText(no,img,video,rec){ return compileStillPrompt(img||video||'',rec); }
   function renderPrompts(d){
     var ps=Array.isArray(d.prompts)?d.prompts:[];
     if(!ps.length){
@@ -1058,7 +1122,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     var remain=ps.length-genN;
     // 只剩最后未出图的→“生成剩下”；一张都没→“生成全部”；全部完成→不出按钮
     var genLabel=genN===0?'🎨 生成全部分镜图':('🎨 生成剩下分镜图（'+remain+'）');
-    var hamN=Object.keys(hamAll()).length;
+    var hamN=hamCountForStyle();
     // 校验：分镜提示词(prompts)数应等于分镜表(beats[].shots)总数；不等多半是模型输出被 max_tokens 截断/偿懒
     var shotTotal=0; (Array.isArray(d.beats)?d.beats:[]).forEach(function(bt){ shotTotal+=(bt.shots||[]).length; });
     var mismatchTip='';
@@ -1071,10 +1135,11 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       +(hamN?'<span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#ecfeff;color:#0e7490;">🔗 锤点驱动：出图自动拿三视图/场景图做参考图锁一致性</span>':'<span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#fff7ed;color:#c2860b;">未出锤点图：先去“人物三视图/场景图”出图，分镜才能图生图锁一致</span>')+'</div>';
     h+=ps.map(function(p){
       var no=String(p.no), img=p.img||'', video=p.video||p.text||'', has=images[no];
+      var compiledImg=compileStillPrompt(img||video,rec), compiledVideo=video?compileVideoPrompt(video,rec):'';
       return '<div class="shotrow" data-shotno="'+sbEsc(no)+'">'
         +'<div class="pinfo"><b>【镜头'+esc(p.no)+'】</b>'
-          +(img?'<div style="font-size:11px;font-weight:700;color:#0e7490;margin:6px 0 2px;">🖼 静态帧出图 img</div><pre>'+esc(img)+'</pre>':'')
-          +(video?'<div style="font-size:11px;font-weight:700;color:#7c3aed;margin:8px 0 2px;">🎬 视频扩展 video</div><pre>'+esc(video)+'</pre>':'')
+          +(compiledImg?'<div style="font-size:11px;font-weight:700;color:#0e7490;margin:6px 0 2px;">🖼 静态帧出图 img · 已注入画风</div><pre>'+esc(compiledImg)+'</pre>':'')
+          +(compiledVideo?'<div style="font-size:11px;font-weight:700;color:#7c3aed;margin:8px 0 2px;">🎬 视频扩展 video · 已注入时序稳定</div><pre>'+esc(compiledVideo)+'</pre>':'')
           +'<div style="margin-top:8px;"><button class="hbtn'+(has?' done':'')+'" data-genshot="'+sbEsc(no)+'"'+(has?' disabled':'')+' style="font-size:12px;'+(has?'':'background:#0e7490;color:#fff;border-color:#0e7490;')+'">'+(has?'✓ 已生成':'🎨 生成分镜')+'</button></div>'
         +'</div>'
         +'<div class="shotcard"><div class="thumb" data-thumb="'+sbEsc(no)+'">'+(has?'<img src="'+has+'">':'镜'+esc(no)+'·待生成')+'</div>'
@@ -1097,8 +1162,8 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   function cssEsc(s){ return String(s).replace(/["\\]/g,'\\$&'); }
 
   // ================= 人物三视图 / 场景图（视觉锤点，真出图） =================
-  // 全片统一画风：优先用用户在“图像画风”里填的 sb_style，否则用一句安全默认
-  function artStyle(){ var s=(localStorage.getItem('sb_style')||'').trim(); return s||'cinematic, low-saturation muted palette, naturalistic lighting, film grain, grounded realism'; }
+  // 人物三视图与场景图也读取同一个 Preset，保持全片世界一致。
+  function artStyle(){ var pr=promptRec(),p=styleForRecord(pr&&pr.rec); return p?(p.stylePrompt+'. '+styleGuard(p)+' Negative style leak: '+p.negativeStylePrompt):'filmic photorealism, naturalistic lighting'; }
   function fill(tpl,map){ return tpl.replace(/\{([^}]+)\}/g,function(m,k){ var kk=k.split(/\s|\//)[0].trim(); return (map[k]!=null?map[k]:(map[kk]!=null?map[kk]:'')); }).replace(/ ,/g,',').replace(/,\s*,/g,',').replace(/,\s*\./g,'.'); }
   // 抽出骨架末尾那段英文提示词模板（去掉字头中文说明）
   function engTpl(card){ var i=card.indexOf('Photorealistic'); return i>=0?card.slice(i):card; }
@@ -1323,7 +1388,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   function genOneShot(no,cb){
     var pr=promptRec(); if(!pr.rec){ alert('未找到对应记录，请先生成或从记录载入。'); if(cb)cb(new Error('no rec')); return; }
     var ps=(pr.rec.board&&pr.rec.board.prompts)||[]; var p=ps.filter(function(x){return String(x.no)===String(no);})[0]; if(!p){ if(cb)cb(new Error('no shot')); return; }
-    var prompt=promptImgText(no,p.img||'',p.video||p.text||'');
+    var prompt=promptImgText(no,p.img||'',p.video||p.text||'',pr.rec);
     var bar=shotBar(no); var barI=bar&&bar.querySelector('i');
     var btns=[].slice.call(document.querySelectorAll('#pane-prompt [data-genshot="'+cssEsc(no)+'"]'));
     btns.forEach(function(b){ b.disabled=true; b.textContent='生成中…'; b.classList.remove('done'); });
@@ -1567,7 +1632,8 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         });
       });
     })();
-    var payload={ name:gameName, note:(boundStory?'绑定故事：'+boundStory:'分镜工作台单传')+'（含台词+分镜'+(nImg?'+'+nImg+'张CG':'提示词')+'+文学故事版+分镜脚本）', script:text, litScript:litScript, shotScripts:shotScripts, bgPrompts:bgPrompts, bgImageLabels:(nImg?labels:undefined), palette:(board&&board.palette)||null };
+    var activeStyle=styleForRecord(rec);
+    var payload={ name:gameName, note:(boundStory?'绑定故事：'+boundStory:'分镜工作台单传')+'（含台词+分镜'+(nImg?'+'+nImg+'张CG':'提示词')+'+文学故事版+分镜脚本）', script:text, litScript:litScript, shotScripts:shotScripts, bgPrompts:bgPrompts, bgImageLabels:(nImg?labels:undefined), palette:(board&&board.palette)||null, styleId:activeStyle&&activeStyle.id, stylePreset:styleSnapshot(activeStyle) };
     function writeAndOpen(){
       try{ localStorage.setItem('vn_incoming_script', JSON.stringify(payload)); }catch(e){ alert('写入失败（剧本文本过大）。'); return; }
       window.open('互动影视游戏.html','_blank');
@@ -1594,7 +1660,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
           if(!p||p.kind!=='storyboard') return;
           var key=p.recKey||p.boundStory||p.title;
           if(existed[key]) return;   // 已有同条→跳过（只增不覆）
-          var rec={ id:newRecId(), title:p.title||key, boundStory:p.boundStory||'', time:p.time||'', srcId:p.recKey||'',
+          var rec={ id:newRecId(), title:p.title||key, boundStory:p.boundStory||'', time:p.time||'', srcId:p.recKey||'', styleId:p.styleId||'', stylePreset:p.stylePreset||null,
             board:p.board||null, nodes:p.nodes||[], upstreamChars:p.upstreamChars||[], upstreamScenes:p.upstreamScenes||[], upstreamRefs:p.upstreamRefs||[],
             shots:(p.board&&p.board.beats)?p.board.beats.reduce(function(a,b){return a+((b.shots||[]).length);},0):0,
             sceneCount:(p.nodes||[]).length, imgNos:p.imgNos||Object.keys(p.images||{}) };
@@ -1674,7 +1740,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         kind:'storyboard', version:1, exportedAt:new Date().toISOString(),
         recKey:dpRecKey(r),
         title:r.title||'', boundStory:r.boundStory||'', time:r.time||'',
-        board:r.board||null, nodes:r.nodes||[], upstreamChars:r.upstreamChars||[], upstreamScenes:r.upstreamScenes||[], upstreamRefs:r.upstreamRefs||[],
+        board:r.board||null, nodes:r.nodes||[], upstreamChars:r.upstreamChars||[], upstreamScenes:r.upstreamScenes||[], upstreamRefs:r.upstreamRefs||[], styleId:r.styleId||'', stylePreset:r.stylePreset||null,
         imgNos:r.imgNos||Object.keys(images), images:images
       };
     });

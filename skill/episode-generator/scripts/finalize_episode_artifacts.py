@@ -18,6 +18,7 @@ from validate_storyboard_fields import (
 )
 from load_reference_bundle import verify_receipts
 from prepare_dialogue_review import build_dialogue_packet
+from seal_pipeline_stage import seal_stage, verify_stage
 
 
 REQUIRED_REFERENCE_PHASES = (
@@ -343,7 +344,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("canvas_root", type=Path)
     parser.add_argument("--cache-root", type=Path)
-    parser.add_argument("--mode", choices=("record-draft", "finalize"), required=True)
+    parser.add_argument("--mode", choices=("record-draft", "freeze", "finalize"), required=True)
     parser.add_argument("--episodes", help="逗号分隔的 episode-NNN；省略时处理全部")
     parser.add_argument("--min-visible-chars", type=int, default=850)
     parser.add_argument("--max-visible-chars", type=int, default=1300)
@@ -354,7 +355,8 @@ def main() -> int:
     root = args.canvas_root.resolve()
     cache_root = args.cache_root.resolve() if args.cache_root else cache_root_for(root)
     manifest = (cache_root / "manifest.md").read_text(encoding="utf-8")
-    is_v27 = "episode-cache-v0.1.27" in manifest
+    is_v28 = "episode-cache-v0.1.28" in manifest
+    is_v27 = "episode-cache-v0.1.27" in manifest or is_v28
     is_v25 = (
         "episode-cache-v0.1.25" in manifest
         or "episode-cache-v0.1.26" in manifest
@@ -369,10 +371,21 @@ def main() -> int:
     )
     is_v19 = "episode-cache-v0.1.19" in manifest or is_v21
     is_v18 = "episode-cache-v0.1.18" in manifest or is_v19
+    if is_v28:
+        required_stage = {
+            "record-draft": "production-cards",
+            "freeze": "drafts",
+            "finalize": "state-writeback",
+        }[args.mode]
+        verify_stage(
+            cache_root,
+            root,
+            required_stage,
+        )
     if is_v23:
         required_phases = (
             REQUIRED_REFERENCE_PHASES
-            if args.mode == "finalize"
+            if args.mode != "record-draft"
             else REQUIRED_REFERENCE_PHASES[:4]
         )
         receipt_errors = verify_receipts(
@@ -473,7 +486,15 @@ def main() -> int:
             synopsis_match = re.search(r"^单集梗概：\s*(.+)$", candidate_text, re.MULTILINE)
             if not synopsis_match:
                 raise SystemExit(f"{episode_id} 当前集定稿缺少单集梗概")
-            cache_text = replace_section(cache_text, "单集梗概", synopsis_match.group(1))
+            if is_v28:
+                frozen_synopsis = section(cache_text, "单集梗概").strip()
+                if synopsis_match.group(1).strip() != frozen_synopsis:
+                    raise SystemExit(
+                        f"{episode_id} 正文梗概与 production-cards 封印不一致，"
+                        "必须返回生产卡阶段重算"
+                    )
+            else:
+                cache_text = replace_section(cache_text, "单集梗概", synopsis_match.group(1))
             visible_chars, action_beats = metrics(candidate_text)
             if not args.min_visible_chars <= visible_chars <= args.max_visible_chars:
                 raise SystemExit(
@@ -568,8 +589,9 @@ def main() -> int:
                     "- 冻结状态：已冻结"
                 )
             cache_text = replace_section(cache_text, "校验状态", status_text)
-        cache_path.write_text(cache_text.rstrip() + "\n", encoding="utf-8")
-        if args.mode == "finalize":
+        if args.mode != "finalize":
+            cache_path.write_text(cache_text.rstrip() + "\n", encoding="utf-8")
+        if args.mode in {"freeze", "finalize"}:
             validate_fields(build_storyboard_fields(cache_text, topology))
 
     if args.mode == "finalize":
@@ -596,9 +618,40 @@ def main() -> int:
                 raise SystemExit(f"{episode_id} 缺少冻结单集梗概")
             synopsis_texts.append(f"## {title_match.group(1).strip()}\n\n{synopsis}")
         combined = "\n\n---\n\n".join(final_texts)
-        (root / "episode-script.md").write_text(combined + "\n", encoding="utf-8")
         synopsis_combined = "# 各集梗概\n\n" + "\n\n".join(synopsis_texts) + "\n"
-        (root / "episode-synopsis.md").write_text(synopsis_combined, encoding="utf-8")
+        if is_v28:
+            staging = cache_root / ".final-staging"
+            staging.mkdir(parents=True, exist_ok=True)
+            (staging / "episode-script.md").write_text(combined + "\n", encoding="utf-8")
+            (staging / "episode-synopsis.md").write_text(synopsis_combined, encoding="utf-8")
+            render = subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).with_name("render_episode_flowchart.py")),
+                    str(root),
+                    "--cache-root",
+                    str(cache_root),
+                    "--output",
+                    str(staging / "episode-flowchart.svg"),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if render.returncode:
+                raise SystemExit(
+                    "公开流程图组装失败：\n"
+                    + (render.stdout or render.stderr).strip()
+                )
+            for name in (
+                "episode-synopsis.md",
+                "episode-flowchart.svg",
+                "episode-script.md",
+            ):
+                (staging / name).replace(root / name)
+            seal_stage(cache_root, root, "final")
+        else:
+            (root / "episode-script.md").write_text(combined + "\n", encoding="utf-8")
+            (root / "episode-synopsis.md").write_text(synopsis_combined, encoding="utf-8")
     return 0
 
 
