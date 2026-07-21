@@ -21,6 +21,8 @@ def write(path: Path, text: str) -> None:
 def reference_receipts(cache: Path) -> None:
     phases = (
         "upstream",
+        "emotional-spine",
+        "causal-graph",
         "topology",
         "production-cards",
         "episode-writing",
@@ -140,7 +142,7 @@ def episode_file(episode_id: str, emotion: str, causal: str) -> str:
     return f"""# 分集
 
 ## 生产卡
-- 拓扑节点：{episode_id}
+- 分集容器：{episode_id}
 - 情绪事件：{emotion}
 - 因果事件：{causal}
 - 核心事件：人物执行拓扑冻结的具体行动并承担结果

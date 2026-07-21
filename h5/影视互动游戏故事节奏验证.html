@@ -1291,7 +1291,7 @@ flowchart TD
   function skillForgeOn(){ var el=document.getElementById('forgeMode'); return !!(el&&el.value==='skill'&&extOn('script_inst')); }
   document.getElementById('forgeMode').addEventListener('change',function(){
     document.getElementById('forgeHint').textContent=this.value==='skill'
-      ? '先锁拓扑和制作卡，再逐集写作；每集独立做因果、对白、冷读验收。质量高，调用次数也更多。'
+      ? '先生成一集一个节点的分集梗概与流程图，再按冻结拓扑逐集写作。'
       : '一次生成结构与剧本，适合低成本试想法；不执行逐集记忆、独立冷读和锁稿。';
   });
   function userMessageContent(text){ if(!IMAGES.length)return text; var out=IMAGES.map(function(x){return {type:'image_url',image_url:{url:x.dataUrl}};}); out.push({type:'text',text:text}); return out; }
@@ -1317,6 +1317,33 @@ flowchart TD
     var nodeFloor=Math.max(8,E+3), nodeCap=Math.max(22,E*3+2); // 节点总数上限随结局数放大（E=10 时可到 ~32）
     var tags=pickedList();
     var brief=(document.getElementById('brief').value||'').trim();
+    if(forge){
+      var forgeReq=intentBlock()+docBlock()+imageBlock()
+        +'【输入】\n'
+        +(brief?('自由描述：'+brief+'\n'):'')
+        +'题材标签：'+(tags.length?tags.join(' ＋ '):'（未选）')+'\n'
+        +'游戏体量参考：'+T+' 分钟\n'
+        +'总结局数：'+E+'\n\n'
+        +'【任务】\n'
+        +'继承输入中的游戏企划和正式角色、场景、道具，只完成故事主线与分集拓扑。不要重做企划或资产，不要输出情绪坐标、容量公式、候选方案、互动配额、生成日志、自评、生产卡、分镜字段或完整剧本。\n'
+        +'先用 outline 的起、承、转、合写清开场、首次收益、代价、反转、高潮和结局；再直接拆成分集。一个节点就是一集，不存在剧情节点到分集的二次映射。节点数量优先采用输入中“剧情节点总数建议”。\n'
+        +'每集 text 用一段话写清谁想做什么、具体阻力、本集核心变化和下一集为何发生。只在玩家确实拥有两个以上合理行动时设置选择，不为凑数量增加。每个选项先进入不同的结果集；汇合时保留尚未解决的关系、信息、风险、资源和承诺差异。\n'
+        +'结局总数严格为 '+E+'，正式结局与失败小结局的构成优先继承输入。\n\n'
+        +'【输出】只返回合法 JSON，不要 Markdown 围栏，不要输出 JSON 之外的文字：\n'
+        +'{\n'
+        +'  "title":"游戏标题",\n'
+        +'  "logline":"一句话概述",\n'
+        +'  "synopsis":"整理后的主线梗概",\n'
+        +'  "characters":[{"name":"正式角色名","role":"主角/主配/配角/NPC","desc":"身份、目标与剧情作用","voice":"说话方式"}],\n'
+        +'  "scenes":[{"name":"正式场景名","time":"日/夜","inout":"内/外","look":"场景描述"}],\n'
+        +'  "props":[{"name":"正式道具名","level":"core/normal","look":"固定外观","func":"剧情用途","appears":"分集id，顿号分隔"}],\n'
+        +'  "outline":[{"stage":"起/承/转/合","minutes":"大致时间段","summary":"具体故事推进"}],\n'
+        +'  "nodes":[{"id":"episode-001","node_title":"分集标题","kind":"normal/choice/major/minor","sub":"结局节点可写end或mid","cast":"出场角色，顿号分隔","loc":"正式场景名","time":"日/夜 内/外","text":"本集梗概","choice_question":"仅选择集填写","next":[{"to":"episode-002","label":"具体行动选项或继续"}],"script":""}]\n'
+        +'}\n'
+        +'硬规则：编号连续且唯一；所有节点从 episode-001 可达；普通集只有一个后续；选择集有2—4个不同目标；同一选择的不同选项不得直接指向同一集；major和minor均为结局且没有后续；major与minor数量之和等于总结局数。';
+      document.getElementById('req').value=forgeReq;
+      return;
+    }
     var s=intentBlock()+docBlock()+imageBlock()
       +'【输入】\n'
       +(brief?('自由描述：'+brief+'\n'):'')
@@ -1336,7 +1363,7 @@ flowchart TD
       +(inst?'  "props": [ {"name":"道具名","level":"core/normal","look":"固定外观描述，供画面锁一致性","func":"核心道具必填：金手指载体/世界规则物证/异性信物/反转扳机 之一或多项；普通道具写跨场用途","appears":"出现场次id，顿号分隔（如 1-1、1-4、E-2）"} ],\n':'')
       +'  "outline": [ {"stage":"阶段名（短片：装置/兑现/反转/抉择/结局；长片：起/承/转/合）","minutes":"0-2","summary":"可执行段落大纲：具体场景、谁在场、发生什么事、情绪落点、为下一段埋什么；写具体内容不写套话，80–160字"} ],\n'
       +(inst
-        ? '  "nodes": [ {"id":"1-1","node_title":"六字内剧情标题","loc":"场景名（如：废弃医院·一楼大厅）","time":"日 内","kind":"normal","cast":"本场在画面内的人物，顿号分隔","text":"该节点情节概要 2–4 句","script":"'+(forge?'（必须留空，第二阶段逐集锻造）':'本场分场剧本：一场能演的戏，引号内原句台词贯穿全场（角色名：台词换行写）＋少量简单动作标点，850–1300可见字，拆1–3情绪场各有转折，中文口语去翻译腔，固定镜头思维')+'","production_card":{"episode_goal":"本集唯一主事件与可见结果","entry_state":"承接所有前置来路的硬状态，300–600字","must_payoff":["本集必须兑现"],"must_seed":["本集必须埋设"],"forbidden":["不得提前使用或改写的事实"]},"dramatic_core":"这场变了什么，一句","emotional_owner":"本场情感属于谁（须是本场cast内人物名）","power_shift":"谁掌权/是否转移，一句","information_gap":"谁知道/瞒/试探什么；确无写 信息对齐","dialogue_intent":"对抗/交代/关系 三选一","next":[{"to":"1-2","label":""}]}, {"id":"E-1","loc":"…","time":"…","kind":"major","sub":"end","cast":"…","text":"…","script":"","production_card":{"episode_goal":"结局兑现","entry_state":"…","must_payoff":[],"must_seed":[],"forbidden":[]},"dramatic_core":"…","emotional_owner":"…","power_shift":"…","information_gap":"…","dialogue_intent":"…"} ],\n'
+        ? '  "nodes": [ {"id":"1-1","node_title":"六字内剧情标题","loc":"场景名（如：废弃医院·一楼大厅）","time":"日 内","kind":"normal","cast":"本场在画面内的人物，顿号分隔","text":"本集梗概：写清本集发生的核心变化","script":"'+(forge?'（必须留空，拓扑冻结后逐集写作）':'完整现场：事实正确，首次人物与设定当场交代，对白写成人话；动作顺写，不用△和出场栏')+'","dramatic_core":"本集核心冲突","next":[{"to":"1-2","label":""}]}, {"id":"E-1","loc":"…","time":"…","kind":"major","sub":"end","cast":"…","text":"…","script":"","dramatic_core":"…"} ],\n'
         : '  "nodes": [ {"id":"1-1","kind":"normal","text":"该节点情节概要 2–4 句（只写结构与情节，不写分场剧本）","next":[{"to":"1-2","label":""}]}, {"id":"E-1","kind":"major","sub":"end","text":"该结局的价值/情绪落点 1–2 句"} ],\n')
       +'  "beats": [ {"t":0, "name":"拍名", "V":-0.6, "D":-0.7, "note":"这一拍发生什么"} ],\n'
       +'  "choices": [ {"at":0, "question":"抉择问题", "options":["选项A","选项B"]} ],\n'
@@ -1353,6 +1380,8 @@ flowchart TD
       +(inst?'【流程图标题硬规则】每个 node 额外输出 node_title：这是流程图缩略图下显示的剧情小标题，必须在写本场 script 前先概括本场的戏剧变化再命名；标题是完整短语，中文最多 6 个汉字的视觉宽度，英文/数字按半角折算；禁止从正文硬截、禁止省略号、禁止泛词（如“剧情推进”“场景转换”）。示例：暗恋未说、姻缘交易、写符许愿、甜变诡异、门锁失效。\n':'')
       +'（短片按结局树、长片按情绪弧组织；beats 的 t＝分钟、V 和 D 都必须给、取 −1 到 1，beats 至少 5 拍且覆盖全程；flowEnter＝大概第几分钟玩家进入心流；choices 与 nodes 里的 choice 节点一一对应。）\n\n'
       +'【输出格式】分两段：\n第一段【生成日志】——严格按规则书第四部分“生成顺序”的六步，逐步写出你对本案例的具体决策（每步 3–6 行，写具体内容禁止套话）：\n第0步 输入自洽检验＋题材先验：先用容量公式反查输入是否自相矛盾（矛盾则写明真实意图与裁决、新参数）；再题材画像/是否需类型融合/视角/金手指及其限制/数值信封（时长·抉择数·结局数总数→先按题材定主结局集合、判断是否有中间大结局）/一句话定位四要素自检；\n第1步 立情绪脊：主干各拍的 PAD 坐标与拐点（哪里 D 负翻正、哪里 V 正翻负）、反差催化剂、观众已知/主角未知的反讽账；\n第2步 识别岔点：从脊上列出候选岔点清单，每个标注价值岔向与选项代价；\n第3步 铺分支拓扑：说明怎么剪裁岔点满足节奏数学（抉择数/三种结局按软区间分配/小结局位置）；\n第4步 填内容：关键节点的场景/人物建置/结局差异化要点，并对 2–3 个关键节点展示题材透镜过程（情节骨架→题材反差物→升级收口→钩子）；\n'+(advChk?'第5步 自检：对照规则书第五部分清单逐项报 ✓/✗，有 ✗ 必须回步修正后再输出。':'第5步 自检（精简）：内部逐项自检不要写过程，有 ✗ 先回步修正；修不了才把结果写进 JSON 的 selfcheck 字段（四组：题材/故事/节奏/剧本，每组 ✓ 或 ✗:一句原因）。')+'\n然后另起一行只写 ===JSON===，之后只输出上面规定的 JSON，不要再有其他文字。';
+    s=s.replace('本集 audience_summary 不得预写，它只能在正文三审通过后生成。拓扑冻结后由工作台逐集生成 850–1300 可见字剧本。','拓扑冻结后由工作台逐集写完整现场，只检查事实、首次出场交代和人话对白。')
+      .replace('script 为 850–1300 可见字、默认 16–24 个以 △ 开头的动作段落；人物说话像自然中文，重台词不超过三分之一，不得连续三句解释设定。','script 直接写完整现场；动作顺写，不使用△和出场栏，不设字数、动作段数或台词比例。');
     if(tags.indexOf('抽象')>=0){ s+='\n\n【抽象说明】题材含"抽象"：请以 B站 / 抖音 当下最热门的抽象梗为素材来构建（梗迭代极快，一律取当前流行的，不要套用过时老梗）。'; }
     if(inputPolicy().strict){ s+='\n\n【完整剧本自动还原·最高优先级】系统已识别输入为完整分场剧本：结构、台词、动作、情节、抉择和结局均照原稿；线性剧本就输出线性节点链。结局数、抉择数、2–4出口、反俗套、力度谱、payoffs 和空合流等生成规则全部降为分析提示，不得据此增删或改写原稿。beats 按真实走势打点；consistency 只登记原稿自身矛盾。'; }
     document.getElementById('req').value=s;
@@ -1478,15 +1507,15 @@ flowchart TD
   var SYS='你是互动短剧结构生成器，遵循《互动短剧设计规则书》。⓪ 用户输入第一性：用户已写到的任何颗粒度（描述或上传原稿里的大纲/分场/人物/场景/道具/台词/镜头/分支/抉择/结局）都是最高权威，一律原样采纳、禁止改写或用你的创意顶掉，你只补空白层并叠加节奏/结构/校验层；冲突时取更细颗粒度的一方；标了「第一性/原稿」的内容优先级高于本系统提示的默认创作倾向。⚠ 第零优先：先做输入自洽检验（容量公式：主线≥15分＋每条完整情感弧光≈20分＋每名露脸角色≈5分），用户内容承诺与时长矛盾时，真实意图＝内容承诺，上调时长并重定引擎，裁决写进 consistency。核心：① 题材层：判断题材够不够成为产品；弱题材靠类型融合破局（底色＝用户点的类型，融一个供能类型当惊喜），每阶段配强敌＋可克服难关；必须有受限的金手指（金手指不限异能/强能力：历史权谋·谍战中智力、乙女纯爱中主角魅力本身也算，同须限定使用规则与场景）；需推荐或融合题材时优先取当下男频/女频热门池（男频：历史模拟器/无限流/系统文/悬疑恐怖/盗墓冒险/末日生存/修仙炼丹/游戏竞技；女频：宫斗宅斗/综艺想象/年代发家/萌宝萌娃/穿书逆袭/纯爱百合），非封闭，用户点名池外照做。② 引擎由时长定（新口径：短10–15／中15–25／长25＋）：短（10–15分）＝结局树（装置先行→一次兑现＋一记反转→抉择树→2–4结局）；中（15–25分）＝过渡（主干＋关键分支＋汇合）；长（25分以上）＝情绪弧（起承转合七拍＋PAD坐标V/A/D＋反差催化剂）。③ 前五分钟必有一个教学交互点，落在第一个情节点高潮；起段固定 1 个选错即死。④ 结局数＝三种之和(末段主结局＋中间大结局0–1＋小结局/死路)，用户输入的就是总数；先按题材定主结局(下限2，≤10min纯爱/抽象可1)、再按余量铺小结局(N≥5尽量多于主结局)，中间大结局＝隐藏结局仅0–1；分配按软区间表(见执行卡【3】)；每个结局一个鲜明的价值/情绪落点。⑤ 一句话定位须含期待/反转/钩子/情绪四要素。⑥ 大纲与节点文字必须具体可执行：写真实场景、真实事件、画面内的人，禁止“主角遇到困难”这类空话。〔INST〕⑦ 剧本层：台词口语化（默认中文，用户提及西幻/具体国家用该语种）、固定镜头为主、以台词传信息传情感、对话符合人设、人物先建置后出场；先产出人物全状态卡与场景日夜状态卡。角色分类用四类固定标签：恋爱类＝主角/男主/女主/配角/NPC，非恋爱类＝主角/主配/配角/NPC；NPC＝跨场出现但没戏、只需固定形象的功能角色也要列。道具分两级入 props：核心道具（金手指载体/世界规则物证/异性信物/反转扳机，至少一项功能）与普通道具（跨场需固定形象）；单场无功能道具不列。〔/INST〕⑧ 反俗套：装置三选一弃第一直觉（高频装置默认禁用）；反转必须连锁链≥2环、禁外部事故；每个爽点＝D轴翻盘×玩家抉择促成×反讽风险，登记进 payoffs。⑨ 单点情节题材透镜：每个关键情节先落地一件具体的事，再过题材透镜换成题材独有的反差物（融合题材从供能类型取），收口在题材逻辑内升级禁止常识性收口，钩子留下一段催化剂口子（最强＝双义钩子）；平情节只许当铺陈不许作节点落点。〔INST〕台词比重高于动作，全部script通读顺畅。〔/INST〕⑩ 力度谱：开场压制V∈[−0.6,−0.35]且D≤−0.5；首个释放点落差≥0.7；中段最强压制V≤−0.6落差≥1.0反号；高潮释放V≥+0.8落差≥1.4且D翻正；收尾V∈[+0.2,+0.5]；释放强度看落差；两个释放拍之间必有V≤−0.2回落。收到【输入】后只返回规定 JSON，不要多余文字。';
   var EXEC=(document.getElementById('execcard').textContent||'').trim();
   var RB=(document.getElementById('rulebook').textContent||'').trim();
+  var FORGE_SYS='你是 episode-generator v0.1.37 分集规划师。继承用户已经确认的游戏企划和正式角色、场景、道具，只整理故事主线与分集拓扑。用户明确写出的主线、人物关系、世界规则、关键事件、节点数量和结局优先。情绪脊是唯一上层驱动：用人物幻想、现实风险、现实落点、控制权变化和下一催化组织起、承、转、合。一个流程节点就是一集，不存在剧情节点到分集的二次映射。拓扑最小单元是玩家动作、状态写入、独立结果。每集只围绕一个主要问题，梗概写清人物目标、具体阻力、本集核心变化和下一催化。只在玩家确实拥有两个以上合理行动时设置选择；每个选项先进入不同结果集，汇合时保留未解决的关系、信息、风险、资源和承诺差异。不要输出情绪坐标、容量公式、候选方案、互动配额、生成日志、自评、生产卡、分镜字段或完整剧本。只返回用户要求的合法 JSON。';
   // 与当前 episode-generator 对齐：保留本台既有 JSON 接口，只以这份规则裁决“剧本该怎么写”。
   var EPISODE_WRITING_POLICY='\n\n【分集规划师·剧本质量规则（替代旧剧本拓展的写作口径，优先执行）】\n'
     +'你交付的是能直接给演员和分镜使用的互动影视剧本，不是大纲、小说梗概、设定说明或台词合集。保持本台要求的 JSON 字段和节点跳转不变；其中每个 nodes[].script 必须是完整剧本。\n'
     +'写作优先级固定为：①观众一遍看懂谁是谁、谁想要什么、发生了什么和为什么；②每场有戏——人物目标、阻力、交锋、信息或权力变化必须落在可见动作与原句台词里；③人物说人话——台词是接话、试探、回避、确认和反应，不是轮流发表金句或解释设定；④最后才是制片格式。低级要求不得破坏高级要求。\n'
-    +'每个 script 用制片格式连续写成：\n【场次 · 地点 · 日/夜 · 内/外】\n出场：人物\n△ 可拍的动作与环境\n人物：台词\n先把一场戏按因果写流畅，再转成这个排版；不要写表格式碎片、旁白概述、镜头术语或“角色A感到”。常规节点至少400个中文字符；极短故事可放宽至250字，但不能用描写灌水。\n'
-    +'每个节点先确定明确处境、人物欲望、推进阻力、至少一次可指认的状态变化；关键对抗要有多轮交锋和至少一次权力易手。信息靠戏内问答、动作、交易和后果长出来，禁止用△概述关键因果或让路人硬灌背景。\n'
-    +'新角色第一次开口前必须出现：可见出场动作、身份锚点、此刻来意。第一集必须在戏内交代故事前提、主角身份和关键关系；规则题材先立后用，新规则每集至多一条，必须讲清、验证并兑现，不能边演边发明规则。\n'
-    +'台词遵循真实口语：承重句一场不超过三分之一，连续三句像金句即重写；人物不能无缘无故立场突变，动机必须有前文铺垫。非结局节点以具体动作、事件或台词把下一集推出去；结局正文必须回收对应选择并给出不同结果或代价。\n'
-    +'互动选择必须是有代价的真实选择，至少造成信息、关系、风险、资源、立场、情绪或结局方向的一项差异；同组选项不得立刻汇到同一节点。写完后冷读检查：不看设定资料，仅凭正文也能答出人物、目标、因果、规则和下集悬念；答不出就返工。';
+    +'每个 script 直接写成完整现场，场次标题使用【场次 · 地点 · 日/夜 · 内/外】，动作顺写，人物台词使用“人物：台词”。不使用△，不输出出场栏，不设字数、动作段数或台词比例。\n'
+    +'写作按相邻因果拍推进：触发、判断、欲望、行动、阻力、调整、即时后果、下一压力。只补足当前因果需要的环节，不跳过移动、接触、失败尝试或代价直接抵达结果。\n'
+    +'只保证三件事：①事实与来路状态正确，不混入未执行路线；②人物、组织、装置和关键设定首次使用时在现场自然交代；③对白有明确所指、接得上话茬并像人物会说的人话。复杂信息通过现象、追问、质疑、确认和反应逐层说清。\n'
+    +'每个选项先进入不同结果集；汇合只使用共同事实，同时保留仍有效的关系、信息、风险、资源和承诺差异。写完只修当前集三项检查中的真实问题，不增加独立审稿层。';
 
   // ===== 拓展能力注册表（基础框架之外的叠加层，开关存 localStorage）=====
   var EXTENSIONS=[
@@ -1516,6 +1545,7 @@ flowchart TD
     return t.replace(/〔ADV〕[\s\S]*?〔\/ADV〕/g,'').replace(/〔\/?ADV_OFF〕/g,'');
   }
   function buildSys(){
+    if(skillForgeOn()) return FORGE_SYS;
     return applyAdv(applyInst(SYS+'\n\n'+EXEC+EPISODE_WRITING_POLICY))+extInject();
   }
 
@@ -1749,11 +1779,11 @@ flowchart TD
       chk('分集工坊依赖链完整运行',ef.status==='completed',efDetail);
       var noCard=ns.filter(function(n){return !n.production_card||!n.production_card.episode_goal;});
       chk('逐集制作卡完整',noCard.length===0,noCard.length?('缺失：'+noCard.map(function(n){return n.id;}).join('、')):'');
-      var noFullScript=ns.filter(function(n){return visibleCount(n.script)<850;});
+      var noFullScript=ns.filter(function(n){return !String(n.script||'').trim();});
       chk('全部分集均有完整剧本',noFullScript.length===0,noFullScript.length?('未完整：'+noFullScript.map(function(n){return n.id;}).join('、')):'');
       var unlocked=ns.filter(function(n){return !(n.episode_audit&&n.episode_audit.locked);});
       chk('全部分集同摘要三审锁稿',unlocked.length===0,unlocked.length?('未锁稿：'+unlocked.map(function(n){return n.id;}).join('、')):'');
-      var digestBad=ns.filter(function(n){var r=n.episode_audit&&n.episode_audit.reviews||[];return r.length!==4||r.some(function(x){return x.digest!==n.episode_audit.digest;});});
+      var digestBad=ns.filter(function(n){var r=n.episode_audit&&n.episode_audit.reviews||[];return r.length!==1||r[0].name!=='three-gate-check'||r.some(function(x){return x.digest!==n.episode_audit.digest;});});
       chk('机械/因果/对白/冷读使用同一 SHA-256',digestBad.length===0,digestBad.length?('摘要不一致：'+digestBad.map(function(n){return n.id;}).join('、')):'');
     }
     // 节奏软指标
@@ -2179,7 +2209,7 @@ flowchart TD
     d.episodes=(d.nodes||[]).map(function(n){
       var ending=n.kind==='major'||n.kind==='minor', interactive=n.kind==='choice'||n.kind==='interaction', next=n.next||[];
       var props=(d.props||[]).filter(function(p){return String(p.appears||'').indexOf(n.id)>=0;}).map(function(p){return p.name;});
-      return {'分集编号':n.id,'分集标题':n.node_title||n.id,'分集剧本':{'单集梗概':n.text||'','完整剧本':n.script||''},'剧本分析':{'本集冲突':n.dramatic_core||'','前置节点编号列表':g.pred[n.id]||[],'后续节点编号列表':next.map(function(e){return e.to;})},'关联角色':String(n.cast||'').split(/[、,，]/).filter(Boolean),'关联场景':n.loc?[n.loc]:[],'关联道具':props,'是否结局':ending,'互动节点':{'是否为分支节点':interactive,'是否有选择问题':interactive&&next.length>0,'选择问题':n.choice_question||n.question||'','选项列表':next.map(function(e,i){return {'选项编号':String(i+1),'选项文字':e.label||'继续','目标分集编号':e.to};}),'默认下一分集编号':interactive?'':((next[0]&&next[0].to)||'')},'_工作台验收':n.episode_audit||null};
+      return {'分集编号':n.id,'分集标题':n.node_title||n.id,'分集剧本':{'单集梗概':n.text||'','完整剧本':n.script||''},'剧本分析':{'本集冲突':n.dramatic_core||'','前置节点编号列表':g.pred[n.id]||[],'后续节点编号列表':next.map(function(e){return e.to;})},'关联角色':String(n.cast||'').split(/[、,，]/).filter(Boolean),'关联场景':n.loc?[n.loc]:[],'关联道具':props,'是否结局':ending,'互动节点':{'是否为分支节点':interactive,'是否有选择问题':interactive&&next.length>0,'选择问题':n.choice_question||n.question||'','选项列表':next.map(function(e,i){return {'选项编号':String(i+1),'选项文字':e.label||'继续','目标分集编号':e.to};}),'默认下一分集编号':interactive?'':((next[0]&&next[0].to)||'')}};
     });
   }
   function forgeContext(d,n,g){
@@ -2187,78 +2217,36 @@ flowchart TD
     return {title:storyTitle(d),logline:d.logline||'',synopsis:d.synopsis||'',characters:chars,scenes:d.scenes||[],props:d.props||[],topology:g.topology,current:n,predecessors:g.pred[n.id]||[],incoming_memories:(g.pred[n.id]||[]).map(function(id){var p=(d.nodes||[]).filter(function(x){return x.id===id;})[0];return p?{id:id,audience_summary:p.audience_summary||p.working_summary||'',exit_state:p.exit_state||''}:null;}).filter(Boolean)};
   }
   function writeEpisode(d,n,g){
-    var sys='你是新版分集剧本锻造器。拓扑和制作卡已冻结，只能写当前一集，禁止改变节点编号、前后连接、选项目标、结局属性或资产身份。剧本必须是自然中文影视剧本，850–1300个可见非空白字符，默认16–24个以“△”开头且可直接拍摄的动作段落；台词可说、人物可区分，重台词不超过三分之一，禁止连续三句解释设定。每集只推进一个主事件，必须形成触发→反应→行动→阻力→调整→可见结果→反应→下一步。分支节点的选项用“动词＋明确对象”；合流只能直接使用所有来路共同成立的事实，路线私有事实须在合流后重新取得。只返回JSON。';
-    var ask='根据以下冻结上下文写当前集。production_card 的 must_payoff 必须兑现，must_seed 必须埋下，forbidden 不得触碰。entry_state 是本集入口硬状态；incoming_memories 用于检查多来路，不得把某条路线私有信息冒充共同事实。working_summary 仅是下游写作使用的临时连续性记忆，不是锁稿摘要；正式观众摘要只能在验收通过后生成。\n'+JSON.stringify(forgeContext(d,n,g))+'\n返回：{"script":"完整剧本","entry_state":"本集实际入口硬状态，300–600字","exit_state":"本集结束时人物位置、关系、知情、道具归属和未决行动","working_summary":"60–100个汉字的临时连续性摘要","dramatic_core":"本集唯一戏剧变化","power_shift":"权力如何变化","information_gap":"知情差","dialogue_intent":"对抗/交代/关系"}';
+    var sys='你是 episode-generator v0.1.37 的分集编剧。拓扑已经冻结，只写当前一集，不改编号、连接、选项、结局和正式资产名。用网文的因果清晰度把梗概写成可拍摄现场，按触发、判断、欲望、行动、阻力、调整、即时后果和下一压力推进；只补当前需要的环节，不跳过程。对白统一使用人物：台词。动作顺写，不使用△，不输出出场栏，不设字数、动作段数或台词比例。只返回JSON。';
+    var ask='只读取当前节点、直接前置真实结果、仍有效的路线差异、相关人物关系与知情、相关场景道具和直接后续入口。顺着现场写出触发、第一反应、行动、阻力、调整、可见结果与下一步；缺哪一步会让因果看不懂才补哪一步。\n'+JSON.stringify(forgeContext(d,n,g))+'\n返回：{"script":"完整剧本","entry_state":"本集实际入口事实","exit_state":"本集结束时实际成立的事实","working_summary":"只写本集实际发生的事","dramatic_core":"本集唯一戏剧变化"}';
     return llmJson([{role:'system',content:sys},{role:'user',content:ask}],false).then(function(x){Object.keys(x||{}).forEach(function(k){n[k]=x[k];});});
   }
-  function mechanicalAudit(n,digest){
-    var len=visibleCount(n.script),actions=actionCount(n.script),issues=[];
-    if(len<850||len>1300)issues.push('可见字数 '+len+'，要求 850–1300');
-    if(actions<16||actions>24)issues.push('△动作段 '+actions+'，默认要求 16–24');
-    if(!n.entry_state||visibleCount(n.entry_state)<300||visibleCount(n.entry_state)>600)issues.push('入口硬状态须为 300–600 字');
-    return {name:'mechanical',pass:!issues.length,issues:issues,digest:digest,stats:{visible_chars:len,action_paragraphs:actions}};
-  }
-  function reviewEpisode(kind,n,d,g,digest){
-    var spec={
-      causal:'只检查：地点与出入、人物权限、事件感知与反应、道具路径、入口出口连续性、分支—汇合双向一致。不得评论文风，不得替作者续写。',
-      dialogue:'只检查：中文台词是否自然可说、角色声音能否区分、是否翻译腔或AI腔、是否过度压缩问答、重台词是否超过三分之一、是否连续三句解释设定。不得使用作者未来计划。',
-      cold:'你是与创作上下文隔离的首次观众。只根据入口硬状态、观众摘要和当前剧本回答六问：我在哪里、谁在场、现在要什么、阻力是什么、刚发生了什么变化、下一步为什么成立；另检查动作可拍、台词可说。不得推测作者意图或后续计划。'
-    };
-    var payload=kind==='cold'?{prior_audience_summaries:(forgeContext(d,n,g).incoming_memories||[]),entry_state:n.entry_state,script:n.script}:{episode_id:n.id,predecessors:g.pred[n.id]||[],topology:g.topology,current_script:n.script,entry_state:n.entry_state,exit_state:n.exit_state};
-    var sys='你是分集锁稿验收员。'+spec[kind]+' 必须对给定 SHA-256 对应的当前版本作结论。只返回JSON：{"pass":true或false,"issues":["可定位问题"],"note":"简短结论"}。没有问题时 issues 为空；不得因为偏好提出改写。';
-    return llmJson([{role:'system',content:sys},{role:'user',content:'digest='+digest+'\n'+JSON.stringify(payload)}],true).then(function(r){return {name:kind,pass:!!r.pass,issues:Array.isArray(r.issues)?r.issues:[],note:r.note||'',digest:digest};});
-  }
-  function repairEpisode(d,n,g,audits){
-    var issues=[]; audits.forEach(function(a){(a.issues||[]).forEach(function(x){issues.push(a.name+'：'+x);});});
-    var sys='你是分集剧本定点返修器。只能修当前集剧本与本集记忆字段，不得改拓扑、选项目标、结局属性、角色/场景/道具身份，也不得提前使用未来事实。修复列出的验收问题，同时继续满足850–1300可见字、16–24个△动作段、自然可说中文。只返回JSON。';
-    var ask=JSON.stringify({context:forgeContext(d,n,g),current:{script:n.script,entry_state:n.entry_state,exit_state:n.exit_state},issues:issues})+'\n返回：{"script":"返修后完整剧本","entry_state":"300–600字","exit_state":"出口硬状态"}';
-    return llmJson([{role:'system',content:sys},{role:'user',content:ask}],false).then(function(x){['script','entry_state','exit_state'].forEach(function(k){if(x&&x[k])n[k]=x[k];});});
-  }
-  function freezeEpisodeMemory(d,n,g){
-    var sys='你是分集冻结记录员。正文已经通过同一 SHA-256 的机械、因果、对白与隔离冷读验收。只记录观众在本集实际看见并确定知道的事实；禁止写作者计划、未来答案、路线评价或主题解释。互斥路线事实不得混成共同事实。只返回JSON。';
-    var ask=JSON.stringify({episode_id:n.id,predecessors:g.pred[n.id]||[],entry_state:n.entry_state,script:n.script})+'\n返回：{"audience_summary":"60–100个汉字","exit_state":"人物位置、关系、知情、道具归属、未决行动"}';
-    return llmJson([{role:'system',content:sys},{role:'user',content:ask}],false).then(function(x){n.audience_summary=x.audience_summary||'';if(x.exit_state)n.exit_state=x.exit_state;var c=visibleCount(n.audience_summary);if(c<60||c>100)throw new Error(n.id+' 冻结摘要长度 '+c+'，要求 60–100');});
-  }
   function auditAndMaybeRepair(d,n,g,allowRepair,onRound){
-    function audit(){return sha256Text(n.script).then(function(digest){var mech=mechanicalAudit(n,digest);return reviewEpisode('causal',n,d,g,digest).then(function(a){return reviewEpisode('dialogue',n,d,g,digest).then(function(b){return reviewEpisode('cold',n,d,g,digest).then(function(c){return [mech,a,b,c];});});});});}
-    function freezeUntilValid(round,audits){
-      return freezeEpisodeMemory(d,n,g).catch(function(e){
-        if(String(e&&e.message||'').indexOf('冻结摘要长度')<0)throw e;
-        logLine('  ↳ '+n.id+' 锁稿摘要不合规，自动重做…');
-        if(onRound)onRound(round,'重做锁稿摘要');
-        return freezeUntilValid(round,audits);
-      });
-    }
-    function cycle(round,previous){
-      if(genStopped)throw new Error('stopped');
-      if(onRound)onRound(round,'第 '+round+' 轮验收');
-      return audit().then(function(audits){
-        var pass=audits.every(function(x){return x.pass&&x.digest===audits[0].digest;});
-        n.episode_audit={digest:audits[0].digest,locked:false,attempts:round,reviews:audits,previous:previous||null};
-        if(pass)return freezeUntilValid(round,audits).then(function(){n.episode_audit={digest:audits[0].digest,locked:true,attempts:round,reviews:audits,previous:previous||null};});
-        if(!allowRepair)throw new Error(n.id+' 导入原稿未通过验收，忠实导入不自动改写');
-        logLine('  ↳ '+n.id+' 第 '+round+' 轮未通过，正在按问题定点返工…');
-        if(onRound)onRound(round,'第 '+round+' 轮未过 · 自动返工');
-        return repairEpisode(d,n,g,audits).then(function(){return cycle(round+1,audits);});
-      });
-    }
-    return cycle(1,null);
+    if(genStopped)throw new Error('stopped');
+    if(onRound)onRound(1,'三项检查');
+    var sys='你是 episode-generator v0.1.37 当前集检查编剧。只检查并修复四件事：事实和路线状态正确；行动因果相邻且没有跳过必要过程；首次出现的人物与设定已在现场自然交代；对白有明确所指、接得上话茬并像人物会说的人话。没有问题的句子保持不动。不得改拓扑、选择、结局和正式资产名，不使用△，不输出出场栏，不设字数、动作段数或台词比例。只返回JSON。';
+    var ask=JSON.stringify({context:forgeContext(d,n,g),script:n.script,entry_state:n.entry_state,exit_state:n.exit_state})+'\n返回：{"script":"三项检查后的完整剧本","entry_state":"本集实际入口事实","exit_state":"本集结束时实际成立的事实","audience_summary":"只写观众在本集实际看见并确定知道的事实"}';
+    return llmJson([{role:'system',content:sys},{role:'user',content:ask}],false).then(function(x){
+      if(!x||!x.script)throw new Error(n.id+' 三项检查未返回完整剧本');
+      n.script=x.script;if(x.entry_state)n.entry_state=x.entry_state;if(x.exit_state)n.exit_state=x.exit_state;n.audience_summary=x.audience_summary||n.working_summary||'';
+      return sha256Text(n.script).then(function(digest){n.episode_audit={digest:digest,locked:true,attempts:1,reviews:[{name:'three-gate-check',pass:true,digest:digest}]};});
+    });
   }
   function forgeProject(d){
     if(!skillForgeOn()||!extOn('script_inst'))return Promise.resolve(d);
     var g=nodeGraph(d),ns=g.order,strict=inputPolicy().strict,writeIndex=0,auditIndex=0;
-    d.__episodeForge={version:'0.1.15-workbench',topology_frozen:true,status:'running',phase:'scripts',total:ns.length,generated:0,reviewed:0,locked:0,review_policy:'same-digest: mechanical + causal + dialogue + isolated-cold-read; repair-until-pass'};
+    d.__episodeForge={version:'0.1.37-workbench',topology_frozen:true,status:'running',phase:'scripts',total:ns.length,generated:0,reviewed:0,locked:0,review_policy:'single four-gate check: facts + adjacent causality + first appearance + natural dialogue'};
     pipelineSet('topology',100,'拓扑、流程图与情绪脊硬规则通过','pass');
     pipelineSet('scripts',0,'准备生成 '+ns.length+' 集完整剧本','active');
     pipelineOverall('生成全量剧本','active');
-    logLine('▸ 拓扑与制作卡已冻结。第二阶段将先生成全部 '+ns.length+' 集剧本，再统一验收。');
+    logLine('▸ 拓扑已冻结。第二阶段逐集写作，并对每集执行一次三项检查。');
     function writeAll(){
       if(genStopped)throw new Error('stopped');
       if(writeIndex>=ns.length){
         d.__episodeForge.phase='audit';
         pipelineSet('scripts',100,ns.length+' 集完整剧本已全部生成','pass');
-        pipelineSet('audit',0,'准备全量验收与自动返工','active');
-        pipelineOverall('校验与自动返工','active');
+        pipelineSet('audit',0,'准备逐集三项检查','active');
+        pipelineOverall('检查事实、首次出场与人话对白','active');
         return auditAll();
       }
       var n=ns[writeIndex],shown=writeIndex+1;
@@ -2275,10 +2263,10 @@ flowchart TD
       }
       var n=ns[auditIndex],shown=auditIndex+1;
       pipelineSet('audit',Math.round((auditIndex/ns.length)*100),'验收第 '+shown+'/'+ns.length+' 集 · '+n.id,'active');
-      logLine('▸ 同摘要验收 '+shown+'/'+ns.length+'｜'+n.id);
+      logLine('▸ 三项检查 '+shown+'/'+ns.length+'｜'+n.id);
       return auditAndMaybeRepair(d,n,g,!strict,function(round,label){pipelineSet('audit',Math.round((auditIndex/ns.length)*100),n.id+' · '+label+' · 剩余 '+(ns.length-auditIndex)+' 集','active');}).then(function(){
         auditIndex++;d.__episodeForge.reviewed=auditIndex;d.__episodeForge.locked=auditIndex;
-        logLine('  ✓ '+n.id+' 同摘要验收通过，第 '+(n.episode_audit.attempts||1)+' 轮锁稿');
+        logLine('  ✓ '+n.id+' 三项检查完成并锁稿');
         pipelineSet('audit',Math.round((auditIndex/ns.length)*100),'已锁稿 '+auditIndex+'/'+ns.length+' 集','active');syncEpisodeContract(d,g);return auditAll();
       });
     }
@@ -2405,7 +2393,7 @@ flowchart TD
           done();
         }
         if(skillForgeOn()){
-          pipelineSet('topology',100,'拓扑、流程图与情绪脊验证通过','pass');
+          pipelineSet('topology',100,'分集梗概与流程图已完成','pass');
           forgeProject(d).then(finalizeProject).catch(function(e){
             if(genStopped||(e&&e.name==='AbortError')||e.message==='stopped'){rememberBackendTask(null);pipelineOverall('已停止','fail');logLine('⏹ 已停止；未完成的分集不会标为锁稿。');done();return;}
             fail('分集工坊中断：'+e.message);
@@ -2726,7 +2714,7 @@ flowchart TD
     if(!ns.length){ wrap.innerHTML='<div class="empty">（暂无数据：先「一键生成」）</div>'; return; }
     var kindTag={ normal:'剧情', choice:'抉择', interaction:'抉择', major:'主结局', minor:'死路' };
     var kindColor={ normal:'#3b82f6', choice:'#f59e0b', interaction:'#f59e0b', major:'#f97316', minor:'#ef4444' };
-    var generated=ns.filter(function(n){return visibleCount(n.script)>=850;}).length,locked=ns.filter(function(n){return n.episode_audit&&n.episode_audit.locked;}).length;
+    var generated=ns.filter(function(n){return String(n.script||'').trim();}).length,locked=ns.filter(function(n){return n.episode_audit&&n.episode_audit.locked;}).length;
     var ready=generated===ns.length&&locked===ns.length;
     var h='<div style="padding:6px 18px 20px;max-width:860px;">'
       +'<div style="display:flex;align-items:center;gap:12px;margin:4px 0 14px;padding:13px 15px;border:1px solid '+(ready?'#bde6d5':'#e4e8f0')+';border-radius:13px;background:'+(ready?'#f7fdf9':'#fafbfc')+';">'

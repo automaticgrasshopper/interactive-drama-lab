@@ -22,7 +22,7 @@ class ReferenceLoaderTests(unittest.TestCase):
     def test_phase_bundle_contains_every_manifest_reference(self):
         result = loader.load_bundle("episode-writing", ("suspense", "confrontation"))
         names = {item["name"] for item in result["files"]}
-        self.assertEqual(names, {"episode-writing-v036.md", "chinese-dialogue-craft.md"})
+        self.assertEqual(names, {"causal-episode-writing-v037.md", "chinese-dialogue-craft.md"})
         self.assertIn(result["receipt_sha256"], result["bundle"])
 
     def test_receipt_round_trip_and_tamper_rejection(self):

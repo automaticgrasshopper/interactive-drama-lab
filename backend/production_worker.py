@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -51,13 +52,9 @@ DIALOGUE_PREPARER = (
 REQUIRED_BACKEND_REFERENCE_PHASES = {
     "upstream",
     "topology",
-    "production-cards",
     "episode-writing",
-    "scene-review",
-    "dialogue-review",
-    "isolated-audience",
-    "state-writeback",
-    "whole-play-review",
+    "dialogue-polish",
+    "continuity-review",
 }
 
 
@@ -160,6 +157,10 @@ def current_episode_skill_version() -> str:
 
 
 class ProductionStopped(RuntimeError):
+    pass
+
+
+class ProductionCheckpointReached(RuntimeError):
     pass
 
 
@@ -280,11 +281,24 @@ class ProductionManager:
         return {
             "role": "user",
             "content": (
-                "【后台长项目分段协议·覆盖本轮输出长度要求】本轮只冻结全局资产、完整拓扑和紧凑生产卡，"
-                "不得省略任何节点或边，但必须压缩每个 production_card：episode_goal 与 entry_state 各不超过80个汉字；"
-                "must_payoff最多2项、must_seed最多1项、forbidden最多1项，每项不超过30个汉字。"
-                "script仍为空。生成日志每步最多2行，避免挤占结构化输出容量。完整生产卡会在拓扑通过后按原子执行组另行展开，"
-                "不得为了写长卡截断JSON。"
+                "【v0.1.31 长项目压缩】本轮只写清楚各分集的具体事件、选择后果、连接和结局，不得省略分集或边。"
+                "一个节点就是一集，使用 episode-NNN；每集 text 用能复述的短梗概表达：人物目标、阻力、实际结果和下一催化。script 留空。"
+                "不展开执行卡、情绪坐标、候选方案、审查过程或逐集分析。"
+            ),
+        }
+
+    @staticmethod
+    def _lightweight_topology_instruction() -> dict[str, str]:
+        return {
+            "role": "user",
+            "content": (
+                "【episode-generator v0.1.31 覆盖指令】忽略上文关于情绪数值、容量公式、候选淘汰、互动配额、生成日志、生产卡和分镜字段的要求。"
+                "本轮只整理故事主线和分集拓扑：资产沿用上游，每个流程节点就是一集，必须使用 episode-NNN。"
+                "选择写在当前集结尾，每个选项直接指向另一集；选择结果、反馈、汇合和结局节点也必须各自是一集。禁止把多个节点折叠进一集。"
+                "只在玩家确实拥有两个以上合理行动时设置选择，不为凑类型或数量增加互动。"
+                "不同选项必须先进入不同结果集；汇合时保留尚未解决的关系、信息、风险、资源和承诺差异。"
+                "每集 text 必须让普通人看懂谁想做什么、受到什么阻力、发生什么结果、为什么进入下一集。"
+                "只返回一个 JSON 对象，不输出生成日志、解释、自评或 ===JSON=== 标记。"
             ),
         }
 
@@ -537,23 +551,15 @@ class ProductionManager:
         choices = [n for n in nodes if n.get("kind") in ("choice", "interaction")]
         if len(majors) + len(minors) != endings:
             errors.append(f"结局总数应为 {endings}，实际 {len(majors) + len(minors)}")
-        if duration <= 15:
-            low, high = (1, 2) if duration <= 10 else (2, 3)
-            if not low <= len(choices) <= high:
-                errors.append(f"短片抉择数应为 {low}–{high}，实际 {len(choices)}")
-        elif len(choices) < 2:
-            errors.append("中长片抉择节点少于 2")
         for node in choices:
             next_items = node.get("next") if isinstance(node.get("next"), list) else []
-            if not 2 <= len(next_items) <= 4:
-                errors.append(f"{node.get('id')} 的出口数不在 2–4")
+            if len(next_items) < 2:
+                errors.append(f"{node.get('id')} 没有形成真实选择")
             if any(not str(edge.get("label") or "").strip() for edge in next_items if isinstance(edge, dict)):
                 errors.append(f"{node.get('id')} 存在空选项文字")
             targets = [str(edge.get("to")) for edge in next_items if isinstance(edge, dict)]
             if len(targets) != len(set(targets)):
                 errors.append(f"{node.get('id')} 存在多选项直接合流")
-            if next_items and all((by_id.get(str(edge.get("to"))) or {}).get("kind") == "minor" for edge in next_items if isinstance(edge, dict)):
-                errors.append(f"{node.get('id')} 的选项全是死路")
         broken_edges = [f"{node.get('id')}→{edge.get('to')}" for node in nodes for edge in (node.get("next") or []) if isinstance(edge, dict) and str(edge.get("to")) not in by_id]
         if broken_edges:
             errors.append("流程图存在断边：" + "、".join(broken_edges))
@@ -574,51 +580,211 @@ class ProductionManager:
         orphan = [node_id for node_id in by_id if node_id not in seen and not ((by_id[node_id].get("trigger") or {}).get("type") == "passive")]
         if orphan:
             errors.append("流程图存在孤儿节点：" + "、".join(orphan))
-        beats = data.get("beats") if isinstance(data.get("beats"), list) else []
-        if len(beats) < 5:
-            errors.append("情绪脊 beats 少于 5 拍")
-        if beats and not any(beat.get("D") is not None for beat in beats if isinstance(beat, dict)):
-            errors.append("情绪脊缺少 D 轴")
-        minimum_d, flipped = 1.0, False
-        for beat in beats:
-            if not isinstance(beat, dict) or beat.get("D") is None:
-                continue
-            try:
-                value = float(beat.get("D"))
-            except (TypeError, ValueError):
-                errors.append("情绪脊 D 轴存在非数值")
-                continue
-            if minimum_d <= -0.3 and value >= 0.3:
-                flipped = True
-            minimum_d = min(minimum_d, value)
-        if beats and not flipped:
-            errors.append("情绪脊缺少 D 轴从被压到掌控的翻盘拍")
         characters = data.get("characters") if isinstance(data.get("characters"), list) else []
-        if not characters or any(not isinstance(item.get("states"), list) or not item.get("states") for item in characters if isinstance(item, dict)):
-            errors.append("人物全状态卡不完整")
-        valid_roles = {"主角", "男主", "女主", "主配", "配角", "NPC"}
-        if any(str(item.get("role") or "").strip() not in valid_roles for item in characters if isinstance(item, dict)):
-            errors.append("角色分类不在固定标签内")
+        if not characters:
+            errors.append("缺少角色资料")
         if characters and not any(str(item.get("role") or "").strip() == "主角" for item in characters if isinstance(item, dict)):
             errors.append("缺少主角")
-        choice_ids = {str(node.get("id")) for node in choices}
-        payoffs = data.get("payoffs") if isinstance(data.get("payoffs"), list) else []
-        if not payoffs or any(str(item.get("enabledBy")) not in choice_ids or not str(item.get("irony") or "").strip() for item in payoffs if isinstance(item, dict)):
-            errors.append("爽点 payoffs 未完整登记翻盘、抉择促成与反讽")
         scenes = data.get("scenes") if isinstance(data.get("scenes"), list) else []
-        if not scenes or any(not re.search(r"日|夜", str(item.get("time") or "")) for item in scenes if isinstance(item, dict)):
-            errors.append("场景表缺失或未标日/夜")
+        if not scenes:
+            errors.append("缺少场景资料")
         props = data.get("props") if isinstance(data.get("props"), list) else []
-        core_props = [item for item in props if isinstance(item, dict) and item.get("level") == "core"]
-        if not props or not core_props or any(not str(item.get("look") or "").strip() or not str(item.get("func") or "").strip() for item in core_props):
-            errors.append("道具表缺失或核心道具没有外观与功能")
+        if not props:
+            errors.append("缺少道具资料")
         outline = data.get("outline") if isinstance(data.get("outline"), list) else []
         if not outline or any(visible_count(item.get("summary")) < 40 for item in outline if isinstance(item, dict)):
             errors.append("大纲段落不完整")
-        no_card = [str(n.get("id")) for n in nodes if not isinstance(n.get("production_card"), dict) or not n["production_card"].get("episode_goal")]
-        if no_card:
-            errors.append("缺少逐集制作卡：" + "、".join(no_card))
         return errors
+
+    @staticmethod
+    def _normalize_episode_nodes(data: dict[str, Any]) -> None:
+        """Make the only topology layer the episode layer, preserving every edge."""
+        nodes = [item for item in data.get("nodes") or [] if isinstance(item, dict)]
+        mapping = {
+            str(node.get("id")): f"episode-{index:03d}"
+            for index, node in enumerate(nodes, 1)
+        }
+        for index, node in enumerate(nodes, 1):
+            old_id = str(node.get("id"))
+            episode_id = mapping[old_id]
+            node["id"] = episode_id
+            node["episode_id"] = episode_id
+            node["episode_title"] = node.get("episode_title") or node.get("node_title") or f"第{index}集"
+            node["node_title"] = node["episode_title"]
+            for edge in node.get("next") or []:
+                if isinstance(edge, dict) and str(edge.get("to")) in mapping:
+                    edge["to"] = mapping[str(edge.get("to"))]
+        data["nodes"] = nodes
+        data.pop("story_nodes", None)
+        data.pop("episode_map", None)
+
+    @staticmethod
+    def _episode_map_errors(data: dict[str, Any], episodes: Any) -> list[str]:
+        """Legacy v0.1.29 cache reader; never used by the v0.1.31 production path."""
+        nodes = [item for item in data.get("nodes") or [] if isinstance(item, dict)]
+        node_ids = {str(item.get("id")) for item in nodes}
+        if not isinstance(episodes, list) or not episodes:
+            return ["分集映射为空"]
+        if len(nodes) >= 8 and len(episodes) >= len(nodes):
+            return ["分集映射机械地把每个剧情节点当成一集"]
+        assigned: list[str] = []
+        errors: list[str] = []
+        by_id = {str(item.get("id")): item for item in nodes}
+        for index, episode in enumerate(episodes, 1):
+            if not isinstance(episode, dict):
+                errors.append(f"第 {index} 个分集映射不是对象")
+                continue
+            members = [str(item) for item in episode.get("node_ids") or []]
+            if not members:
+                errors.append(f"第 {index} 个分集没有剧情节点")
+                continue
+            assigned.extend(members)
+            member_set = set(members)
+            adjacent = {item: set() for item in member_set}
+            for member in member_set:
+                for edge in (by_id.get(member) or {}).get("next") or []:
+                    target = str(edge.get("to")) if isinstance(edge, dict) else ""
+                    if target in member_set:
+                        adjacent[member].add(target)
+                        adjacent[target].add(member)
+            seen, queue = set(), [members[0]]
+            while queue:
+                current = queue.pop(0)
+                if current in seen:
+                    continue
+                seen.add(current)
+                queue.extend(adjacent.get(current, set()) - seen)
+            if seen != member_set:
+                errors.append(f"第 {index} 集内部剧情节点不连续")
+        missing = sorted(node_ids - set(assigned))
+        unknown = sorted(set(assigned) - node_ids)
+        duplicate = sorted({item for item in assigned if assigned.count(item) > 1})
+        if missing:
+            errors.append("未映射剧情节点：" + "、".join(missing))
+        if unknown:
+            errors.append("映射含未知剧情节点：" + "、".join(unknown))
+        if duplicate:
+            errors.append("剧情节点被重复映射：" + "、".join(duplicate))
+        return errors
+
+    def _assign_episode_map(self, project_id: str, run_id: str, data: dict[str, Any], duration: int, pipeline: dict[str, Any]) -> None:
+        """Reject the removed v0.1.29 mapping stage if an old caller invokes it."""
+        raise RuntimeError("v0.1.31 不存在节点到分集映射；流程节点本身就是一集")
+        # The unreachable body below is retained only to deserialize unfinished
+        # v0.1.29 checkpoints. New v0.1.31 runs never call it.
+        if isinstance(data.get("story_nodes"), list) and isinstance(data.get("episode_map"), list):
+            return
+        existing = data.get("episode_map")
+        if not self._episode_map_errors(data, existing):
+            return
+        compact_nodes = [
+            {key: node.get(key) for key in ("id", "node_title", "kind", "text", "next")}
+            for node in data.get("nodes") or []
+            if isinstance(node, dict)
+        ]
+        for attempt in range(1, 4):
+            forge = data.setdefault("__episodeForge", {})
+            forge["current_task"] = {"id": "episode-map-write", "role": "author", "status": "running", "attempt": attempt}
+            self.runs.update(project_id, run_id, result_data=data)
+            mapped = self._json_chat(
+                project_id,
+                run_id,
+                [
+                    {"role": "system", "content": "已停用的 v0.1.29 兼容路径"},
+                    {"role": "user", "content": "已停用的 v0.1.29 兼容路径"},
+                ],
+                validator=False,
+                max_tokens=6000,
+                temperature=0.35,
+                reference_phase="topology",
+                reference_profiles=self._reference_profiles(data),
+            )
+            episodes = mapped.get("episodes")
+            mechanical = self._episode_map_errors(data, episodes)
+            if mechanical:
+                continue
+            normalized = []
+            for index, episode in enumerate(episodes, 1):
+                normalized.append({
+                    "id": f"episode-{index:03d}",
+                    "title": str(episode.get("title") or f"第{index}集"),
+                    "main_dramatic_question": str(episode.get("main_dramatic_question") or ""),
+                    "node_ids": [str(item) for item in episode.get("node_ids") or []],
+                })
+            data["episode_map"] = normalized
+            for episode in normalized:
+                for node_id in episode["node_ids"]:
+                    node = next(item for item in data.get("nodes") or [] if str(item.get("id")) == node_id)
+                    node["episode_id"] = episode["id"]
+                    node["episode_title"] = episode["title"]
+            self._collapse_story_nodes_to_episodes(data)
+            forge["current_task"] = {"id": "episode-map-write", "role": "author", "status": "complete", "attempt": attempt}
+            self.runs.update(project_id, run_id, result_data=data)
+            return
+        raise RuntimeError("剧情节点到分集的映射连续三次未通过，已停止")
+
+    @staticmethod
+    def _collapse_story_nodes_to_episodes(data: dict[str, Any]) -> None:
+        """Keep causal nodes private and expose episode containers to production."""
+        story_nodes = [item for item in data.get("nodes") or [] if isinstance(item, dict)]
+        by_id = {str(item.get("id")): item for item in story_nodes}
+        episode_map = [item for item in data.get("episode_map") or [] if isinstance(item, dict)]
+        node_to_episode = {str(node_id): str(episode.get("id")) for episode in episode_map for node_id in episode.get("node_ids") or []}
+        units = []
+        for episode in episode_map:
+            episode_id = str(episode.get("id"))
+            members = [by_id[str(node_id)] for node_id in episode.get("node_ids") or []]
+            member_ids = {str(item.get("id")) for item in members}
+            next_edges = []
+            for member in members:
+                for edge in member.get("next") or []:
+                    if not isinstance(edge, dict):
+                        continue
+                    target_node = str(edge.get("to"))
+                    target_episode = node_to_episode.get(target_node)
+                    if not target_episode or target_episode == episode_id:
+                        continue
+                    candidate = {"to": target_episode, "label": edge.get("label") or "继续"}
+                    if candidate not in next_edges:
+                        next_edges.append(candidate)
+            casts = list(dict.fromkeys(name.strip() for item in members for name in re.split(r"[、,，]", str(item.get("cast") or "")) if name.strip()))
+            locations = list(dict.fromkeys(str(item.get("loc")) for item in members if item.get("loc")))
+            emotion_refs = list(dict.fromkeys(str(ref) for item in members for ref in (item.get("emotion_refs") or item.get("emotional_events") or []) if ref))
+            causal_refs = list(dict.fromkeys(str(ref) for item in members for ref in (item.get("causal_refs") or item.get("causal_events") or []) if ref))
+            if not next_edges:
+                ending_kinds = [str(item.get("kind")) for item in members]
+                kind = "major" if "major" in ending_kinds else "minor" if "minor" in ending_kinds else "normal"
+            else:
+                kind = "choice" if len(next_edges) > 1 else "normal"
+            compact_cards = [item.get("production_card") for item in members if isinstance(item.get("production_card"), dict)]
+            unit = {
+                "id": episode_id,
+                "episode_id": episode_id,
+                "node_title": episode.get("title") or episode_id,
+                "episode_title": episode.get("title") or episode_id,
+                "kind": kind,
+                "text": "；".join(str(item.get("text") or "") for item in members if item.get("text")),
+                "cast": "、".join(casts),
+                "loc": "／".join(locations),
+                "time": next((item.get("time") for item in members if item.get("time")), ""),
+                "next": next_edges,
+                "choice_question": next((item.get("choice_question") or item.get("question") for item in members if item.get("choice_question") or item.get("question")), ""),
+                "member_node_ids": [str(item.get("id")) for item in members],
+                "story_nodes": [{key: item.get(key) for key in ("id", "node_title", "kind", "text", "next", "production_card")} for item in members],
+                "production_card": {
+                    "episode_goal": episode.get("main_dramatic_question") or "；".join(str(card.get("episode_goal") or "") for card in compact_cards),
+                    "entry_state": "；".join(str(card.get("entry_state") or "") for card in compact_cards if card.get("entry_state")),
+                    "must_payoff": list(dict.fromkeys(str(value) for card in compact_cards for value in card.get("must_payoff") or [])),
+                    "must_seed": list(dict.fromkeys(str(value) for card in compact_cards for value in card.get("must_seed") or [])),
+                    "forbidden": list(dict.fromkeys(str(value) for card in compact_cards for value in card.get("forbidden") or [])),
+                    "story_node_ids": [str(item.get("id")) for item in members],
+                    "emotion_refs": emotion_refs,
+                    "causal_refs": causal_refs,
+                },
+            }
+            units.append(unit)
+        data["story_nodes"] = story_nodes
+        data["nodes"] = units
 
     @staticmethod
     def _graph(data: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, list[str]], list[dict[str, Any]]]:
@@ -734,8 +900,15 @@ class ProductionManager:
         }
 
     def _write_episode(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]]) -> None:
-        system = f"你是 episode-generator {current_episode_skill_version()} 的候选正文生成器。工作台已经独立完成上游题材与资产准备，本步骤直接从冻结拓扑和正式资产开始。只能兑现当前节点，不得改变编号、连接、选项目标、结局属性或正式资产名。先写连续戏，再抽取真实台词逐句润色并原位写回。正文第一行必须逐字采用制片标题格式【场一 · 地点 · 日/夜 · 内/外】，第二个非空行必须为出场：人物；禁止用Markdown粗体、井号标题或竖线标题代替。正文850–1300个可见非空白字符，16–24个以△开头的可拍动作段；只推进一个主事件，形成触发→感知→第一反应→行动→阻力→调整→可见结果→下一步。只返回JSON。"
-        prompt = "只读取给定的压缩事实、当前生产卡、可靠前置真实结尾/观众摘要和直接后续入口。登记语义触发；未触发项写无。production_card 的 must_payoff 必须兑现，must_seed 必须埋下，forbidden 不得触碰。\n" + json.dumps(self._context(data, node, predecessors, topology), ensure_ascii=False) + '\n返回：{"script":"普通Markdown完整剧本","entry_state":"本集可靠入口硬状态","exit_state":"候选出口硬状态","working_summary":"60–100字临时连续性摘要","semantic_triggers":{"首次出现人物":"内容或无","核心关系触发":"内容或无","关键事件":"内容或无","关键干预":"内容或无","互动选择":"内容或无"},"dramatic_core":"唯一戏剧变化","power_shift":"权力变化","information_gap":"知情差","dialogue_intent":"对抗/交代/关系"}'
+        system = (
+            f"你是 episode-generator {current_episode_skill_version()} 分集规划师的逐集编剧。"
+            "拓扑已经冻结，只写当前一集，不改分集编号、连接、选项目标、状态效果、结局属性和正式资产名。"
+            "用网文的因果清晰度写可拍摄现场：从人物已经面对的具体事情开始，按需要写出触发、判断、欲望、行动、阻力、调整、即时后果和下一压力；"
+            "不得跳过移动、接触、失败尝试或代价直接抵达结果。场次使用【场景名称·时段·内/外】，动作按正常段落顺写，对白统一使用人物：台词。"
+            "不使用△、出场栏、镜号、景别或运镜，不设硬字数、动作段数或台词比例。只返回JSON。"
+        )
+        context = self._context(data, node, predecessors, topology)
+        prompt = "只读取当前节点、直接前置真实结果、仍有效的状态差异、正式资产和直接后续入口。人物必须围绕眼前事情交流；功能信息通过证据、追问、质疑和反应逐层说清。\n" + json.dumps(context, ensure_ascii=False) + '\n返回：{"script":"完整剧本","entry_state":"本集开始时已经成立的事实","exit_state":"本集结束时实际成立的事实","working_summary":"只写本集实际发生的事"}'
         result = self._json_chat(
             project_id,
             run_id,
@@ -746,6 +919,103 @@ class ProductionManager:
         node.update(result)
         self._log(project_id, run_id, f"  ↳ {node.get('id')} 初稿完成：{visible_count(node.get('script'))} 可见字 · {action_count(node.get('script'))} 个动作段")
 
+    def _polish_episode_dialogue(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any]) -> None:
+        """Run one whole-episode spoken-Chinese pass without adding an audit layer."""
+        before = str(node.get("script") or "")
+        system = (
+            f"你是 episode-generator {current_episode_skill_version()} 的整场人话润色编剧。"
+            "通读完整剧本后直接润色对白，不逐句评分、不输出问题清单。让人物真正接话，允许打断、省略、反问、口语垫词和必要冗余；"
+            "去掉说明书对白、过分整齐的短句、书面结论和所有角色同一种声音。"
+            "必须保留原说话人、场次、动作骨架、事实、选择、结局和正式资产名。只返回JSON。"
+        )
+        payload = {
+            "characters": [{key: item.get(key) for key in ("name", "role", "desc", "voice")} for item in data.get("characters") or []],
+            "script": before,
+        }
+        result = self._json_chat(
+            project_id,
+            run_id,
+            [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(payload, ensure_ascii=False) + '\n返回：{"script":"润色后的完整剧本"}'}],
+            max_tokens=9000,
+            temperature=0.45,
+            reference_phase="dialogue-polish",
+            reference_profiles=self._reference_profiles(data, node),
+        )
+        revised = str(result.get("script") or "").strip()
+        if not revised:
+            raise RuntimeError("整场人话润色没有返回完整剧本")
+        if re.sub(r"\s+", "", action_skeleton(revised)) != re.sub(r"\s+", "", action_skeleton(before)):
+            raise RuntimeError("整场人话润色改变了非台词骨架")
+        node["script"] = revised
+        node["dialogue_polished_digest"] = script_digest(revised)
+
+    def _continuity_only_review(self, project_id: str, run_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Check only cross-episode factual contradictions."""
+        order, _, _ = self._graph(data)
+        episodes = [
+            {
+                "id": node.get("id"),
+                "next": node.get("next"),
+                "script": node.get("script"),
+            }
+            for node in order
+        ]
+        system = (
+            "你是剧本前后事实连续性检查员。只检查时间、地点、人物知情、关系与承诺、道具来源持有和状态、已发生事件、"
+            "互斥分支及结局条件。只有能指出前文事实和冲突后文时才登记。角色撒谎、误解、改口或情绪变化不自动算矛盾。"
+            "不评价文风、节奏、动作数量和戏剧强度，不润色、不补剧情。只返回JSON。"
+        )
+        result = self._json_chat(
+            project_id,
+            run_id,
+            [{"role": "system", "content": system}, {"role": "user", "content": json.dumps({"episodes": episodes}, ensure_ascii=False) + '\n返回：{"issues":[{"episode_id":"较早或应修的分集id","later_episode_id":"冲突后文分集id","earlier_fact":"前文事实","conflict":"冲突后文","minimal_fix":"最小修复方向"}]}'}],
+            validator=True,
+            max_tokens=5000,
+            temperature=0.1,
+            reference_phase="continuity-review",
+            reference_profiles=self._reference_profiles(data),
+        )
+        issues = result.get("issues") if isinstance(result.get("issues"), list) else []
+        valid_ids = {str(node.get("id")) for node in order}
+        normalized = []
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            episode_id = str(issue.get("episode_id") or "")
+            later_id = str(issue.get("later_episode_id") or "")
+            if episode_id not in valid_ids or later_id not in valid_ids:
+                raise RuntimeError("事实连续性问题没有定位到有效分集")
+            if not str(issue.get("earlier_fact") or "").strip() or not str(issue.get("conflict") or "").strip():
+                raise RuntimeError("事实连续性问题缺少前后证据")
+            normalized.append(issue)
+        return {"issues": normalized, "digest": script_digest("\n".join(str(node.get("script") or "") for node in order))}
+
+    def _repair_continuity_issue(self, project_id: str, run_id: str, data: dict[str, Any], issue: dict[str, Any]) -> None:
+        by_id = {str(node.get("id")): node for node in data.get("nodes") or []}
+        target_id = str(issue.get("episode_id") or "")
+        target = by_id.get(target_id)
+        if target is None:
+            raise RuntimeError("事实修复目标分集不存在")
+        before = str(target.get("script") or "")
+        system = (
+            "你是事实矛盾定点修复编剧。只修改造成所列矛盾的最小句子或动作，不润色其他台词、不增强戏剧、不新增反转，"
+            "不得改变选择、结局、正式资产名和无关剧情。返回修复后的完整剧本JSON。"
+        )
+        result = self._json_chat(
+            project_id,
+            run_id,
+            [{"role": "system", "content": system}, {"role": "user", "content": json.dumps({"issue": issue, "script": before}, ensure_ascii=False) + '\n返回：{"script":"最小修复后的完整剧本"}'}],
+            max_tokens=9000,
+            temperature=0.2,
+            reference_phase="continuity-review",
+            reference_profiles=self._reference_profiles(data, target),
+        )
+        revised = str(result.get("script") or "").strip()
+        if not revised:
+            raise RuntimeError("事实定点修复没有返回完整剧本")
+        target["script"] = revised
+        target["dialogue_polished_digest"] = ""
+
     def _expand_group_cards(self, project_id: str, run_id: str, data: dict[str, Any], nodes: list[dict[str, Any]], predecessors: dict[str, list[str]]) -> None:
         pending = [node for node in nodes if not node.get("production_card_expanded")]
         if not pending:
@@ -753,14 +1023,17 @@ class ProductionManager:
         by_id = {str(node.get("id")): node for node in data.get("nodes") or []}
         system = (
             f"你是 episode-generator {current_episode_skill_version()} 生产卡展开器。工作台已独立完成上游题材与资产准备；拓扑、正式输入和资产名已经冻结。"
-            "只把当前原子执行组中本批给出的紧凑生产卡展开为可执行卡；批次只是传输切片，不能改变原子执行组边界。"
-            "不写正文、不改变节点、边、选择、结局或资产。"
+            "只把当前一个分集容器的紧凑生产卡展开为可执行卡。"
+            "不写正文、不改变成员剧情节点、边、选择、结局或资产。"
             "每张卡必须写清本集作用与冲突、前后承接、定性体验功能、开场处境、核心事件、人物第一反应、"
             "行动阻力与可见结果、事件对核心人物的意义、关系与知情变化、场景与物件路径、钩子、真实入口硬状态和后续进入条件。只返回JSON。"
         )
-        schema = '\n返回：{"cards":[{"id":"节点id","production_card":{"episode_goal":"本集作用与唯一主事件","entry_state":"全部可靠来路共同成立的入口硬状态","experience_function":"定性体验功能","opening_situation":"开场处境","core_event":"核心事件","character_reaction":"人物第一反应及事件意义","action_resistance_result":"行动、阻力、调整、可见结果","relationship_information_change":"关系、知情、风险与权力变化","scene_prop_path":"场景、物件来源持有使用与结尾状态","next_condition":"后续进入条件","must_payoff":["必须兑现"],"must_seed":["必须埋设"],"forbidden":["禁区"]}}]}'
+        schema = '\n返回：{"cards":[{"id":"分集id","production_card":{"episode_goal":"本集作用与唯一主事件","entry_state":"全部可靠来路共同成立的入口硬状态","experience_function":"定性体验功能","opening_situation":"开场处境","core_event":"核心事件","character_reaction":"人物第一反应及事件意义","action_resistance_result":"行动、阻力、调整、可见结果","relationship_information_change":"关系、知情、风险与权力变化","scene_prop_path":"场景、物件来源持有使用与结尾状态","next_condition":"后续进入条件","must_payoff":["必须兑现"],"must_seed":["必须埋设"],"forbidden":["禁区"]}}]}'
         global_context = {"logline": data.get("logline"), "synopsis": data.get("synopsis"), "characters": data.get("characters"), "scenes": data.get("scenes"), "props": data.get("props")}
-        batch_size = 3
+        # v0.1.29: one model call owns one semantic production-card task.
+        # The former three-card transport batch made omissions hard to locate
+        # and allowed the model to trade detail between unrelated nodes.
+        batch_size = 1
         total_batches = (len(pending) + batch_size - 1) // batch_size
         for batch_index, batch in enumerate((pending[index:index + batch_size] for index in range(0, len(pending), batch_size)), 1):
             payload_nodes = []
@@ -803,11 +1076,11 @@ class ProductionManager:
     @staticmethod
     def _mechanical(node: dict[str, Any], digest: str) -> dict[str, Any]:
         length, actions, issues = visible_count(node.get("script")), action_count(node.get("script")), []
+        script = str(node.get("script") or "")
         if length < 850 or length > 1300:
             issues.append(f"可见字数 {length}，要求 850–1300")
         if actions < 16 or actions > 24:
             issues.append(f"△动作段 {actions}，要求 16–24")
-        script = str(node.get("script") or "")
         if not re.search(r"【场[^】]+】", script):
             issues.append("缺少正式场次标题")
         if any(label in script for label in ("扩展场面", "收束场面", "补充场面", "返工", "优化后", "润色版")):
@@ -820,6 +1093,11 @@ class ProductionManager:
             "dialogue": "你是人物交流复核员。逐场通读带编号的完整剧本，只报告真正有问题的话轮；不得逐句输出PASS，不得修改动作或补剧情。",
             "cold": "你是与创作历史隔离的普通观众。只能读取路径内观众摘要和当前正文，判断新人物能否识别、事件顺序是否可见、关系是否有正文证据、对白是否围绕眼前人事、结果和下一行动是否清楚。不得读取生产卡、入口硬状态、作者计划或后续答案。",
         }
+        required_checks = {
+            "causal": ["来源与权限", "首次出场与感知", "行动阻力结果", "物件路径", "后续入口"],
+            "dialogue": ["话茬承接", "单句信息负载", "现场目的", "人物声音", "口语自然度"],
+            "cold": ["人物可识别", "事件顺序", "关系证据", "对白现场性", "结果与下一行动"],
+        }[kind]
         system = specs[kind]
         context = self._context(data, node, predecessors, topology)
         if kind == "cold":
@@ -839,11 +1117,11 @@ class ProductionManager:
                 "问句、请求或命令是否得到回答、拒绝或可识别的回避，且对方随后有符合回避的反应；"
                 "因果连接是否在当地可懂；是否连续每句都只替作者发布剧情；人物声音是否可区分；"
                 "一句是否塞入多个交流任务；台词是否真回应眼前的人事。故意回避只有在对方动作或下一话轮识别并承接时才成立。"
-                "只返回JSON：{\"pass\":true或false,\"issues\":[\"S01-L02｜问题类型｜简短原因\"],"
+                "只返回JSON：{\"covered_checks\":[\"逐字检查项\"],\"issues\":[\"S01-L02｜问题类型｜简短原因\"],"
                 "\"note\":\"简短结论\",\"owner\":\"character_exchange\"}。正常行不列出；没有问题时issues必须为空。"
             )
         else:
-            system += ' 必须绑定给定正文SHA，只判不改。每项依据必须给当前正文真实场次和可核对证据。只返回JSON：{"pass":true或false,"issues":["场次+问题"],"evidence":[{"scene":"真实场次标题","proof":"正文证据"}],"note":"简短结论","owner":"scene_facts或character_exchange"}。没有问题时issues为空；不得因个人偏好判失败。冷读失败必须用owner归责。'
+            system += ' 必须绑定给定正文SHA，只判不改。每项依据必须给当前正文真实场次和可核对证据。只返回JSON：{"covered_checks":["逐字检查项"],"issues":["场次+问题"],"evidence":[{"scene":"真实场次标题","proof":"正文证据"}],"note":"简短结论","owner":"scene_facts或isolated_audience"}。没有问题时issues为空；不得因个人偏好判失败。冷读失败必须用owner归责。'
         phase = {
             "causal": "scene-review",
             "dialogue": "dialogue-review",
@@ -852,20 +1130,23 @@ class ProductionManager:
         result = self._json_chat(
             project_id,
             run_id,
-            [{"role": "system", "content": system}, {"role": "user", "content": "digest=" + digest + "\n" + json.dumps(payload, ensure_ascii=False)}],
+            [{"role": "system", "content": system}, {"role": "user", "content": "digest=" + digest + "\nrequired_checks=" + json.dumps(required_checks, ensure_ascii=False) + "\n" + json.dumps(payload, ensure_ascii=False)}],
             validator=True,
             max_tokens=3500,
             temperature=0.15,
             reference_phase=phase,
             reference_profiles=self._reference_profiles(data, node),
         )
-        issues = [str(item) for item in result.get("issues", [])] if isinstance(result.get("issues"), list) else []
-        review = {"name": kind, "pass": bool(result.get("pass")) and not issues, "issues": issues, "evidence": result.get("evidence") if isinstance(result.get("evidence"), list) else [], "note": result.get("note") or "", "owner": result.get("owner") or "", "digest": digest}
+        raw_issues = [str(item) for item in result.get("issues", [])] if isinstance(result.get("issues"), list) else []
+        covered = {str(item) for item in result.get("covered_checks") or []}
+        issues = list(raw_issues)
+        missing_checks = [item for item in required_checks if item not in covered]
+        if missing_checks:
+            issues.append("审查覆盖不完整：" + "、".join(missing_checks))
+        review = {"name": kind, "pass": not issues, "issues": issues, "covered_checks": sorted(covered), "required_checks": required_checks, "evidence": result.get("evidence") if isinstance(result.get("evidence"), list) else [], "note": result.get("note") or "", "owner": result.get("owner") or "", "digest": digest}
         if kind == "dialogue":
             valid_ids = set(packet["dialogue_ids"])
-            if not result.get("pass") and not issues:
-                raise RuntimeError("人物交流复核判定失败但没有返回带编号的问题项")
-            if any(not (set(re.findall(r"S\d{2}-L\d{2}", issue)) & valid_ids) for issue in issues):
+            if any(not (set(re.findall(r"S\d{2}-L\d{2}", issue)) & valid_ids) for issue in raw_issues):
                 raise RuntimeError("人物交流问题项缺少当前台词包中的有效编号")
             review.update({"dialogue_sha256": packet["dialogue_sha256"], "dialogue_count": packet["dialogue_count"], "coverage": packet["coverage"]})
         return review
@@ -1024,36 +1305,67 @@ class ProductionManager:
         self._group_state(group, "已装载")
         self._update_pipeline(project_id, run_id, pipeline, phase="scripts", result_data=data)
         self._log(project_id, run_id, f"▸ {group['id']} {group['type']}｜{'、'.join(group['nodes'])} 已装载")
-        if data.get("__compactTopologyCards"):
-            self._expand_group_cards(project_id, run_id, data, nodes, predecessors)
+        # v0.1.29 processes one node through the complete write/review/freeze
+        # chain before moving to the next. Group membership remains context for
+        # branches and merges; it is no longer a batching licence.
         for node in nodes:
+            node_id = str(node.get("id"))
+            if self._is_locked(node):
+                continue
+            if data.get("__compactTopologyCards") and not node.get("production_card_expanded"):
+                self._atomic_checkpoint(project_id, run_id, data, pipeline, f"{node_id}:card", "author", "running")
+                self._expand_group_cards(project_id, run_id, data, [node], predecessors)
+                self._atomic_checkpoint(project_id, run_id, data, pipeline, f"{node_id}:card", "author", "complete")
             if not str(node.get("script") or "").strip():
+                self._atomic_checkpoint(project_id, run_id, data, pipeline, f"{node_id}:draft", "author", "running")
                 self._write_episode(project_id, run_id, data, node, predecessors, topology)
-        self._group_state(group, "候选正文")
-
-        for state, kind in (("机械预检通过", "mechanical"), ("场面事实通过", "causal"), ("人物交流通过", "dialogue"), ("隔离观众通过", "cold")):
-            pipeline["scripts"] = {"pct": round(((index - 1) + GROUP_STATES.index(state) / 8) / max(total_groups, 1) * 100), "label": f"{group['id']} · {state} · {index}/{total_groups} 组", "state": "active"}
-            self._update_pipeline(project_id, run_id, pipeline, phase="scripts", result_data=data)
-            for node in nodes:
+                self._atomic_checkpoint(project_id, run_id, data, pipeline, f"{node_id}:draft", "author", "complete")
+            for state, kind, role in (
+                ("机械预检通过", "mechanical", "controller"),
+                ("场面事实通过", "causal", "reviewer"),
+                ("人物交流通过", "dialogue", "reviewer"),
+                ("隔离观众通过", "cold", "reviewer"),
+            ):
+                task_id = f"{node_id}:{kind}"
+                self._atomic_checkpoint(project_id, run_id, data, pipeline, task_id, role, "running")
                 try:
                     self._ensure_layer(project_id, run_id, data, node, predecessors, topology, kind)
                 except ProductionStopped:
                     raise
                 except Exception as exc:  # noqa: BLE001
-                    raise RuntimeError(f"{group['id']} · {node.get('id')} · {state}：{public_error_message(exc)}") from exc
-                self._update_pipeline(project_id, run_id, pipeline, phase="scripts", result_data=data)
-            self._group_state(group, state)
-            self._update_pipeline(project_id, run_id, pipeline, phase="scripts", result_data=data)
-
-        for node in nodes:
+                    self._atomic_checkpoint(project_id, run_id, data, pipeline, task_id, role, "needs_fix", [public_error_message(exc)])
+                    raise RuntimeError(f"{group['id']} · {node_id} · {state}：{public_error_message(exc)}") from exc
+                self._atomic_checkpoint(project_id, run_id, data, pipeline, task_id, role, "complete")
             self._ensure_current_reviews(project_id, run_id, data, node, predecessors, topology)
             node["episode_audit"]["locked"] = True
-        self._group_state(group, "机械冻结")
-        for node in nodes:
+            self._atomic_checkpoint(project_id, run_id, data, pipeline, f"{node_id}:freeze", "controller", "complete")
+            self._atomic_checkpoint(project_id, run_id, data, pipeline, f"{node_id}:state-writeback", "controller", "running")
             self._freeze(project_id, run_id, data, node, predecessors)
+            self._atomic_checkpoint(project_id, run_id, data, pipeline, f"{node_id}:state-writeback", "controller", "complete")
+            self._sync_episodes(data, predecessors)
+            stop_after = int(data.get("__stop_after_episode") or 0)
+            locked_count = sum(1 for item in data.get("nodes") or [] if self._is_locked(item))
+            if stop_after and locked_count >= stop_after:
+                raise ProductionCheckpointReached(f"已完成并冻结前 {stop_after} 集")
+        for state in GROUP_STATES[2:]:
+            self._group_state(group, state)
         self._group_state(group, "状态已回写")
         self._sync_episodes(data, predecessors)
         self._log(project_id, run_id, f"  ✓ {group['id']} 全组冻结并完成状态回写")
+
+    def _atomic_checkpoint(self, project_id: str, run_id: str, data: dict[str, Any], pipeline: dict[str, Any], task_id: str, role: str, status: str, issues: list[str] | None = None) -> None:
+        """Persist the current atomic task before and after every semantic call."""
+        forge = data.setdefault("__episodeForge", {})
+        ledger = forge.setdefault("atomic_tasks", [])
+        record = next((item for item in ledger if item.get("id") == task_id), None)
+        if record is None:
+            record = {"id": task_id, "role": role, "attempt": 0}
+            ledger.append(record)
+        if status == "running" and record.get("status") != "running":
+            record["attempt"] = int(record.get("attempt") or 0) + 1
+        record.update({"status": status, "issues": list(issues or []), "updated_at": time.time()})
+        forge["current_task"] = {"id": task_id, "role": role, "status": status}
+        self._update_pipeline(project_id, run_id, pipeline, phase="scripts", result_data=data)
 
     def _ensure_current_reviews(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]]) -> None:
         """Reconcile stale layer receipts before freezing a recovered node."""
@@ -1080,18 +1392,27 @@ class ProductionManager:
             "dialogue": "清除事实审查视角后，只读检查全剧关系触发、人物行动优先级、对白现场性、人物声音和朴素中文。",
         }
         episodes = [{"id": node.get("id"), "script": node.get("script"), "audience_summary": node.get("audience_summary"), "exit_state": node.get("exit_state"), "next": node.get("next")} for node in data.get("nodes") or []]
-        system = f"你是 episode-generator {current_episode_skill_version()} 全剧终检员。" + specs[kind] + ' 只判不改，只报告会破坏理解、连续性或人物成立的真实问题。返回JSON：{"pass":true或false,"issues":["问题"],"affected_ids":["节点id"]}。'
+        required_checks = {
+            "causal": ["人物知情时间", "证据与道具连续性", "事件顺序", "分支汇合", "状态边界"],
+            "dialogue": ["关系触发", "行动优先级", "对白现场性", "人物声音", "朴素中文"],
+        }[kind]
+        system = f"你是 episode-generator {current_episode_skill_version()} 全剧终检员。" + specs[kind] + ' 只判不改，只报告会破坏理解、连续性或人物成立的真实问题。不得声明PASS。返回JSON：{"covered_checks":["逐字检查项"],"issues":["问题"],"affected_ids":["分集id"]}。'
         result = self._json_chat(
             project_id,
             run_id,
-            [{"role": "system", "content": system}, {"role": "user", "content": json.dumps({"topology": [{"id": n.get("id"), "next": n.get("next")} for n in data.get("nodes") or []], "episodes": episodes}, ensure_ascii=False)}],
+            [{"role": "system", "content": system}, {"role": "user", "content": json.dumps({"required_checks": required_checks, "topology": [{"id": n.get("id"), "next": n.get("next")} for n in data.get("nodes") or []], "episodes": episodes}, ensure_ascii=False)}],
             validator=True,
             max_tokens=6000,
             temperature=0.1,
             reference_phase="whole-play-review",
             reference_profiles=self._reference_profiles(data),
         )
-        return {"name": kind, "pass": bool(result.get("pass")), "issues": result.get("issues") if isinstance(result.get("issues"), list) else [], "affected_ids": [str(item) for item in result.get("affected_ids") or []]}
+        issues = [str(item) for item in result.get("issues") or []] if isinstance(result.get("issues"), list) else []
+        covered = {str(item) for item in result.get("covered_checks") or []}
+        missing = [item for item in required_checks if item not in covered]
+        if missing:
+            issues.append("审查覆盖不完整：" + "、".join(missing))
+        return {"name": kind, "pass": not issues, "issues": issues, "covered_checks": sorted(covered), "required_checks": required_checks, "affected_ids": [str(item) for item in result.get("affected_ids") or []]}
 
     @staticmethod
     def _descendants(data: dict[str, Any], starts: set[str]) -> set[str]:
@@ -1108,33 +1429,72 @@ class ProductionManager:
 
     @staticmethod
     def _sync_episodes(data: dict[str, Any], predecessors: dict[str, list[str]]) -> None:
+        nodes = [node for node in data.get("nodes") or [] if isinstance(node, dict)]
+        by_episode: dict[str, list[dict[str, Any]]] = {
+            str(node.get("id")): [node] for node in nodes
+        }
+        node_to_episode = {str(node.get("id")): episode_id for episode_id, members in by_episode.items() for node in members}
+        by_node = {str(node.get("id")): node for node in nodes}
         episodes = []
-        for node in data.get("nodes") or []:
+        for episode_id, members in by_episode.items():
+            node = members[0]
+            member_ids = {str(item.get("id")) for item in members}
+            external_next = []
+            for member in members:
+                for edge in member.get("next") or []:
+                    target = str(edge.get("to")) if isinstance(edge, dict) else ""
+                    target_episode = node_to_episode.get(target, target)
+                    if target and target_episode != episode_id:
+                        external_next.append({"to": target_episode, "label": edge.get("label") or "继续"})
+            deduped_next = []
+            seen_targets = set()
+            for edge in external_next:
+                key = (edge["to"], edge["label"])
+                if key not in seen_targets:
+                    seen_targets.add(key)
+                    deduped_next.append(edge)
+            script_parts = []
+            for member in members:
+                incoming_labels = []
+                for source_id in predecessors.get(str(member.get("id")), []):
+                    if source_id not in member_ids:
+                        continue
+                    for edge in (by_node.get(source_id) or {}).get("next") or []:
+                        if str(edge.get("to")) == str(member.get("id")) and edge.get("label"):
+                            incoming_labels.append(str(edge.get("label")))
+                route = ("｜路线：" + "／".join(incoming_labels)) if incoming_labels else ""
+                heading = f"## {member.get('node_title') or member.get('id')}（剧情节点 {member.get('id')}{route}）" if len(members) > 1 else ""
+                script_parts.append((heading + "\n\n" if heading else "") + str(member.get("script") or ""))
+            next_items = deduped_next
             next_items = node.get("next") or []
-            interactive = node.get("kind") in ("choice", "interaction")
-            node_id = str(node.get("id"))
+            if len(members) > 1:
+                next_items = deduped_next
+            interactive = any(item.get("kind") in ("choice", "interaction") for item in members) or len({item.get("to") for item in next_items}) > 1
+            node_id = episode_id
             related_props = []
             for item in data.get("props") or []:
                 if not isinstance(item, dict) or not item.get("name"):
                     continue
                 appearances = {part.strip() for part in re.split(r"[、,，]", str(item.get("appears") or "")) if part.strip()}
-                if node_id in appearances or str(item.get("name")) in str(node.get("script") or ""):
+                if member_ids.intersection(appearances) or str(item.get("name")) in "\n".join(str(member.get("script") or "") for member in members):
                     related_props.append(item.get("name"))
             episodes.append({
-                "分集编号": node.get("id"),
-                "分集标题": node.get("node_title") or node.get("id"),
-                "分集剧本": {"单集梗概": node.get("text") or "", "完整剧本": node.get("script") or ""},
-                "剧本分析": {"本集冲突": node.get("dramatic_core") or "", "前置节点编号列表": predecessors.get(str(node.get("id")), []), "后续节点编号列表": [item.get("to") for item in next_items]},
-                "关联角色": [item for item in re.split(r"[、,，]", str(node.get("cast") or "")) if item],
-                "关联场景": [node.get("loc")] if node.get("loc") else [],
+                "分集编号": episode_id,
+                "分集标题": node.get("episode_title") or node.get("node_title") or episode_id,
+                "分集剧本": {"单集梗概": "；".join(str(item.get("text") or "") for item in members if item.get("text")), "完整剧本": "\n\n".join(script_parts)},
+                "剧本分析": {"本集冲突": "；".join(str(item.get("dramatic_core") or "") for item in members if item.get("dramatic_core")), "前置节点编号列表": sorted({node_to_episode.get(source, source) for member in members for source in predecessors.get(str(member.get("id")), []) if source not in member_ids}), "后续节点编号列表": [item.get("to") for item in next_items]},
+                "关联角色": sorted({name for member in members for name in re.split(r"[、,，]", str(member.get("cast") or "")) if name}),
+                "关联场景": list(dict.fromkeys(item.get("loc") for item in members if item.get("loc"))),
                 "关联道具": related_props,
-                "是否结局": node.get("kind") in ("major", "minor"),
+                "是否结局": any(item.get("kind") in ("major", "minor") for item in members),
                 "互动节点": {"是否为分支节点": interactive, "是否有选择问题": interactive and bool(next_items), "选择问题": node.get("choice_question") or node.get("question") or "", "选项列表": [{"选项编号": str(index + 1), "选项文字": item.get("label") or "继续", "目标分集编号": item.get("to")} for index, item in enumerate(next_items)], "默认下一分集编号": "" if interactive else ((next_items[0].get("to") if next_items else "") or "")},
             })
         data["episodes"] = episodes
 
     @staticmethod
     def _is_locked(node: dict[str, Any]) -> bool:
+        if node.get("lightweight_status") == "已口语化":
+            return node.get("dialogue_polished_digest") == script_digest(node.get("script"))
         audit = node.get("episode_audit")
         if not isinstance(audit, dict) or not audit.get("locked"):
             return False
@@ -1146,103 +1506,77 @@ class ProductionManager:
         )
 
     def _finish_from_checkpoint(self, project_id: str, run_id: str, data: dict[str, Any], pipeline: dict[str, Any]) -> None:
-        """Run the v0.1.25 rolling execution-group pipeline from a checkpoint."""
-        self._load_reference_context(
-            project_id,
-            run_id,
-            "production-cards",
-            self._reference_profiles(data),
-        )
+        """Run the v0.1.31 write → dialogue polish → continuity pipeline."""
         order, predecessors, topology = self._graph(data)
         total = len(order)
         forge = data.get("__episodeForge") if isinstance(data.get("__episodeForge"), dict) else {}
-        fresh_groups = self._execution_groups(data)
-        old_groups = forge.get("execution_groups") if str(forge.get("version") or "").endswith("-backend") and isinstance(forge.get("execution_groups"), list) else []
-        old_by_nodes = {tuple(group.get("nodes") or []): group for group in old_groups if isinstance(group, dict)}
-        for group in fresh_groups:
-            previous = old_by_nodes.get(tuple(group["nodes"]))
-            if previous and previous.get("state") in GROUP_STATES:
-                group["state"] = previous["state"]
         forge.update({
             "version": current_episode_skill_version() + "-backend",
             "cache_version": "episode-cache-" + current_episode_skill_version(),
-            "policy_note": "全部模型阶段由装载器注入当前 reference bundle；装载凭证仅保存在执行器私有内存中",
-            "topology_frozen": True,
             "status": "running",
             "total": total,
-            "review_policy": "execution-group: mechanical → scene-facts → character-exchange → isolated-audience → freeze → state-writeback",
-            "execution_groups": fresh_groups,
+            "pipeline": "episode-writing → dialogue-polish → continuity-review",
         })
         data["__episodeForge"] = forge
 
-        groups = forge["execution_groups"]
-        pipeline["topology"] = {"pct": 100, "label": f"全局规划通过 · {len(groups)} 个执行组", "state": "pass"}
-        pipeline["overall"] = {"label": "按执行组滚动生产", "state": "active"}
-        forge["phase"] = "execution_groups"
-        for index, group in enumerate(groups, 1):
+        pipeline["topology"] = {"pct": 100, "label": f"分集梗概与流程已完成 · {total} 集", "state": "pass"}
+        pipeline["overall"] = {"label": "逐集写作", "state": "active"}
+        forge["phase"] = "episode-writing"
+        for index, node in enumerate(order, 1):
             self._check_stop(project_id, run_id)
-            group_nodes = [next(node for node in order if str(node.get("id")) == node_id) for node_id in group["nodes"]]
-            if group.get("state") == "状态已回写" and all(self._is_locked(node) for node in group_nodes):
-                continue
-            forge["current_group"] = group["id"]
-            self._process_group(project_id, run_id, data, group, predecessors, topology, pipeline, index, len(groups))
-            forge["generated"] = sum(1 for node in order if str(node.get("script") or "").strip())
-            forge["locked"] = sum(1 for node in order if self._is_locked(node))
-            forge["reviewed"] = forge["locked"]
-            pipeline["scripts"] = {"pct": round(index / max(len(groups), 1) * 100), "label": f"已完成 {index}/{len(groups)} 个执行组", "state": "active" if index < len(groups) else "pass"}
+            node_id = str(node.get("id"))
+            forge["current_episode"] = node_id
+            if not str(node.get("script") or "").strip():
+                node["lightweight_status"] = "待写作"
+                self._write_episode(project_id, run_id, data, node, predecessors, topology)
+                node["lightweight_status"] = "已写作"
+                self.runs.update(project_id, run_id, result_data=data)
+            elif node.get("lightweight_status") not in ("已写作", "已口语化"):
+                node["lightweight_status"] = "已写作"
+            if not self._is_locked(node):
+                self._polish_episode_dialogue(project_id, run_id, data, node)
+                node["lightweight_status"] = "已口语化"
+                count = visible_count(node.get("script"))
+                anchor = int(forge.get("length_anchor") or 0)
+                if not anchor:
+                    forge["length_anchor"] = count
+                elif count < round(anchor * .9) or count > round(anchor * 1.1):
+                    raise RuntimeError(f"{node_id} 长度 {count} 未达到第一集基准 {anchor} 的 90%—110%")
+                self.runs.update(project_id, run_id, result_data=data)
+            elif not int(forge.get("length_anchor") or 0):
+                forge["length_anchor"] = visible_count(node.get("script"))
+            pipeline["scripts"] = {"pct": round(index / max(total, 1) * 100), "label": f"第 {index}/{total} 集已完成", "state": "active" if index < total else "pass"}
             self._update_pipeline(project_id, run_id, pipeline, phase="scripts", result_data=data)
 
-        forge["phase"] = "whole_play_validation"
-        pipeline["scripts"] = {"pct": 100, "label": f"{len(groups)} 个执行组全部状态已回写", "state": "pass"}
-        pipeline["overall"] = {"label": "全剧压缩校验", "state": "active"}
-        while True:
-            whole_reviews = []
-            for index, kind in enumerate(("causal", "dialogue"), 1):
-                pipeline["audit"] = {"pct": index * 45, "label": "全剧场面事实复检" if kind == "causal" else "全剧人物交流复检", "state": "active"}
-                self._update_pipeline(project_id, run_id, pipeline, phase="audit", result_data=data)
-                review = self._whole_play_review(project_id, run_id, data, kind)
-                whole_reviews.append(review)
-                details = "；".join(review["issues"]) or "通过"
-                self._log(project_id, run_id, f"  {'✓' if review['pass'] else '✗'} 全剧{'场面事实' if kind == 'causal' else '人物交流'}：{details}")
-            forge["whole_play_reviews"] = whole_reviews
-            failed = [review for review in whole_reviews if not review.get("pass")]
-            if not failed:
+            stop_after = int(data.get("__stop_after_episode") or 0)
+            if stop_after and sum(1 for item in order if self._is_locked(item)) >= stop_after:
+                raise ProductionCheckpointReached(f"已完成前 {stop_after} 集")
+
+        forge["phase"] = "continuity-review"
+        pipeline["overall"] = {"label": "正在检查前后事实", "state": "active"}
+        pipeline["audit"] = {"pct": 20, "label": "检查时间、知情、关系与道具连续性", "state": "active"}
+        self._update_pipeline(project_id, run_id, pipeline, phase="audit", result_data=data)
+        for attempt in range(1, 4):
+            review = self._continuity_only_review(project_id, run_id, data)
+            forge["continuity"] = review
+            issues = review.get("issues") or []
+            if not issues:
                 break
-            affected = {node_id for review in failed for node_id in review.get("affected_ids") or []}
-            if not affected:
-                raise RuntimeError("全剧语义复检未通过，但校验模型没有定位受影响节点")
-            by_id = {str(node.get("id")): node for node in order}
-            self._log(project_id, run_id, "  ↳ 全剧复检只解冻受影响节点及依赖：" + "、".join(sorted(affected)))
-            causal_ids = {node_id for review in failed if review.get("name") == "causal" for node_id in review.get("affected_ids") or []}
-            impacted = self._descendants(data, causal_ids) | affected
-            for review in failed:
-                layer = "causal" if review.get("name") == "causal" else "dialogue"
-                for node_id in review.get("affected_ids") or []:
-                    node = by_id.get(node_id)
-                    if not node:
-                        continue
-                    localized = {"issues": [issue for issue in review.get("issues") or [] if node_id in issue] or review.get("issues") or []}
-                    try:
-                        self._repair(project_id, run_id, data, node, predecessors, topology, localized, layer)
-                    except RuntimeError as exc:
-                        if str(exc) != "REPAIR_CARD_REQUIRED":
-                            raise
-                        self._repair_card(project_id, run_id, data, node, localized)
-                        self._write_episode(project_id, run_id, data, node, predecessors, topology)
-            for group_index, group in enumerate(groups, 1):
-                if not impacted.intersection(group.get("nodes") or []):
-                    continue
-                group["state"] = "未开始"
-                for node_id in group.get("nodes") or []:
-                    if isinstance((by_id.get(node_id) or {}).get("episode_audit"), dict):
-                        by_id[node_id]["episode_audit"]["locked"] = False
-                self._process_group(project_id, run_id, data, group, predecessors, topology, pipeline, group_index, len(groups))
+            self._log(project_id, run_id, f"  ↳ 发现 {len(issues)} 处前后事实矛盾，正在定点修复")
+            for issue in issues:
+                self._repair_continuity_issue(project_id, run_id, data, issue)
+                target = next(node for node in order if str(node.get("id")) == str(issue.get("episode_id")))
+                self._polish_episode_dialogue(project_id, run_id, data, target)
+                target["lightweight_status"] = "已口语化"
+            self.runs.update(project_id, run_id, result_data=data)
+        else:
+            raise RuntimeError("前后事实矛盾连续三轮仍未消除")
 
         forge.update({"status": "completed", "phase": "completed"})
         data["__forgeComplete"] = True
         self._sync_episodes(data, predecessors)
         self._assert_reference_receipts(project_id, run_id)
-        pipeline["audit"] = {"pct": 100, "label": f"全剧校验通过 · {total} 集已冻结", "state": "pass"}
+        pipeline["audit"] = {"pct": 100, "label": "前后事实一致", "state": "pass"}
         pipeline["overall"] = {"label": "已交付", "state": "pass"}
         self._log(project_id, run_id, f"✓ {current_episode_skill_version()} 分集主体已完成。")
         self._update_pipeline(project_id, run_id, pipeline, phase="completed", status="completed", result_data=data)
@@ -1281,12 +1615,12 @@ class ProductionManager:
             )
             duration, endings = int(payload.get("duration") or 20), int(payload.get("endings") or 3)
             compact_mode = duration >= 30 or endings >= 6
-            topology_base = list(base_messages) + ([self._compact_topology_instruction()] if compact_mode else [])
+            topology_base = list(base_messages) + [self._lightweight_topology_instruction()] + ([self._compact_topology_instruction()] if compact_mode else [])
             round_no, json_failures, messages = 1, 0, list(topology_base)
             while True:
                 self._check_stop(project_id, run_id)
-                pipeline["overall"] = {"label": "拓扑与情绪脊", "state": "active"}
-                pipeline["topology"] = {"pct": min(90, 15 + round_no * 10), "label": f"第 {round_no} 轮生成与硬规则验证", "state": "active"}
+                pipeline["overall"] = {"label": "分集梗概与流程", "state": "active"}
+                pipeline["topology"] = {"pct": min(90, 15 + round_no * 10), "label": f"第 {round_no} 轮结构检查", "state": "active"}
                 self._update_pipeline(project_id, run_id, pipeline, phase="topology")
                 self._log(project_id, run_id, f"▸ 后台拓扑生成与校验｜第 {round_no} 轮")
                 text = self._chat(
@@ -1302,13 +1636,14 @@ class ProductionManager:
                 json_text = text.split("===JSON===", 1)[-1]
                 try:
                     data = parse_json_text(json_text)
+                    self._normalize_episode_nodes(data)
                 except (ValueError, json.JSONDecodeError) as exc:
                     json_failures += 1
                     errors = [f"JSON 无法解析：{exc}"]
                     if len(json_text) >= 18000 and not compact_mode:
                         compact_mode = True
                         json_failures = 0
-                        topology_base = list(base_messages) + [self._compact_topology_instruction()]
+                        topology_base = list(base_messages) + [self._lightweight_topology_instruction(), self._compact_topology_instruction()]
                         self._log(project_id, run_id, f"  ↳ 检测到结构化输出在 {len(json_text)} 字符附近截断，切换长项目分段协议；这不是剧情返工")
                     elif compact_mode and len(json_text) >= 18000 and json_failures >= 2:
                         raise RuntimeError("长项目分段协议下 JSON 仍连续两次被截断，已停止以避免重复消耗") from exc
@@ -1324,7 +1659,14 @@ class ProductionManager:
                 round_no += 1
 
             data["__compactTopologyCards"] = compact_mode
+            data["__planning"] = {"story_spine": data.get("outline") or []}
+            data["__stop_after_episode"] = max(0, int(payload.get("stop_after_episode") or 0))
             self._finish_from_checkpoint(project_id, run_id, data, pipeline)
+        except ProductionCheckpointReached as exc:
+            pipeline["overall"] = {"label": "已完成指定分集", "state": "pass"}
+            record = self.runs.read(project_id, run_id) or {}
+            checkpoint = record.get("result_data") if isinstance(record.get("result_data"), dict) else None
+            self._update_pipeline(project_id, run_id, pipeline, phase="episode-checkpoint", status="stopped", result_data=checkpoint, checkpoint_note=str(exc))
         except ProductionStopped:
             pipeline["overall"] = {"label": "已停止", "state": "fail"}
             self._update_pipeline(project_id, run_id, pipeline, phase="stopped", status="stopped")

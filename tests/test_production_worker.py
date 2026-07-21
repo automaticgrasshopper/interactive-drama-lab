@@ -88,7 +88,12 @@ class ReviewCaptureManager(FakeManager):
 
     def _json_chat(self, project_id, run_id, messages, **kwargs):
         self.system_messages.append(messages[0]["content"])
-        return {"pass": True, "issues": [], "evidence": [], "note": "通过", "owner": "scene_facts"}
+        return {"covered_checks": ["来源与权限", "首次出场与感知", "行动阻力结果", "物件路径", "后续入口"], "issues": [], "evidence": [], "note": "", "owner": "scene_facts"}
+
+
+class SelfSigningReviewManager(ReviewCaptureManager):
+    def _json_chat(self, project_id, run_id, messages, **kwargs):
+        return {"pass": True, "issues": [], "evidence": [], "note": "模型自称通过", "owner": "scene_facts"}
 
 
 class ProductionWorkerTests(unittest.TestCase):
@@ -184,13 +189,13 @@ class ProductionWorkerTests(unittest.TestCase):
             )
         self.assertEqual(manager.chat_calls, 3)
 
-    def test_large_atomic_group_expands_in_persisted_batches(self):
+    def test_large_atomic_group_expands_one_card_per_persisted_task(self):
         manager = CardBatchManager()
         nodes = [{"id": str(index), "production_card": {"compact": True}, "next": []} for index in range(1, 8)]
         data = {"nodes": nodes, "logline": "测试"}
         manager._expand_group_cards("p", "r", data, nodes, {node["id"]: [] for node in nodes})
-        self.assertEqual(manager.batches, [["1", "2", "3"], ["4", "5", "6"], ["7"]])
-        self.assertEqual(manager.runs.checkpoints, [["1", "2", "3"], ["1", "2", "3", "4", "5", "6"], ["1", "2", "3", "4", "5", "6", "7"]])
+        self.assertEqual(manager.batches, [["1"], ["2"], ["3"], ["4"], ["5"], ["6"], ["7"]])
+        self.assertEqual(manager.runs.checkpoints[-1], ["1", "2", "3", "4", "5", "6", "7"])
         self.assertTrue(all(node.get("production_card_expanded") for node in nodes))
 
     def test_passed_layer_with_same_digest_is_not_repeated(self):
@@ -234,6 +239,13 @@ class ProductionWorkerTests(unittest.TestCase):
         review = ProductionManager._review(manager, "p", "r", "causal", {"nodes": [node]}, node, {"1": []}, [], script_digest(node["script"]))
         self.assertTrue(review["pass"])
         self.assertIn("场面事实复核员", manager.system_messages[0])
+
+    def test_backend_ignores_model_self_signed_pass_without_coverage(self):
+        manager = SelfSigningReviewManager()
+        node = {"id": "1", "script": valid_script(), "production_card": {}, "next": []}
+        review = ProductionManager._review(manager, "p", "r", "causal", {"nodes": [node]}, node, {"1": []}, [], script_digest(node["script"]))
+        self.assertFalse(review["pass"])
+        self.assertTrue(any("覆盖不完整" in issue for issue in review["issues"]))
 
 
 if __name__ == "__main__":

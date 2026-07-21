@@ -88,7 +88,8 @@ def load_settings() -> dict[str, Any]:
         "api_key": data.get("api_key", ""),
         "config_locked": bool(data.get("config_locked", False)),
         "auto_commit": bool(data.get("auto_commit", True)),
-        "auto_push": bool(data.get("auto_push", False)),
+        # Remote pushes are intentionally reserved for the Codex-managed workflow.
+        "auto_push": False,
     }
 
 
@@ -201,6 +202,18 @@ def archive_time(value: Any) -> str:
     return text
 
 
+def archive_dedupe_key(path: str, payload: dict[str, Any], *, kind: str, project_id: str) -> str:
+    """Return a stable archive identity without treating asset timestamps as separate work."""
+    if kind in {"script", "storyboard"}:
+        name = Path(path).name
+        for suffix in (".script.json", ".sb.json"):
+            if name.endswith(suffix):
+                return "datapack|" + name.removesuffix(suffix)
+        return "datapack|" + datapack_stem(payload.get("boundStory") or payload.get("title"))
+    run_id = str(payload.get("run_id") or Path(path).stem)
+    return f"run|{project_id}|{run_id}"
+
+
 def git_archived_tasks(include_data: bool = False) -> list[dict[str, Any]]:
     refs: list[tuple[str, str]] = [("HEAD", "已本地提交")]
     if run_git("rev-parse", "--verify", "@{upstream}").returncode == 0:
@@ -221,7 +234,7 @@ def git_archived_tasks(include_data: bool = False) -> list[dict[str, Any]]:
         when = str(payload.get("time") or payload.get("updated_at") or payload.get("created_at") or "")
         project_match = re.match(r"data/projects/([^/]+)/", path)
         project_id = project_match.group(1) if project_match else safe_name(payload.get("project_id") or title, "git-archive")
-        dedupe = f"{title}|{when}" if when else f"{project_id}|{path}"
+        dedupe = archive_dedupe_key(path, payload, kind=kind, project_id=project_id)
         record = archives.get(dedupe)
         has_cg = datapack_stem(title) in cg_stems or datapack_stem(payload.get("boundStory")) in cg_stems or kind == "storyboard"
         if record is None:
@@ -246,6 +259,11 @@ def git_archived_tasks(include_data: bool = False) -> list[dict[str, Any]]:
             archives[dedupe] = record
         else:
             record["has_cg"] = bool(record.get("has_cg")) or has_cg
+            candidate_time = archive_time(when)
+            if candidate_time and candidate_time > str(record.get("updated_at") or ""):
+                record["updated_at"] = candidate_time
+            if candidate_time and (not record.get("created_at") or candidate_time < str(record["created_at"])):
+                record["created_at"] = candidate_time
             if state == "已在 Git":
                 record["git_state"] = state
             if kind == "storyboard":
@@ -262,7 +280,12 @@ def git_archived_tasks(include_data: bool = False) -> list[dict[str, Any]]:
         payload = git_blob_json(ref, path)
         if not payload:
             continue
-        kind = "storyboard" if path.endswith(".sb.json") else ("task" if match and match.group(1) == "tasks" else "run")
+        if path.endswith(".sb.json"):
+            kind = "storyboard"
+        elif path.endswith(".script.json"):
+            kind = "script"
+        else:
+            kind = "task" if match and match.group(1) == "tasks" else "run"
         upsert(path, ref, state, payload, kind=kind)
 
     result = list(archives.values())
