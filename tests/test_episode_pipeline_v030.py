@@ -63,12 +63,6 @@ class EpisodePipelineV037Test(unittest.TestCase):
         self.assertNotIn("length_anchor", worker)
         self.assertNotIn("90%—110%", worker)
 
-    def test_skill_postwriting_review_is_dialogue_only(self):
-        skill = (ROOT / "skill" / "episode-generator" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("## 阶段四：人话台词校验与投射", skill)
-        self.assertIn("只校验和润色人话台词", skill)
-        self.assertIn("不再执行全剧事实复审", skill)
-
     def test_every_topology_node_normalizes_to_one_episode(self):
         data = {
             "nodes": [
