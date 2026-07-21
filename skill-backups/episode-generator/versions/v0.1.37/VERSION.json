@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-07-21T14:12:59.116381+00:00",
+  "created_at": "2026-07-21T14:36:41.264536+00:00",
   "files": {
-    "SKILL.md": "1cc1688cbe76e91d7176143f6b11e0c0782363c339654ad32f8164bbf095f4d5",
+    "SKILL.md": "02b79d519a823c414470414c48c44013a266de1d4645ada4be955de8c7b521af",
     "agents/openai.yaml": "17b810799229d7fddd9cde716ab120dcaa9d348ba84a53bebda2442af8909332",
     "reference-manifest.json": "9b0e327ce56eddf140a89bab7fb289e250e5d5ae371d41c9634bfea189ca67a7",
     "references/atomic-task-orchestration.md": "b2547c8a19759960d017392d091e58e4f5163c0049aeaa7ad15ef3543f6e0096",
@@ -50,6 +50,6 @@
   "parent": "v0.1.36",
   "skill_marker": "v0.1.37",
   "source": "/Users/automaticgrasshopper/Documents/CodeXWork/interactive-drama-lab/skill/episode-generator",
-  "summary": "正式版：分集规划师以情绪脊逻辑驱动状态拓扑；将v、A、D概念方向直接映射到五个情绪脊字段；稳定参考文件名并同步互动节奏平台。",
+  "summary": "正式版：情绪脊状态拓扑与因果逐集写作；正文完成后的压缩校验只做人话台词润色和摘要锁稿；同步互动影视节奏生产后台。",
   "version": "v0.1.37"
 }

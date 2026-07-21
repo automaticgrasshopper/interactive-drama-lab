@@ -38,14 +38,36 @@ class EpisodePipelineV037Test(unittest.TestCase):
         platform = (ROOT / "h5" / "影视互动游戏故事节奏验证.html").read_text(encoding="utf-8")
         self.assertIn("episode-generator v0.1.37 分集规划师", platform)
         self.assertIn("0.1.37-workbench", platform)
+        self.assertIn("人话台词校验", platform)
+        self.assertIn("dialogue-polish-only", platform)
         self.assertNotIn("episode-generator v0.1.36", platform)
         self.assertNotIn("0.1.36-workbench", platform)
+        self.assertNotIn("全剧压缩校验", platform)
+        self.assertNotIn("single four-gate check", platform)
+        self.assertNotIn("逐集制作卡完整", platform)
+        self.assertNotIn("全部分集同摘要三审锁稿", platform)
+        self.assertNotIn("存在 D 轴翻盘拍", platform)
+        self.assertNotIn("beats ≥5 拍", platform)
+        self.assertNotIn("释放点过密", platform)
 
     def test_backend_runtime_has_required_dependency_phases(self):
         self.assertEqual(
             REQUIRED_BACKEND_REFERENCE_PHASES,
-            {"upstream", "topology", "episode-writing", "dialogue-polish", "continuity-review"},
+            {"upstream", "topology", "episode-writing", "dialogue-polish"},
         )
+
+    def test_backend_v037_has_no_postwriting_continuity_or_length_gate(self):
+        worker = (ROOT / "backend" / "production_worker.py").read_text(encoding="utf-8")
+        self.assertIn('"pipeline": "episode-writing → dialogue-polish"', worker)
+        self.assertNotIn("_continuity_only_review", worker)
+        self.assertNotIn("length_anchor", worker)
+        self.assertNotIn("90%—110%", worker)
+
+    def test_skill_postwriting_review_is_dialogue_only(self):
+        skill = (ROOT / "skill" / "episode-generator" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("## 阶段四：人话台词校验与投射", skill)
+        self.assertIn("只校验和润色人话台词", skill)
+        self.assertIn("不再执行全剧事实复审", skill)
 
     def test_every_topology_node_normalizes_to_one_episode(self):
         data = {
@@ -71,6 +93,19 @@ class EpisodePipelineV037Test(unittest.TestCase):
         self.assertTrue(ProductionManager._is_locked(node))
         node["script"] += "\n乙：等等。"
         self.assertFalse(ProductionManager._is_locked(node))
+
+        legacy = {
+            "script": script,
+            "episode_audit": {
+                "locked": True,
+                "digest": script_digest(script),
+                "reviews": [
+                    {"name": name, "pass": True, "digest": script_digest(script)}
+                    for name in ("mechanical", "causal", "dialogue", "cold")
+                ],
+            },
+        }
+        self.assertFalse(ProductionManager._is_locked(legacy))
 
     def test_outline_check_no_longer_requires_emotion_or_production_cards(self):
         data = {

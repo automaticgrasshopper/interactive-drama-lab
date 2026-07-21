@@ -333,13 +333,13 @@
           <div class="pipe-track"><div id="topologyBar" class="pipe-fill"></div></div>
         </div>
         <div id="pipe-scripts" class="pipe-step">
-          <div class="pipe-top"><span class="pipe-num">02</span><span class="pipe-name">执行组滚动生产</span><span id="scriptsPct" class="pipe-pct">0%</span></div>
-          <div id="scriptsLabel" class="pipe-label">按原子组生成、复核、冻结并回写状态</div>
+          <div class="pipe-top"><span class="pipe-num">02</span><span class="pipe-name">逐集写作</span><span id="scriptsPct" class="pipe-pct">0%</span></div>
+          <div id="scriptsLabel" class="pipe-label">按冻结拓扑依次生成完整剧本</div>
           <div class="pipe-track"><div id="scriptsBar" class="pipe-fill"></div></div>
         </div>
         <div id="pipe-audit" class="pipe-step">
-          <div class="pipe-top"><span class="pipe-num">03</span><span class="pipe-name">全剧压缩校验</span><span id="auditPct" class="pipe-pct">0%</span></div>
-          <div id="auditLabel" class="pipe-label">人物、道具、钩子、分支汇合与九字段终检</div>
+          <div class="pipe-top"><span class="pipe-num">03</span><span class="pipe-name">人话台词校验</span><span id="auditPct" class="pipe-pct">0%</span></div>
+          <div id="auditLabel" class="pipe-label">只润色人物对白并锁定当前正文</div>
           <div class="pipe-track"><div id="auditBar" class="pipe-fill"></div></div>
         </div>
       </div>
@@ -1514,8 +1514,8 @@ flowchart TD
     +'写作优先级固定为：①观众一遍看懂谁是谁、谁想要什么、发生了什么和为什么；②每场有戏——人物目标、阻力、交锋、信息或权力变化必须落在可见动作与原句台词里；③人物说人话——台词是接话、试探、回避、确认和反应，不是轮流发表金句或解释设定；④最后才是制片格式。低级要求不得破坏高级要求。\n'
     +'每个 script 直接写成完整现场，场次标题使用【场次 · 地点 · 日/夜 · 内/外】，动作顺写，人物台词使用“人物：台词”。不使用△，不输出出场栏，不设字数、动作段数或台词比例。\n'
     +'写作按相邻因果拍推进：触发、判断、欲望、行动、阻力、调整、即时后果、下一压力。只补足当前因果需要的环节，不跳过移动、接触、失败尝试或代价直接抵达结果。\n'
-    +'只保证三件事：①事实与来路状态正确，不混入未执行路线；②人物、组织、装置和关键设定首次使用时在现场自然交代；③对白有明确所指、接得上话茬并像人物会说的人话。复杂信息通过现象、追问、质疑、确认和反应逐层说清。\n'
-    +'每个选项先进入不同结果集；汇合只使用共同事实，同时保留仍有效的关系、信息、风险、资源和承诺差异。写完只修当前集三项检查中的真实问题，不增加独立审稿层。';
+    +'写作时直接保证三件事：①事实与来路状态正确，不混入未执行路线；②人物、组织、装置和关键设定首次使用时在现场自然交代；③相邻因果完整。\n'
+    +'每个选项先进入不同结果集；汇合只使用共同事实，同时保留仍有效的关系、信息、风险、资源和承诺差异。正文完成后只执行一次整场人话台词润色，不增加其它内容审查层。';
 
   // ===== 拓展能力注册表（基础框架之外的叠加层，开关存 localStorage）=====
   var EXTENSIONS=[
@@ -1690,7 +1690,7 @@ flowchart TD
     pipelineOverall('正在整理上游资料','active');
     pipelineSet('topology',0,'正在生成分集流程图','active');
     pipelineSet('scripts',0,'正在组装最终剧本','');
-    pipelineSet('audit',0,'正在检查人物与道具连续性','');
+    pipelineSet('audit',0,'正在校验人话台词','');
   }
   function applyTaskPipeline(task){
     var p=task&&task.pipeline||{};
@@ -1703,7 +1703,7 @@ flowchart TD
     var lines=['▸ 后台生产持续运行（内部推理与装载凭证不公开）'];
     if(overall.label)lines.push('  当前阶段：'+overall.label);
     if(scripts.label)lines.push('  分集生产：'+(scripts.pct||0)+'% · '+scripts.label);
-    if(audit.label)lines.push('  全剧校验：'+(audit.pct||0)+'% · '+audit.label);
+    if(audit.label)lines.push('  台词校验：'+(audit.pct||0)+'% · '+audit.label);
     if(task&&task.updated_at)lines.push('  最近检查点：'+task.updated_at);
     return lines.join('\n');
   }
@@ -1719,115 +1719,51 @@ flowchart TD
   function logLine(s){ logHead+=s+'\n'; logEl.textContent=logHead; logEl.scrollTop=logEl.scrollHeight; }
   function logStream(chainText){ logEl.textContent=logHead+chainText; logEl.scrollTop=logEl.scrollHeight; }
 
-  // ===== 结构校验：JSON 层硬规则 + 节奏偏移，产出分析对象 =====
+  // ===== v0.1.37 终检：只验证可交付结构，不再重审内容或计算情绪数值 =====
   function validateData(d){
     var hard=[], soft=[];
-    var inst=(typeof extOn==='function')&&extOn('script_inst'); // off＝骨架模式，跳过剧本/人物/场景/道具硬检查
-    var sourceStrict=inputPolicy().strict; // 自动识别完整剧本：互动类硬规则降为软提示
     function chk(name,ok,detail){ hard.push({name:name,ok:!!ok,detail:detail||''}); }
-    // 完整原稿还原时，互动结构类检查降级为软提示（仍显示偏离，不判失败）
-    function chkI(name,ok,detail){ if(sourceStrict){ if(!ok) soft.push('原稿还原·仅提示｜'+name+(detail?('（'+detail+'）'):'')); } else { chk(name,ok,detail); } }
-    var ns=Array.isArray(d.nodes)?d.nodes:[];
-    var byId={}; ns.forEach(function(n){ byId[n.id]=n; });
-    var hasScript=ns.every(function(n){ return (n.script||n.text||'').length>=30; });
-    chk('每场有剧本/情节内容（≥30字）', hasScript, '');
-    var majors=ns.filter(function(n){return n.kind==='major';});
-    var choicesN=ns.filter(function(n){return n.kind==='choice'||n.kind==='interaction';});
-    var minors=ns.filter(function(n){return n.kind==='minor';});
-    chkI('结局总数＝设定（'+lastE+'）', (majors.length+minors.length)===lastE, '主/中间大 '+majors.length+' + 死路 '+minors.length+' = '+(majors.length+minors.length));
-    var shortFilm=lastT<=15;
-    if(shortFilm){ var lo=(lastT<=10)?1:2, hi=(lastT<=10)?2:3; chkI('抉择数在 '+lo+'–'+hi+'（短片结局树 10–15分）', choicesN.length>=lo&&choicesN.length<=hi, '实际 '+choicesN.length); }
-    else { chkI('抉择数≥2（中/长片）', choicesN.length>=2, '实际 '+choicesN.length); }
-    var allDead=choicesN.filter(function(n){ var nx=(n.next||[]); return nx.length>0 && nx.every(function(e){ var t=byId[e.to]; return t&&t.kind==='minor'; }); });
-    chkI('无"选项全是死路"的互动（至少留一条活路）', allDead.length===0, allDead.length?('违规：'+allDead.map(function(n){return n.id;}).join('、')):'');
-    var optBad=choicesN.filter(function(n){ var k=(n.next||[]).length; return k<2||k>4; });
-    chkI('每个抉择 2–4 个出口', optBad.length===0, optBad.length?('违规：'+optBad.map(function(n){return n.id;}).join('、')):'');
-    var labBad=choicesN.filter(function(n){ return (n.next||[]).some(function(e){return !e.label;}); });
-    chk('抉择出口都有选项文字', labBad.length===0, labBad.length?('缺 label：'+labBad.map(function(n){return n.id;}).join('、')):'');
-    var endBad=ns.filter(function(n){ return (n.kind==='major'||n.kind==='minor') && (n.next||[]).length; });
-    chk('结局节点无后续', endBad.length===0, endBad.length?endBad.map(function(n){return n.id;}).join('、'):'');
-    // 连通性
-    if(ns.length){ var seen={}; var q=[ns[0].id]; seen[ns[0].id]=1;
-      while(q.length){ var cur=byId[q.shift()]; (cur&&cur.next||[]).forEach(function(e){ if(byId[e.to]&&!seen[e.to]){ seen[e.to]=1; q.push(e.to); } }); }
-      // 被动触发节点（trigger.type==passive，仅当拓展开启）豁免孤儿检查
-      var passiveOn=(typeof extOn==='function')&&extOn('passive_cond');
-      var orphan=ns.filter(function(n){ if(seen[n.id]) return false; if(passiveOn && n.trigger && n.trigger.type==='passive') return false; return true; });
-      chk('流程图连通（无孤儿节点）', orphan.length===0, orphan.length?('孤儿：'+orphan.map(function(n){return n.id;}).join('、')+'（需给某个 choice 节点加一条 next 指向它；若为被动结局需开启「拓展·被动条件判断」并加 trigger 字段）'):'');
-    }
-    chk('beats ≥5 拍', Array.isArray(d.beats)&&d.beats.length>=5, 'beats '+((d.beats||[]).length)+' 拍');
-    if(inst) chk('人物含状态卡（states）', Array.isArray(d.characters)&&d.characters.length>0&&d.characters.every(function(c){return Array.isArray(c.states)&&c.states.length>0;}), '');
-    var validRoles=['主角','男主','女主','主配','配角','NPC'];
-    var badRole=(d.characters||[]).filter(function(c){ return validRoles.indexOf((c.role||'').trim())<0; });
-    if(inst) chk('角色分类用四类固定标签', Array.isArray(d.characters)&&badRole.length===0, badRole.length?('非法：'+badRole.map(function(c){return c.name+'('+(c.role||'空')+')';}).join('、')):'');
-    if(inst) chk('至少一个主角', (d.characters||[]).some(function(c){return (c.role||'').trim()==='主角';}), '');
-    // 爽点三要素：D轴翻盘 × 抉择促成 × 反讽登记
-    var beats=Array.isArray(d.beats)?d.beats:[];
-    var hasDVal=beats.some(function(b){return b.D!=null;});
-    var flip=false, minSoFar=1;
-    beats.forEach(function(b){ if(b.D==null) return; if(minSoFar<=-0.3 && +b.D>=0.3) flip=true; minSoFar=Math.min(minSoFar,+b.D); });
-    chkI('存在 D 轴翻盘拍（被压→掌控，爽点前提）', hasDVal&&flip, hasDVal?'':'beats 未给 D 值');
-    var choiceIdSet={}; ns.forEach(function(n){ if(n.kind==='choice'||n.kind==='interaction') choiceIdSet[n.id]=1; });
-    var pf=Array.isArray(d.payoffs)?d.payoffs:[];
-    chkI('爽点登记 payoffs（翻盘×抉择促成×反讽）', pf.length>0&&pf.every(function(p){return p.enabledBy&&choiceIdSet[p.enabledBy]&&(p.irony||'').length>0;}), pf.length?'':'缺 payoffs 或 enabledBy 不是真实抉择节点');
-    if(inst) chk('场景表存在且标日/夜', Array.isArray(d.scenes)&&d.scenes.length>0&&d.scenes.every(function(s){return /日|夜/.test(s.time||'');}), '');
-    var props=Array.isArray(d.props)?d.props:[];
-    var coreProps=props.filter(function(p){return p.level==='core';});
-    if(inst) chkI('道具表存在且核心道具≥1（含外观+功能）', props.length>0&&coreProps.length>=1&&coreProps.every(function(p){return (p.look||'').length>0&&(p.func||'').length>0;}), props.length?('核心 '+coreProps.length+' / 普通 '+props.filter(function(p){return p.level==='normal';}).length):'缺 props');
-    chk('大纲每段有具体内容（≥40字）', Array.isArray(d.outline)&&d.outline.length>0&&d.outline.every(function(o){return (o.summary||'').length>=40;}), '');
-    if(d.__episodeForge){
-      var ef=d.__episodeForge,efDetail='已生成 '+(ef.generated||0)+'/'+(ef.total||ns.length)+'、已验收 '+(ef.reviewed||0)+'/'+(ef.total||ns.length)+'、已锁稿 '+(ef.locked||0)+'/'+(ef.total||ns.length);
-      chk('分集工坊依赖链完整运行',ef.status==='completed',efDetail);
-      var noCard=ns.filter(function(n){return !n.production_card||!n.production_card.episode_goal;});
-      chk('逐集制作卡完整',noCard.length===0,noCard.length?('缺失：'+noCard.map(function(n){return n.id;}).join('、')):'');
-      var noFullScript=ns.filter(function(n){return !String(n.script||'').trim();});
-      chk('全部分集均有完整剧本',noFullScript.length===0,noFullScript.length?('未完整：'+noFullScript.map(function(n){return n.id;}).join('、')):'');
-      var unlocked=ns.filter(function(n){return !(n.episode_audit&&n.episode_audit.locked);});
-      chk('全部分集同摘要三审锁稿',unlocked.length===0,unlocked.length?('未锁稿：'+unlocked.map(function(n){return n.id;}).join('、')):'');
-      var digestBad=ns.filter(function(n){var r=n.episode_audit&&n.episode_audit.reviews||[];return r.length!==1||r[0].name!=='three-gate-check'||r.some(function(x){return x.digest!==n.episode_audit.digest;});});
-      chk('机械/因果/对白/冷读使用同一 SHA-256',digestBad.length===0,digestBad.length?('摘要不一致：'+digestBad.map(function(n){return n.id;}).join('、')):'');
-    }
-    // 节奏软指标
-    soft=deviationIssues();
-    // 力度谱软指标：压制深度/释放落差/释放贬值
-    if(beats.length>=3){
-      var F=P.force;
-      var vs=beats.map(function(b){return +b.V;});
-      var openV=vs[0];
-      if(openV>F.openMax+0.05) soft=soft.concat(['开场压制不足：首拍 V='+openV.toFixed(2)+'（力度谱要求 ≤'+F.openMax+'），前段没有压制，后续释放缺乏落差。']);
-      var peakV=Math.max.apply(null,vs), troughV=Math.min.apply(null,vs);
-      var drop=peakV-troughV;
-      if(peakV<F.peakMin) soft=soft.concat(['高潮强度不足：全篇最高 V='+peakV.toFixed(2)+'（力度谱要求 ≥+'+F.peakMin+'）。']);
-      if(drop<F.dropMin) soft=soft.concat(['总落差不足：最高−最低='+drop.toFixed(2)+'（力度谱要求 ≥'+F.dropMin+'）——压制不深则释放无力，需先压深再弹高。']);
-      // 释放贬值：两个 V>sweet 的拍之间无 V<=dip 回落
-      var lastSweet=-1, inflate=false;
-      for(var i=0;i<vs.length;i++){
-        if(vs[i]>F.sweet){ if(lastSweet>=0){ var dip=false; for(var j=lastSweet+1;j<i;j++){ if(vs[j]<=F.dip) dip=true; } if(!dip) inflate=true; } lastSweet=i; }
+    var ns=Array.isArray(d.nodes)?d.nodes:[], byId={};
+    ns.forEach(function(n){ if(n&&n.id)byId[n.id]=n; });
+    chk('存在分集节点',ns.length>0,'实际 '+ns.length+' 集');
+    chk('分集编号唯一',Object.keys(byId).length===ns.length,'');
+    var broken=[], choicesN=[], endings=[];
+    ns.forEach(function(n){
+      var next=Array.isArray(n.next)?n.next:[];
+      if(n.kind==='choice'||n.kind==='interaction')choicesN.push(n);
+      if(n.kind==='major'||n.kind==='minor')endings.push(n);
+      next.forEach(function(e){if(!e||!byId[e.to])broken.push(String(n.id)+'→'+String(e&&e.to||''));});
+    });
+    chk('流程图无断边',broken.length===0,broken.join('、'));
+    var badChoice=choicesN.filter(function(n){
+      var next=Array.isArray(n.next)?n.next:[], targets=next.map(function(e){return e&&e.to;});
+      return next.length<2||next.some(function(e){return !e||!String(e.label||'').trim();})||targets.length!==new Set(targets).size;
+    });
+    chk('选择拥有至少两个不同结果且选项文字完整',badChoice.length===0,badChoice.map(function(n){return n.id;}).join('、'));
+    var badEnding=endings.filter(function(n){return Array.isArray(n.next)&&n.next.length;});
+    chk('结局节点无后续',badEnding.length===0,badEnding.map(function(n){return n.id;}).join('、'));
+    chk('结局总数符合设定',endings.length===lastE,'设定 '+lastE+'，实际 '+endings.length);
+    if(ns.length){
+      var seen={}, queue=[ns[0].id];
+      while(queue.length){
+        var id=queue.shift(); if(seen[id]||!byId[id])continue; seen[id]=1;
+        (byId[id].next||[]).forEach(function(e){if(e&&e.to&&!seen[e.to])queue.push(e.to);});
       }
-      if(inflate) soft=soft.concat(['释放点过密：两个释放拍（V>+'+F.sweet+'）之间没有 V≤'+F.dip+' 的回落，后一个释放的体感强度会下降——中间需要一次压制。']);
-      var lastV=vs[vs.length-1];
-      if(lastV>F.endHi+0.1) soft=soft.concat(['收尾过高：末拍 V='+lastV.toFixed(2)+'（力度谱建议 +'+F.endLo+'~+'+F.endHi+'），从高点回落收束，保留余味。']);
+      var orphan=ns.filter(function(n){return !seen[n.id]&&!((n.trigger||{}).type==='passive');});
+      chk('流程图从唯一入口可达',orphan.length===0,orphan.map(function(n){return n.id;}).join('、'));
     }
-    // 心流点校验：flowEnter 应在首个正向拐点之后、且不晚于全程 40%（否则前段抓不住人）
-    if(d.flowEnter!=null && beats.length>=2){
-      var fe=+d.flowEnter, T=lastT;
-      // 首个正向拐点：V 由降转升的那一拍时间
-      var firstRiseT=null;
-      for(var i=1;i<beats.length;i++){ if(+beats[i].V > +beats[i-1].V){ firstRiseT=+beats[i].t; break; } }
-      if(fe > T*0.4) soft=soft.concat(['心流点偏晚：进入心流在第 '+fe+' 分（全程 '+T+' 分的 '+Math.round(fe/T*100)+'%），超过 40% 才抓住人，前段易流失——应在前五分钟交互点或首个正向拐点附近就让玩家进入。']);
-      if(firstRiseT!=null && fe < firstRiseT-1) soft=soft.concat(['心流点偏早：进入心流（第 '+fe+' 分）早于首个正向拐点（第 '+firstRiseT+' 分），此前情绪仍在下行，玩家还没尝到甜头，心流点存疑。']);
-    } else if(d.flowEnter==null){ soft=soft.concat(['未提供 flowEnter，无法校验心流点位置。']); }
-    // 空合流（硬）：同一抉择有两个及以上 next 指向同一节点＝零差异假选项（选了等于没选），触发自动重跑
-    var hollow=choicesN.filter(function(n){ var tos=(n.next||[]).map(function(e){return e.to;}); var seen={},dup=false; tos.forEach(function(t){ if(seen[t])dup=true; seen[t]=1; }); return tos.length>=2 && dup; });
-    chkI('无空合流假选项（选项不得直接并到同一节点）', hollow.length===0, hollow.length?('违规：'+hollow.map(function(n){ var tos=(n.next||[]).map(function(e){return e.to;}); var dups=tos.filter(function(t,i){return tos.indexOf(t)!==i;}).filter(function(t,i,a){return a.indexOf(t)===i;}); return n.id+'（多选项同指 '+dups.join('、')+'）'; }).join('；')+'——须让各选项先各经一个不同即时结果节点(kind=normal)再合流，或删掉该选项改纯剧情'):'');
-    // 结局分配倾向：N≥5 时小结局宜 ≥ 主结局（用死路铺中段压力）
-    if(lastE>=5 && minors.length<majors.length) soft=soft.concat(['结局分配：总数 '+lastE+'（N≥5）建议小结局 ≥ 主结局，当前 死路 '+minors.length+' < 主/中间大 '+majors.length+'，可多用死路铺中段压力。']);
-    // 锦上添花：major 结局未标 sub(end/mid)，流程图无法区分末段主结局与中间大结局
-    var majNoSub=majors.filter(function(n){ return n.sub!=='end'&&n.sub!=='mid'; });
-    if(majNoSub.length) soft=soft.concat(['以下 major 结局未标 sub 字段（end=末段主结局 / mid=中间大结局），流程图将默认按末段主结局显示，建议补标：'+majNoSub.map(function(n){return n.id;}).join('、')]);
-    var midCount=majors.filter(function(n){return n.sub==='mid';}).length;
-    if(midCount>1) soft=soft.concat(['中间大结局（sub="mid"）有 '+midCount+' 个，规则是全局 0–1 个，多出的应改成末段主结局(sub="end")或小结局。']);
-    var pass=hard.every(function(h){return h.ok;});
-    return { hard:hard, soft:soft, pass:pass };
+    if(d.__episodeForge){
+      var ef=d.__episodeForge, detail='已写作 '+(ef.generated||0)+'/'+(ef.total||ns.length)+'、台词锁稿 '+(ef.locked||0)+'/'+(ef.total||ns.length);
+      chk('v0.1.37 分集生产链完成',ef.status==='completed',detail);
+      var noScript=ns.filter(function(n){return !String(n.script||'').trim();});
+      chk('全部分集均有完整剧本',noScript.length===0,noScript.map(function(n){return n.id;}).join('、'));
+      var unlocked=ns.filter(function(n){return n.lightweight_status!=='已口语化'||!String(n.dialogue_polished_digest||'').trim();});
+      chk('全部分集人话台词已锁稿',unlocked.length===0,unlocked.map(function(n){return n.id;}).join('、'));
+      var required=['分集编号','分集标题','分集剧本','剧本分析','关联角色','关联场景','关联道具','是否结局','互动节点'];
+      var episodes=Array.isArray(d.episodes)?d.episodes:[], badContract=episodes.filter(function(ep){return required.some(function(k){return !Object.prototype.hasOwnProperty.call(ep,k);});});
+      chk('九字段分集结果完整',episodes.length===ns.length&&badContract.length===0,'分集结果 '+episodes.length+'/'+ns.length);
+    }
+    return {hard:hard,soft:soft,pass:hard.every(function(h){return h.ok;})};
   }
   function analysisHtml(va, attempt){
     var h='<div style="background:#fafbfc;border:1px solid #eef0f4;border-radius:14px;padding:14px 16px;margin-bottom:16px;">'
@@ -1836,7 +1772,7 @@ flowchart TD
     va.hard.forEach(function(x){ h+='<div>'+(x.ok?'<span style="color:#16a34a;">✓</span>':'<span style="color:#dc2626;">✗</span>')+' '+esc(x.name)+(x.detail?'　<span style="color:#8a92a6;">'+esc(x.detail)+'</span>':'')+'</div>'; });
     h+='</div>';
     if(va.soft.length){ h+='<div style="font-weight:600;font-size:12.5px;margin-top:8px;color:#b45309;">节奏偏移提示（软指标，不触发重跑）</div><ul style="margin:4px 0 0;padding-left:20px;font-size:12px;line-height:1.9;color:#7c4a03;">'+va.soft.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>'; }
-    else if(va.pass){ h+='<div style="font-size:12px;color:#16a34a;margin-top:6px;">节奏无显著偏移，贴合规则书标准线。</div>'; }
+    else if(va.pass){ h+='<div style="font-size:12px;color:#16a34a;margin-top:6px;">结构与交付格式通过。</div>'; }
     // 精简自检模式：展示模型返回的 selfcheck（主观项自评）
     var sc=lastData&&lastData.selfcheck;
     if(sc&&typeof sc==='object'){
@@ -2167,7 +2103,7 @@ flowchart TD
     aa.href=u; aa.download='校准数据_'+out.length+'条_'+new Date().toISOString().slice(0,10)+'.json'; aa.click(); URL.revokeObjectURL(u);
   });
 
-  // ===== 新版分集工坊：冻结拓扑 → 逐集锻造 → 因果/对白/冷读三审 → 同摘要锁稿 =====
+  // ===== v0.1.37 分集工坊：冻结拓扑 → 逐集写作 → 人话台词校验 → 摘要锁稿 =====
   function jsonFromText(s){
     s=String(s||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
     var a=s.indexOf('{'),b=s.lastIndexOf('}'); if(a>=0&&b>a)s=s.slice(a,b+1);
@@ -2221,32 +2157,41 @@ flowchart TD
     var ask='只读取当前节点、直接前置真实结果、仍有效的路线差异、相关人物关系与知情、相关场景道具和直接后续入口。顺着现场写出触发、第一反应、行动、阻力、调整、可见结果与下一步；缺哪一步会让因果看不懂才补哪一步。\n'+JSON.stringify(forgeContext(d,n,g))+'\n返回：{"script":"完整剧本","entry_state":"本集实际入口事实","exit_state":"本集结束时实际成立的事实","working_summary":"只写本集实际发生的事","dramatic_core":"本集唯一戏剧变化"}';
     return llmJson([{role:'system',content:sys},{role:'user',content:ask}],false).then(function(x){Object.keys(x||{}).forEach(function(k){n[k]=x[k];});});
   }
-  function auditAndMaybeRepair(d,n,g,allowRepair,onRound){
+  function nonDialogueSkeleton(script){
+    return String(script||'').split('\n').filter(function(line){
+      var s=line.trim();
+      if(!s||s.charAt(0)==='#'||s.indexOf('单集梗概：')===0||s.charAt(0)==='【'||s.indexOf('互动选项：')===0||s.indexOf('选项')===0)return true;
+      return !/^[^：:\n]{1,20}[：:]/.test(s);
+    }).join('\n').replace(/\s/g,'');
+  }
+  function polishDialogueAndLock(d,n,onRound){
     if(genStopped)throw new Error('stopped');
-    if(onRound)onRound(1,'三项检查');
-    var sys='你是 episode-generator v0.1.37 当前集检查编剧。只检查并修复四件事：事实和路线状态正确；行动因果相邻且没有跳过必要过程；首次出现的人物与设定已在现场自然交代；对白有明确所指、接得上话茬并像人物会说的人话。没有问题的句子保持不动。不得改拓扑、选择、结局和正式资产名，不使用△，不输出出场栏，不设字数、动作段数或台词比例。只返回JSON。';
-    var ask=JSON.stringify({context:forgeContext(d,n,g),script:n.script,entry_state:n.entry_state,exit_state:n.exit_state})+'\n返回：{"script":"三项检查后的完整剧本","entry_state":"本集实际入口事实","exit_state":"本集结束时实际成立的事实","audience_summary":"只写观众在本集实际看见并确定知道的事实"}';
+    if(onRound)onRound(1,'人话台词校验');
+    var before=String(n.script||''), skeleton=nonDialogueSkeleton(before);
+    var sys='你是 episode-generator v0.1.37 的整场人话台词润色编剧。只修改现有说话人的对白，让人物真正接话，允许打断、省略、反问、口语垫词和必要冗余；去掉说明书对白、书面结论、过分整齐的短句和所有角色同一种声音。不得修改场次、动作骨架、事实、选择、结局和正式资产名。只返回JSON。';
+    var ask=JSON.stringify({characters:(d.characters||[]).map(function(x){return {name:x.name,role:x.role,desc:x.desc,voice:x.voice};}),script:before})+'\n返回：{"script":"只润色台词后的完整剧本"}';
     return llmJson([{role:'system',content:sys},{role:'user',content:ask}],false).then(function(x){
-      if(!x||!x.script)throw new Error(n.id+' 三项检查未返回完整剧本');
-      n.script=x.script;if(x.entry_state)n.entry_state=x.entry_state;if(x.exit_state)n.exit_state=x.exit_state;n.audience_summary=x.audience_summary||n.working_summary||'';
-      return sha256Text(n.script).then(function(digest){n.episode_audit={digest:digest,locked:true,attempts:1,reviews:[{name:'three-gate-check',pass:true,digest:digest}]};});
+      if(!x||!x.script)throw new Error(n.id+' 人话台词校验未返回完整剧本');
+      if(nonDialogueSkeleton(x.script)!==skeleton)throw new Error(n.id+' 人话台词校验改变了非台词骨架');
+      n.script=x.script;n.lightweight_status='已口语化';delete n.episode_audit;
+      return sha256Text(n.script).then(function(digest){n.dialogue_polished_digest=digest;});
     });
   }
   function forgeProject(d){
     if(!skillForgeOn()||!extOn('script_inst'))return Promise.resolve(d);
     var g=nodeGraph(d),ns=g.order,strict=inputPolicy().strict,writeIndex=0,auditIndex=0;
-    d.__episodeForge={version:'0.1.37-workbench',topology_frozen:true,status:'running',phase:'scripts',total:ns.length,generated:0,reviewed:0,locked:0,review_policy:'single four-gate check: facts + adjacent causality + first appearance + natural dialogue'};
+    d.__episodeForge={version:'0.1.37-workbench',topology_frozen:true,status:'running',phase:'scripts',total:ns.length,generated:0,reviewed:0,locked:0,review_policy:'dialogue-polish-only'};
     pipelineSet('topology',100,'拓扑、流程图与情绪脊硬规则通过','pass');
     pipelineSet('scripts',0,'准备生成 '+ns.length+' 集完整剧本','active');
     pipelineOverall('生成全量剧本','active');
-    logLine('▸ 拓扑已冻结。第二阶段逐集写作，并对每集执行一次三项检查。');
+    logLine('▸ 拓扑已冻结。第二阶段逐集写作，正文完成后只执行人话台词校验。');
     function writeAll(){
       if(genStopped)throw new Error('stopped');
       if(writeIndex>=ns.length){
-        d.__episodeForge.phase='audit';
+        d.__episodeForge.phase='dialogue-polish';
         pipelineSet('scripts',100,ns.length+' 集完整剧本已全部生成','pass');
-        pipelineSet('audit',0,'准备逐集三项检查','active');
-        pipelineOverall('检查事实、首次出场与人话对白','active');
+        pipelineSet('audit',0,'准备逐集校验人话台词','active');
+        pipelineOverall('校验人话台词','active');
         return auditAll();
       }
       var n=ns[writeIndex],shown=writeIndex+1;
@@ -2259,15 +2204,15 @@ flowchart TD
       if(genStopped)throw new Error('stopped');
       if(auditIndex>=ns.length){
         d.__episodeForge.status='completed';d.__episodeForge.phase='completed';d.__episodeForge.reviewed=ns.length;d.__episodeForge.locked=ns.length;d.__forgeComplete=true;
-        pipelineSet('audit',100,ns.length+' 集全部通过并锁稿','pass');pipelineOverall('已交付','pass');syncEpisodeContract(d,g);return Promise.resolve(d);
+        pipelineSet('audit',100,ns.length+' 集人话台词全部锁稿','pass');pipelineOverall('已交付','pass');syncEpisodeContract(d,g);return Promise.resolve(d);
       }
       var n=ns[auditIndex],shown=auditIndex+1;
-      pipelineSet('audit',Math.round((auditIndex/ns.length)*100),'验收第 '+shown+'/'+ns.length+' 集 · '+n.id,'active');
-      logLine('▸ 三项检查 '+shown+'/'+ns.length+'｜'+n.id);
-      return auditAndMaybeRepair(d,n,g,!strict,function(round,label){pipelineSet('audit',Math.round((auditIndex/ns.length)*100),n.id+' · '+label+' · 剩余 '+(ns.length-auditIndex)+' 集','active');}).then(function(){
+      pipelineSet('audit',Math.round((auditIndex/ns.length)*100),'校验第 '+shown+'/'+ns.length+' 集人话台词 · '+n.id,'active');
+      logLine('▸ 人话台词校验 '+shown+'/'+ns.length+'｜'+n.id);
+      return polishDialogueAndLock(d,n,function(round,label){pipelineSet('audit',Math.round((auditIndex/ns.length)*100),n.id+' · '+label+' · 剩余 '+(ns.length-auditIndex)+' 集','active');}).then(function(){
         auditIndex++;d.__episodeForge.reviewed=auditIndex;d.__episodeForge.locked=auditIndex;
-        logLine('  ✓ '+n.id+' 三项检查完成并锁稿');
-        pipelineSet('audit',Math.round((auditIndex/ns.length)*100),'已锁稿 '+auditIndex+'/'+ns.length+' 集','active');syncEpisodeContract(d,g);return auditAll();
+        logLine('  ✓ '+n.id+' 人话台词完成并锁稿');
+        pipelineSet('audit',Math.round((auditIndex/ns.length)*100),'人话台词已锁稿 '+auditIndex+'/'+ns.length+' 集','active');syncEpisodeContract(d,g);return auditAll();
       });
     }
     return writeAll();
@@ -2385,7 +2330,7 @@ flowchart TD
           pipelineOverall('已交付','pass');
           logLine('✓ 生产与验收全部通过，已交付。分集剧本页会显示每集的同摘要锁稿状态与验收详情。');
           histSave({ time:new Date().toLocaleString('zh-CN',{hour12:false}), title:storyTitle(d), logline:(d.logline||''), synopsis:(d.synopsis||''), runId:d.__runId,
-            params:'时长'+lastT+'分/结局'+lastE+'/'+(tags.length?tags.join('＋'):'无标签')+'/'+model+'/'+(skillForgeOn()?'分集工坊三审':'快速草稿'),
+            params:'时长'+lastT+'分/结局'+lastE+'/'+(tags.length?tags.join('＋'):'无标签')+'/'+model+'/'+(skillForgeOn()?'v0.1.37人话台词锁稿':'快速草稿'),
             pass:va.pass, attempts:attempt, log:logEl.textContent, analysisText:analysisText, json:c,
             input:{ brief:briefTxt, tags:tagsNow.slice(), dur:genDurSel, ends:genEndsSel, forgeMode:document.getElementById('forgeMode').value, docs:(DOCS.length?DOCS.map(function(dd){return {name:dd.name,text:dd.text};}):null), images:(IMAGES.length?IMAGES.map(function(im){return {name:im.name,type:im.type,dataUrl:im.dataUrl};}):null), intent:inputPolicy().label } });
           rememberBackendTask(null);
@@ -2714,15 +2659,14 @@ flowchart TD
     if(!ns.length){ wrap.innerHTML='<div class="empty">（暂无数据：先「一键生成」）</div>'; return; }
     var kindTag={ normal:'剧情', choice:'抉择', interaction:'抉择', major:'主结局', minor:'死路' };
     var kindColor={ normal:'#3b82f6', choice:'#f59e0b', interaction:'#f59e0b', major:'#f97316', minor:'#ef4444' };
-    var generated=ns.filter(function(n){return String(n.script||'').trim();}).length,locked=ns.filter(function(n){return n.episode_audit&&n.episode_audit.locked;}).length;
+    var generated=ns.filter(function(n){return String(n.script||'').trim();}).length,locked=ns.filter(function(n){return n.lightweight_status==='已口语化'&&String(n.dialogue_polished_digest||'').trim();}).length;
     var ready=generated===ns.length&&locked===ns.length;
     var h='<div style="padding:6px 18px 20px;max-width:860px;">'
       +'<div style="display:flex;align-items:center;gap:12px;margin:4px 0 14px;padding:13px 15px;border:1px solid '+(ready?'#bde6d5':'#e4e8f0')+';border-radius:13px;background:'+(ready?'#f7fdf9':'#fafbfc')+';">'
-      +'<div><div style="font-size:13px;font-weight:800;color:#283044;">'+(ready?'全部分集已锁稿':'分集生产未完成')+'</div><div style="margin-top:3px;font-size:11.5px;color:#8790a3;">完整剧本 '+generated+'/'+ns.length+' · 验收锁稿 '+locked+'/'+ns.length+'</div></div>'
+      +'<div><div style="font-size:13px;font-weight:800;color:#283044;">'+(ready?'全部分集已锁稿':'分集生产未完成')+'</div><div style="margin-top:3px;font-size:11.5px;color:#8790a3;">完整剧本 '+generated+'/'+ns.length+' · 人话台词锁稿 '+locked+'/'+ns.length+'</div></div>'
       +'<span class="auditpill '+(ready?'pass':'fail')+'" style="margin-left:auto;">'+(ready?'✓ 可交付':'! 未交付')+'</span></div>';
     ns.forEach(function(n){
-      var audit=n.episode_audit, reviews=audit&&audit.reviews||[];
-      function reviewPill(name,label){var r=reviews.filter(function(x){return x.name===name;})[0];var cls=!r?'wait':(r.pass?'pass':'fail');return '<span class="auditpill '+cls+'" title="'+esc((r&&((r.issues||[]).join('；')||r.note))||'尚未验收')+'">'+(r?(r.pass?'✓':'!'):'·')+' '+label+'</span>';}
+      var dialogueLocked=n.lightweight_status==='已口语化'&&String(n.dialogue_polished_digest||'').trim();
       h+='<div style="margin-bottom:18px;">'
         +'<div style="display:flex;align-items:center;gap:8px;padding:8px 0 6px;border-bottom:2px solid #eef0f4;">'
         +'<b style="font-size:14px;">场 '+esc(n.id||'')+'</b>'
@@ -2730,8 +2674,8 @@ flowchart TD
         +'<span style="font-size:12px;color:#8a92a6;">'+esc(n.time||'')+'</span>'
         +'<span style="margin-left:auto;font-size:11px;font-weight:700;color:#fff;background:'+(kindColor[n.kind]||'#3b82f6')+';border-radius:6px;padding:2px 8px;">'+(kindTag[n.kind]||'剧情')+'</span></div>'
         +(n.cast?'<div style="font-size:12px;color:#6b7488;padding:6px 0 0;"><b>在场：</b>'+esc(n.cast)+'</div>':'')
-        +(audit?'<div class="auditline"><span class="auditpill '+(audit.locked?'pass':'fail')+'">'+(audit.locked?'🔒 同摘要锁稿':'⚠ 未锁稿')+'</span>'+reviewPill('mechanical','机械')+reviewPill('causal','因果')+reviewPill('dialogue','对白')+reviewPill('cold','冷读')+'<span style="font-size:10.5px;color:#98a1b2;">SHA '+esc((audit.digest||'').slice(0,10))+' · '+(audit.attempts||1)+' 轮</span></div>':'')
-        +(n.script?'<div style="font-size:13px;line-height:2;padding:6px 0;white-space:pre-wrap;">'+esc(n.script)+'</div>':'<div style="margin:9px 0;padding:12px;border:1px dashed #d6dbe5;border-radius:10px;background:#fafbfc;color:#8a92a6;font-size:12px;line-height:1.7;"><b style="color:#596174;">尚未生成完整剧本</b><br>当前只有制作卡梗概，不会冒充剧本正文。</div>');
+        +(n.script?'<div class="auditline"><span class="auditpill '+(dialogueLocked?'pass':'wait')+'">'+(dialogueLocked?'🔒 人话台词已锁稿':'· 等待人话台词校验')+'</span>'+(dialogueLocked?'<span style="font-size:10.5px;color:#98a1b2;">SHA '+esc(String(n.dialogue_polished_digest).slice(0,10))+'</span>':'')+'</div>':'')
+        +(n.script?'<div style="font-size:13px;line-height:2;padding:6px 0;white-space:pre-wrap;">'+esc(n.script)+'</div>':'<div style="margin:9px 0;padding:12px;border:1px dashed #d6dbe5;border-radius:10px;background:#fafbfc;color:#8a92a6;font-size:12px;line-height:1.7;"><b style="color:#596174;">尚未生成完整剧本</b><br>当前只有分集梗概，不会冒充剧本正文。</div>');
       if((n.next||[]).length && (n.kind==='choice'||n.kind==='interaction')){
         h+='<div style="background:#fff9ec;border:1px solid #f5e2b8;border-radius:10px;padding:8px 12px;font-size:12.5px;line-height:1.9;"><b style="color:#b45309;">抉择：</b>'+n.next.map(function(e){return '「'+esc(e.label||'继续')+'」→ 场 '+esc(e.to);}).join('　/　')+'</div>';
       } else if((n.next||[]).length){ h+='<div style="font-size:12px;color:#8a92a6;">→ 接场 '+n.next.map(function(e){return esc(e.to);}).join('、')+'</div>'; }
@@ -2739,7 +2683,7 @@ flowchart TD
     });
     wrap.innerHTML=h+'</div>';
   }
-  document.getElementById('scriptcopy').addEventListener('click', function(){ var t=scriptText(); if(!t){ alert('全部完整剧本尚未生成，暂不允许把制作卡梗概当成剧本复制。'); return; } try{ navigator.clipboard.writeText(t); this.textContent='已复制'; var b=this; setTimeout(function(){ b.textContent='复制全部剧本'; },1200); }catch(e){} });
+  document.getElementById('scriptcopy').addEventListener('click', function(){ var t=scriptText(); if(!t){ alert('全部完整剧本尚未生成，暂不允许把分集梗概当成剧本复制。'); return; } try{ navigator.clipboard.writeText(t); this.textContent='已复制'; var b=this; setTimeout(function(){ b.textContent='复制全部剧本'; },1200); }catch(e){} });
 
   // ===== 分集流程图：用模型返回的 nodes 画实打实的卡片流程图 =====
   function renderFlow(){
