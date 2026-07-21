@@ -1,0 +1,4 @@
+interface:
+  display_name: "NXP-分集规划师"
+  short_description: "情绪开扇并锚定拓扑，再逐集铺实、事实复核和逐句人话检验"
+  default_prompt: "Use $episode-generator 继承游戏企划和正式资产，先冻结上游，用情绪脊和因果链生成一集一个节点的拓扑；确认锚定后逐集执行最小写作包、整场铺实、事实复核、人物交流与场型案例同轮复核、格式检查和冻结。"

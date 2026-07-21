@@ -1,0 +1,67 @@
+{
+  "skill_version": "v0.1.35",
+  "phases": {
+    "upstream": [
+      "upstream-input-translation.md",
+      "public-output-and-progress.md"
+    ],
+    "emotional-spine": [
+      "planning-and-topology-v032.md"
+    ],
+    "causal-graph": [
+      "planning-and-topology-v032.md"
+    ],
+    "topology": [
+      "planning-and-topology-v032.md",
+      "public-output-and-progress.md"
+    ],
+    "episode-writing": [
+      "episode-production-v035.md",
+      "public-output-and-progress.md"
+    ],
+    "dialogue-polish": [
+      "episode-production-v035.md",
+      "chinese-dialogue-craft.md"
+    ],
+    "continuity-review": [
+      "continuity-only-review.md"
+    ],
+    "production-cards": [
+      "episode-production-v035.md"
+    ],
+    "scene-review": [
+      "episode-production-v035.md"
+    ],
+    "dialogue-review": [
+      "episode-production-v035.md",
+      "chinese-dialogue-craft.md"
+    ],
+    "isolated-audience": [
+      "episode-production-v035.md"
+    ],
+    "state-writeback": [
+      "episode-production-v035.md"
+    ],
+    "whole-play-review": [
+      "continuity-only-review.md"
+    ]
+  },
+  "profiles": {
+    "suspense": {
+      "episode-writing": [],
+      "dialogue-review": []
+    },
+    "confrontation": {
+      "episode-writing": [],
+      "dialogue-review": ["case-confrontation-liuxi.md"]
+    },
+    "power-reversal": {
+      "episode-writing": [],
+      "dialogue-review": ["case-power-reversal-minguo.md"]
+    },
+    "evidence-verification": {
+      "episode-writing": [],
+      "dialogue-review": ["case-evidence-verification.md"]
+    }
+  }
+}
