@@ -21,8 +21,10 @@ class EpisodePipelineV037Test(unittest.TestCase):
         self.assertNotIn("对白情绪词正负分", skill)
 
     def test_emotional_spine_reference_uses_formal_v037_language(self):
-        reference = (ROOT / "skill" / "episode-generator" / "references" / "emotional-spine-state-graph-v037.md").read_text(encoding="utf-8")
+        reference = (ROOT / "skill" / "episode-generator" / "references" / "emotional-spine-state-graph.md").read_text(encoding="utf-8")
         self.assertIn("## 三、情绪脊逻辑", reference)
+        self.assertIn("V（Valence）", reference)
+        self.assertIn("默认不使用、不计算、不写入节点", reference)
         self.assertNotIn("情绪脊替代情绪分数", reference)
         self.assertNotIn("喜悦为正", reference)
         self.assertNotIn("InkOS", reference)

@@ -1,9 +1,9 @@
 {
-  "created_at": "2026-07-21T13:54:40.814191+00:00",
+  "created_at": "2026-07-21T14:06:08.345059+00:00",
   "files": {
-    "SKILL.md": "34582460e5cc25a576777f6fa932cac64cbab7553c18134365644ee583844a67",
+    "SKILL.md": "811a326f4b067e696d53d6ca335bc5e78e29da0724935e3eda4709a4f92d9869",
     "agents/openai.yaml": "17b810799229d7fddd9cde716ab120dcaa9d348ba84a53bebda2442af8909332",
-    "reference-manifest.json": "09065d7fc3675b80af892c128505e487e3dd7e7b6ae66268b63ba79aadc8d710",
+    "reference-manifest.json": "9b0e327ce56eddf140a89bab7fb289e250e5d5ae371d41c9634bfea189ca67a7",
     "references/atomic-task-orchestration.md": "b2547c8a19759960d017392d091e58e4f5163c0049aeaa7ad15ef3543f6e0096",
     "references/canvas-cache-protocol.md": "af58a667b108ebad12ed242b6db903b210339e105902dfefbabb42d0d248e4cb",
     "references/case-confrontation-liuxi.md": "5e8488ec3c2522c298eb50c4e0b4b4b26f68b6f9d7188ae0bec0e104668d1028",
@@ -15,7 +15,7 @@
     "references/continuity-only-review.md": "955a34ee8c93dc858a4b1585223678f07fda68516068367408fdfc706d262fe7",
     "references/creative-novelty-and-genre-lens.md": "98190f88ea45e0459f9a152503f255c06d070149c676f961cc6539de15b31848",
     "references/emotional-spine-and-branching.md": "baacc735411a2e98178c71e30e7f87a6309a70c0f12270e1b9eb7c7caa6f8358",
-    "references/emotional-spine-state-graph-v037.md": "c03b5bbf5375126037c8316bc92b3b853cc86496d6c22bd527d1b16bdcd9f90b",
+    "references/emotional-spine-state-graph.md": "7a811a16422b104d8b8d29f81142e00bba657d811324367d3b7041838c95d8e6",
     "references/episode-production-v032.md": "1f8968f1919bea14198a4bdb0fd739084fcaa5c9fb748770d38a3744bc1812e4",
     "references/episode-writing-v036.md": "b3bb74fe4a98ea0c2ec69082b9ae29c668a0e1dbea78ad39a96ead1fa81bd2e6",
     "references/gold-sample-episode.md": "c1254dbc6820ce95841bcd31047abe4d0f4b90b21d7380b5302e1af970b4e587",
@@ -50,6 +50,6 @@
   "parent": "v0.1.36",
   "skill_marker": "v0.1.37",
   "source": "/Users/automaticgrasshopper/Documents/CodeXWork/interactive-drama-lab/skill/episode-generator",
-  "summary": "正式版：统一命名为分集规划师；以情绪脊逻辑驱动状态拓扑与相邻因果拍写作；同步互动节奏平台 v0.1.37。",
+  "summary": "正式版：分集规划师以情绪脊逻辑驱动状态拓扑；VAD仅作内部术语备忘且不计算、不展示；稳定参考文件名并同步互动节奏平台。",
   "version": "v0.1.37"
 }
