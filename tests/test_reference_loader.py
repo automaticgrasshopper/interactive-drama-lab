@@ -30,6 +30,15 @@ class ReferenceLoaderTests(unittest.TestCase):
         self.assertEqual(names, {"causal-episode-writing.md", "chinese-dialogue-craft.md"})
         self.assertIn("补口语组织（反过度压缩）", result["bundle"])
 
+    def test_episode_quality_review_is_small_and_isolated(self):
+        result = loader.load_bundle("episode-quality-review")
+        self.assertEqual({item["name"] for item in result["files"]}, {"episode-quality-review.md"})
+        reference = result["bundle"]
+        self.assertIn("七项完整覆盖", reference)
+        self.assertIn("正文 SHA-256", reference)
+        self.assertLessEqual(result["files"][0]["chars"], 1200)
+        self.assertGreaterEqual(result["files"][0]["chars"], 800)
+
     def test_receipt_round_trip_and_tamper_rejection(self):
         directory = Path(tempfile.mkdtemp())
         result = loader.load_bundle("topology")

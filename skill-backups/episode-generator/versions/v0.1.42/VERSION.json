@@ -1,0 +1,23 @@
+{
+  "created_at": "2026-07-22T14:09:49.755262+00:00",
+  "files": {
+    "SKILL.md": "994760833712decdf412bca61a37275a7ed0f54307e775b5d5ae5334de943167",
+    "agents/openai.yaml": "17b810799229d7fddd9cde716ab120dcaa9d348ba84a53bebda2442af8909332",
+    "reference-manifest.json": "b53bdd49b7b0a517a05f23755948a08355d6b59170c54b0d8fcfac43ed085108",
+    "references/causal-episode-writing.md": "e994bab2757eb2e271767ac0bcd877ecf2d2f000c1418a073797b628cd9dab1f",
+    "references/chinese-dialogue-craft.md": "15114a0e224b670564c9414db44fe5735f5fa62e28b9edfec30b9e625e053d71",
+    "references/emotional-spine-state-graph.md": "c0b5d0ea15bd352ae7298ba4582b5b82a66fbd9e23250be9e06f3f815ce7436a",
+    "references/episode-quality-review.md": "6722e54547b97768dc61ed6e942e978d970c2feabf9bf4dafd297a7af27218fb",
+    "references/public-output-and-progress.md": "207e91358342bb03df7f2bddec8649f9715479ceace90de434af86531c68e279",
+    "references/upstream-input-translation.md": "3eedbba3775be7ae9499e2632d3a8b51c426b5b011b32effa6ef9d9450f2e636",
+    "scripts/episode_quality_gate.py": "cbb2fdb768a8aca8712ab7307944bf441452d0ea8dd4c2454a9cc41261b86686",
+    "scripts/validate_and_assemble_scripts.py": "d1327aa94ac16c9f6bcfef08936e3c897592d27f0aa2879848b1f0a47484d6d6",
+    "scripts/validate_emotional_topology.py": "f35f635c9186b3f531f528606aaf6ae67795d13ce74970164a13c249b441e865",
+    "scripts/validate_topology.py": "f321552dc51cafa6a53c0798449c15cb660b97a74ae9ee054105637be71cdabb"
+  },
+  "parent": "v0.1.41",
+  "skill_marker": null,
+  "source": "/Users/automaticgrasshopper/Documents/CodeXWork/interactive-drama-lab/skill/episode-generator",
+  "summary": "逐集复检恢复有限前情冷读：先复述人物任务、触发代价、行动结果与下一入口；理解失败不得进入七项检查。",
+  "version": "v0.1.42"
+}

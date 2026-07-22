@@ -122,6 +122,37 @@ class DialogueRepairCaptureManager(FakeManager):
         return {"script": valid_script("你还能走吗？")}
 
 
+class QualityReviewCaptureManager(FakeManager):
+    def __init__(self, covered_checks=None, issues=None):
+        super().__init__()
+        self.covered_checks = covered_checks or [
+            "事实来源与知情",
+            "首次出现与必要交代",
+            "因果相邻与可见后果",
+            "话茬与现场目的",
+            "口语组织与反过度压缩",
+            "普通话表达与叙述可读",
+            "结尾画面与下一入口",
+        ]
+        self.issues = issues or []
+        self.kwargs = {}
+
+    def _json_chat(self, project_id, run_id, messages, **kwargs):
+        self.kwargs = kwargs
+        return {
+            "covered_checks": self.covered_checks,
+            "issues": self.issues,
+            "evidence": [{
+                "check": "普通话表达与叙述可读",
+                "dialogue_location": "甲：你还能走吗？",
+                "dialogue_proof": "台词采用自然普通话语序并承接现场。",
+                "narration_location": "他走到门边",
+                "narration_proof": "描述写清人物动作与位置变化。",
+            }],
+            "note": "",
+        }
+
+
 class ProductionWorkerTests(unittest.TestCase):
     def test_backend_reference_loader_issues_private_receipt(self):
         manager = object.__new__(ProductionManager)
@@ -298,6 +329,23 @@ class ProductionWorkerTests(unittest.TestCase):
         self.assertIn("不得默认追求最短表达", system)
         self.assertIn("承担对象、承接、态度或关系功能的口语成分不得删除", system)
         self.assertIn("不得为显得口语而强行加口水", system)
+
+    def test_independent_quality_review_uses_its_own_reference_and_digest(self):
+        manager = QualityReviewCaptureManager()
+        node = {"id": "episode-001", "script": valid_script(), "next": []}
+        data = {"nodes": [node], "characters": [], "scenes": [], "props": []}
+        review = ProductionManager._episode_quality_review(manager, "p", "r", data, node, {"episode-001": []}, [])
+        self.assertTrue(review["pass"])
+        self.assertEqual(review["digest"], script_digest(node["script"]))
+        self.assertEqual(manager.kwargs["reference_phase"], "episode-quality-review")
+
+    def test_independent_quality_review_rejects_incomplete_coverage(self):
+        manager = QualityReviewCaptureManager(covered_checks=["事实来源与知情"])
+        node = {"id": "episode-001", "script": valid_script(), "next": []}
+        data = {"nodes": [node], "characters": [], "scenes": [], "props": []}
+        review = ProductionManager._episode_quality_review(manager, "p", "r", data, node, {"episode-001": []}, [])
+        self.assertFalse(review["pass"])
+        self.assertTrue(any("复检覆盖不完整" in issue for issue in review["issues"]))
 
 
 if __name__ == "__main__":

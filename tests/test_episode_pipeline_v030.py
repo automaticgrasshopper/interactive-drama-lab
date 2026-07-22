@@ -10,7 +10,7 @@ from backend.production_worker import ProductionManager, REQUIRED_BACKEND_REFERE
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class EpisodePipelineV037Test(unittest.TestCase):
+class EpisodePipelineV041Test(unittest.TestCase):
     def test_skill_package_contains_only_runtime_files(self):
         skill_root = ROOT / "skill" / "episode-generator"
         files = {
@@ -27,18 +27,20 @@ class EpisodePipelineV037Test(unittest.TestCase):
                 "references/causal-episode-writing.md",
                 "references/chinese-dialogue-craft.md",
                 "references/emotional-spine-state-graph.md",
+                "references/episode-quality-review.md",
                 "references/public-output-and-progress.md",
                 "references/upstream-input-translation.md",
                 "scripts/validate_and_assemble_scripts.py",
                 "scripts/validate_emotional_topology.py",
                 "scripts/validate_topology.py",
+                "scripts/episode_quality_gate.py",
             },
         )
 
-    def test_manifest_and_skill_are_v037(self):
+    def test_manifest_and_skill_are_v041(self):
         manifest = json.loads((ROOT / "skill" / "episode-generator" / "reference-manifest.json").read_text(encoding="utf-8"))
         skill = (ROOT / "skill" / "episode-generator" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertEqual(manifest["skill_version"], "v0.1.37")
+        self.assertEqual(manifest["skill_version"], "v0.1.42")
         self.assertNotIn("当前规范版本：", skill)
         self.assertIn("# 分集规划师", skill)
         self.assertNotIn("情绪脊分集规划师", skill)
@@ -54,12 +56,12 @@ class EpisodePipelineV037Test(unittest.TestCase):
         self.assertIn("### 带差异地合流", reference)
         self.assertIn("### 收扇", reference)
 
-    def test_story_rhythm_platform_is_aligned_to_v037(self):
+    def test_story_rhythm_platform_is_aligned_to_v041(self):
         platform = (ROOT / "h5" / "影视互动游戏故事节奏验证.html").read_text(encoding="utf-8")
-        self.assertIn("episode-generator v0.1.37 分集规划师", platform)
-        self.assertIn("0.1.37-workbench", platform)
+        self.assertIn("episode-generator v0.1.42 分集规划师", platform)
+        self.assertIn("0.1.42-workbench", platform)
         self.assertIn("人话台词校验", platform)
-        self.assertIn("dialogue-polish-only", platform)
+        self.assertIn("dialogue-polish-then-independent-review", platform)
         self.assertNotIn("episode-generator v0.1.36", platform)
         self.assertNotIn("0.1.36-workbench", platform)
         self.assertNotIn("全剧压缩校验", platform)
@@ -73,12 +75,13 @@ class EpisodePipelineV037Test(unittest.TestCase):
     def test_backend_runtime_has_required_dependency_phases(self):
         self.assertEqual(
             REQUIRED_BACKEND_REFERENCE_PHASES,
-            {"upstream", "topology", "episode-writing", "dialogue-polish"},
+            {"upstream", "topology", "episode-writing", "dialogue-polish", "episode-quality-review"},
         )
 
-    def test_backend_v037_has_no_postwriting_continuity_or_length_gate(self):
+    def test_backend_v041_uses_one_compact_postwriting_quality_gate(self):
         worker = (ROOT / "backend" / "production_worker.py").read_text(encoding="utf-8")
-        self.assertIn('"pipeline": "episode-writing → dialogue-polish"', worker)
+        self.assertIn('"pipeline": "episode-writing → dialogue-polish → episode-quality-review"', worker)
+        self.assertIn('reference_phase="episode-quality-review"', worker)
         self.assertNotIn("_continuity_only_review", worker)
         self.assertNotIn("length_anchor", worker)
         self.assertNotIn("90%—110%", worker)
@@ -97,12 +100,13 @@ class EpisodePipelineV037Test(unittest.TestCase):
         self.assertEqual([edge["to"] for edge in data["nodes"][0]["next"]], ["episode-002", "episode-003"])
         self.assertNotIn("episode_map", data)
 
-    def test_lightweight_lock_only_depends_on_polished_current_script(self):
+    def test_lock_requires_quality_review_bound_to_current_script(self):
         script = "【场一 · 旧屋 · 夜 · 内】\n出场：甲\n\n甲：行，先这么办。"
         node = {
             "script": script,
-            "lightweight_status": "已口语化",
+            "lightweight_status": "已复检",
             "dialogue_polished_digest": script_digest(script),
+            "episode_audit": {"reviews": [{"name": "quality", "pass": True, "digest": script_digest(script)}]},
         }
         self.assertTrue(ProductionManager._is_locked(node))
         node["script"] += "\n乙：等等。"
