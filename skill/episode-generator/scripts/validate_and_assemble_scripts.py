@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 from pathlib import Path
 
@@ -31,9 +32,19 @@ INTERACTION_SUBFIELDS = [
     "选项列表",
     "默认下一分集编号",
 ]
-CHARACTERS = {"周屿", "林乔", "陈铮", "顾惟安", "许曼青"}
-SCENES = {"临川社区档案馆", "雨夜老城区", "停运地铁支线", "火灾档案库房", "河岸仓储区"}
-PROPS = {"黑色旧录音机", "焦痕值班表", "停摆旧钟", "缺段监控硬盘"}
+CHARACTERS: set[str] = set()
+SCENES: set[str] = set()
+PROPS: set[str] = set()
+
+
+def load_assets(path: Path) -> None:
+    global CHARACTERS, SCENES, PROPS
+    data = json.loads(path.read_text(encoding="utf-8"))
+    CHARACTERS = set(data.get("characters") or [])
+    SCENES = set(data.get("scenes") or [])
+    PROPS = set(data.get("props") or [])
+    if not CHARACTERS or not SCENES or not PROPS:
+        raise ValueError("assets.json 必须提供非空 characters、scenes 和 props")
 
 
 def section(text: str, name: str) -> str:
@@ -73,6 +84,12 @@ def validate_episode(node_id: str, node: dict[str, object], text: str) -> list[s
         issues.append(f"互动节点子字段错误：{node_id}")
     if re.search(r"^\s*△", text, re.MULTILINE) or re.search(r"^\s*出场：", text, re.MULTILINE):
         issues.append(f"含禁用正文格式：{node_id}")
+    try:
+        script = section(text, "分集剧本")
+    except ValueError:
+        script = ""
+    if re.search(r"^[^\n：]{1,20}：\s*[“\"]", script, re.MULTILINE):
+        issues.append(f"对白必须使用人物：台词，不使用台词引号：{node_id}")
     if not re.search(r"^【[^】·]+(?:·[^】·]+){2,}】$", blocks["分集剧本"], re.MULTILINE):
         issues.append(f"缺少场次标题：{node_id}")
     if not values(blocks["关联角色"]) <= CHARACTERS:
@@ -105,6 +122,11 @@ def main() -> int:
     parser.add_argument("cache_root", type=Path)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
+    try:
+        load_assets(args.cache_root / "assets.json")
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        print(f"FAIL: 正式资产清单无效：{error}")
+        return 1
     topology = parse(args.cache_root / "topology.md")
     scripts: list[str] = []
     issues: list[str] = []

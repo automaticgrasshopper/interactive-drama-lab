@@ -57,7 +57,7 @@ class EmotionalSpineTopologyV037Test(unittest.TestCase):
 
         sys.path.insert(0, str(SCRIPT_ROOT))
         try:
-            module = load_module("validate_and_assemble_scripts_v037", SCRIPT_ROOT / "validate_and_assemble_scripts_v037.py")
+            module = load_module("validate_and_assemble_scripts", SCRIPT_ROOT / "validate_and_assemble_scripts.py")
         finally:
             sys.path.pop(0)
         text = """# 分集编号
