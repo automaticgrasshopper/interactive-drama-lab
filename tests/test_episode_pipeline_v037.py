@@ -19,26 +19,14 @@ def load_module(name: str, path: Path):
 
 
 class EmotionalSpineTopologyV037Test(unittest.TestCase):
-    def test_minimum_emotional_state_graph_passes(self):
-        module = load_module("validate_emotional_topology_v037", SCRIPT_ROOT / "validate_emotional_topology_v037.py")
+    def test_original_emotional_spine_graph_does_not_require_state_fields(self):
+        module = load_module("validate_emotional_topology", SCRIPT_ROOT / "validate_emotional_topology.py")
         nodes = []
-        successors = "episode-002、episode-003、episode-004、episode-005"
         nodes.append(
             """## episode-001｜抉择
 - 互动类型：关键选择
 - 结局：否
 - 后续节点：episode-002、episode-003、episode-004、episode-005
-- 节点类型：start
-- 情绪位置：起
-- 现场触发：门正在关闭
-- 人物当下欲望：离开房间
-- 现实阻力：四条路只能选一条
-- 采取行动：选择出口
-- 即时事实：主角作出第一步行动
-- 控制权变化：主角短暂取得行动权
-- 状态读取：无
-- 状态写入：无
-- 下一催化：出口后的代价出现
 - 选择：推开东门 → episode-002
 - 选择：推开西门 → episode-003
 - 选择：打开天窗 → episode-004
@@ -57,23 +45,12 @@ class EmotionalSpineTopologyV037Test(unittest.TestCase):
 - 互动类型：{interaction}
 - 结局：是
 - 后续节点：无
-- 节点类型：ending
-- 情绪位置：合
-- 现场触发：选择已经执行
-- 人物当下欲望：承受结果
-- 现实阻力：行动不可撤回
-- 采取行动：面对出口结果
-- 即时事实：{fact}
-- 控制权变化：结果确定
-- 状态读取：无
-- 状态写入：路线={title}
-- 下一催化：无
 """
             )
         directory = Path(tempfile.mkdtemp())
         topology = directory / "topology.md"
         topology.write_text("\n".join(nodes), encoding="utf-8")
-        self.assertEqual(module.validate_v037(topology, None), [])
+        self.assertEqual(module.validate_emotional_topology(topology, None), [])
 
     def test_dialogue_quote_is_rejected(self):
         import sys

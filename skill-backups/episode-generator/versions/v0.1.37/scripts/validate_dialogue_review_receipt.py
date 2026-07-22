@@ -13,9 +13,9 @@ from prepare_dialogue_review import build_dialogue_packet
 PROFILE_CASE = {
     "ordinary": None,
     "suspense": None,
-    "confrontation": "case-confrontation-liuxi.md",
-    "power-reversal": "case-power-reversal-minguo.md",
-    "evidence-verification": "case-evidence-verification.md",
+    "confrontation": None,
+    "power-reversal": None,
+    "evidence-verification": None,
 }
 REQUIRED_CHECKS = {
     "referents",

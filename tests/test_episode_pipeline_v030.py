@@ -15,24 +15,20 @@ class EpisodePipelineV037Test(unittest.TestCase):
         manifest = json.loads((ROOT / "skill" / "episode-generator" / "reference-manifest.json").read_text(encoding="utf-8"))
         skill = (ROOT / "skill" / "episode-generator" / "SKILL.md").read_text(encoding="utf-8")
         self.assertEqual(manifest["skill_version"], "v0.1.37")
-        self.assertIn("当前规范版本：`v0.1.37`", skill)
+        self.assertNotIn("当前规范版本：", skill)
         self.assertIn("# 分集规划师", skill)
         self.assertNotIn("情绪脊分集规划师", skill)
         self.assertNotIn("对白情绪词正负分", skill)
 
-    def test_emotional_spine_reference_uses_formal_v037_language(self):
+    def test_emotional_spine_reference_matches_original_v01_topology(self):
         reference = (ROOT / "skill" / "episode-generator" / "references" / "emotional-spine-state-graph.md").read_text(encoding="utf-8")
-        self.assertIn("## 三、情绪脊逻辑", reference)
-        self.assertIn("V（Valence）", reference)
-        self.assertIn("人物幻想（v+）", reference)
-        self.assertIn("现实风险（v-）", reference)
-        self.assertIn("现实落点（A+）", reference)
-        self.assertIn("控制权变化（D）", reference)
-        self.assertIn("下一催化（A-）", reference)
-        self.assertNotIn("内部术语备忘", reference)
-        self.assertNotIn("情绪脊替代情绪分数", reference)
-        self.assertNotIn("喜悦为正", reference)
-        self.assertNotIn("InkOS", reference)
+        original = (ROOT / "skill-backups" / "episode-generator" / "versions" / "v0.1" / "references" / "emotional-spine-and-branching.md").read_text(encoding="utf-8")
+        self.assertEqual(reference, original)
+        self.assertIn("## 二、建立 PAD/VAD 情绪脊", reference)
+        self.assertIn("## 三、从情绪脊识别天然岔点", reference)
+        self.assertIn("## 四、分支开扇与编织带原则", reference)
+        self.assertIn("### 带差异地合流", reference)
+        self.assertIn("### 收扇", reference)
 
     def test_story_rhythm_platform_is_aligned_to_v037(self):
         platform = (ROOT / "h5" / "影视互动游戏故事节奏验证.html").read_text(encoding="utf-8")
