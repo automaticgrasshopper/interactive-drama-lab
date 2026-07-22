@@ -280,7 +280,7 @@ class ProductionManager:
         return {
             "role": "user",
             "content": (
-                "【v0.1.38 长项目压缩】本轮只写清楚各分集的具体事件、选择后果、连接和结局，不得省略分集或边。"
+                "【v0.1.37 长项目压缩】本轮只写清楚各分集的具体事件、选择后果、连接和结局，不得省略分集或边。"
                 "一个节点就是一集，使用 episode-NNN；每集 text 用能复述的短梗概表达：人物目标、阻力、实际结果和下一催化。script 留空。"
                 "不展开执行卡、情绪坐标、候选方案、审查过程或逐集分析。"
             ),
@@ -291,7 +291,7 @@ class ProductionManager:
         return {
             "role": "user",
             "content": (
-                "【episode-generator v0.1.38 覆盖指令】忽略上文关于情绪数值、容量公式、候选淘汰、互动配额、生成日志、生产卡和分镜字段的要求。"
+                "【episode-generator v0.1.37 覆盖指令】忽略上文关于情绪数值、容量公式、候选淘汰、互动配额、生成日志、生产卡和分镜字段的要求。"
                 "本轮只整理故事主线和分集拓扑：资产沿用上游，每个流程节点就是一集，必须使用 episode-NNN。"
                 "选择写在当前集结尾，每个选项直接指向另一集；选择结果、反馈、汇合和结局节点也必须各自是一集。禁止把多个节点折叠进一集。"
                 "只在玩家确实拥有两个以上合理行动时设置选择，不为凑类型或数量增加互动。"
@@ -1431,7 +1431,7 @@ class ProductionManager:
         )
 
     def _finish_from_checkpoint(self, project_id: str, run_id: str, data: dict[str, Any], pipeline: dict[str, Any]) -> None:
-        """Run the v0.1.38 write → spoken-dialogue polish pipeline."""
+        """Run the v0.1.37 write → spoken-dialogue polish pipeline."""
         order, predecessors, topology = self._graph(data)
         total = len(order)
         forge = data.get("__episodeForge") if isinstance(data.get("__episodeForge"), dict) else {}
