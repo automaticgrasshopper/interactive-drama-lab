@@ -35,18 +35,19 @@ GROUP_STATES = (
     "状态已回写",
 )
 REFERENCE_LOADER = (
-    Path(__file__).resolve().parents[1]
-    / "skill"
-    / "episode-generator"
-    / "scripts"
+    Path(__file__).resolve().parent
+    / "episode_pipeline"
     / "load_reference_bundle.py"
 )
-REFERENCE_MANIFEST = REFERENCE_LOADER.parents[1] / "reference-manifest.json"
-DIALOGUE_PREPARER = (
+REFERENCE_MANIFEST = (
     Path(__file__).resolve().parents[1]
     / "skill"
     / "episode-generator"
-    / "scripts"
+    / "reference-manifest.json"
+)
+DIALOGUE_PREPARER = (
+    Path(__file__).resolve().parent
+    / "episode_pipeline"
     / "prepare_dialogue_review.py"
 )
 REQUIRED_BACKEND_REFERENCE_PHASES = {

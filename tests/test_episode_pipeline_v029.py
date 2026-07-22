@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT_ROOT = Path(__file__).resolve().parents[1] / "skill" / "episode-generator" / "scripts"
+SCRIPT_ROOT = Path(__file__).resolve().parents[1] / "backend" / "episode_pipeline"
 sys.path.insert(0, str(SCRIPT_ROOT))
 
 from episode_task_state import claim, complete, planning_tasks, production_tasks  # noqa: E402

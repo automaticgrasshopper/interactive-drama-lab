@@ -6,7 +6,7 @@ import unittest
 import subprocess
 from pathlib import Path
 
-SCRIPT_ROOT = Path(__file__).resolve().parents[1] / "skill" / "episode-generator" / "scripts"
+SCRIPT_ROOT = Path(__file__).resolve().parents[1] / "backend" / "episode_pipeline"
 sys.path.insert(0, str(SCRIPT_ROOT))
 
 from load_reference_bundle import load_bundle, write_receipt  # noqa: E402

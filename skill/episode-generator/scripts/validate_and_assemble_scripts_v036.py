@@ -8,7 +8,7 @@ import hashlib
 import re
 from pathlib import Path
 
-from validate_topology_v032 import parse
+from validate_topology import parse
 
 
 FIELDS = [

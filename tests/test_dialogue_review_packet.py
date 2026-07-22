@@ -5,9 +5,8 @@ from pathlib import Path
 
 MODULE_PATH = (
     Path(__file__).resolve().parents[1]
-    / "skill"
-    / "episode-generator"
-    / "scripts"
+    / "backend"
+    / "episode_pipeline"
     / "prepare_dialogue_review.py"
 )
 SPEC = importlib.util.spec_from_file_location("prepare_dialogue_review", MODULE_PATH)

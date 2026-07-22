@@ -7,9 +7,8 @@ from pathlib import Path
 
 LOADER_PATH = (
     Path(__file__).resolve().parents[1]
-    / "skill"
-    / "episode-generator"
-    / "scripts"
+    / "backend"
+    / "episode_pipeline"
     / "load_reference_bundle.py"
 )
 SPEC = importlib.util.spec_from_file_location("load_reference_bundle", LOADER_PATH)

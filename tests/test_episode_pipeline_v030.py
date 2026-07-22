@@ -11,6 +11,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class EpisodePipelineV037Test(unittest.TestCase):
+    def test_skill_package_contains_only_runtime_files(self):
+        skill_root = ROOT / "skill" / "episode-generator"
+        files = {
+            path.relative_to(skill_root).as_posix()
+            for path in skill_root.rglob("*")
+            if path.is_file() and "__pycache__" not in path.parts
+        }
+        self.assertEqual(
+            files,
+            {
+                "SKILL.md",
+                "agents/openai.yaml",
+                "reference-manifest.json",
+                "references/causal-episode-writing.md",
+                "references/chinese-dialogue-craft.md",
+                "references/emotional-spine-state-graph.md",
+                "references/public-output-and-progress.md",
+                "references/upstream-input-translation.md",
+                "scripts/validate_and_assemble_scripts_v036.py",
+                "scripts/validate_and_assemble_scripts_v037.py",
+                "scripts/validate_emotional_topology.py",
+                "scripts/validate_topology.py",
+            },
+        )
+
     def test_manifest_and_skill_are_v037(self):
         manifest = json.loads((ROOT / "skill" / "episode-generator" / "reference-manifest.json").read_text(encoding="utf-8"))
         skill = (ROOT / "skill" / "episode-generator" / "SKILL.md").read_text(encoding="utf-8")

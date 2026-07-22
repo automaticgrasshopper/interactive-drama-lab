@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from validate_topology_v032 import parse, validate
+from validate_topology import parse, validate
 
 
 def validate_emotional_topology(path: Path, synopsis: Path | None) -> list[str]:

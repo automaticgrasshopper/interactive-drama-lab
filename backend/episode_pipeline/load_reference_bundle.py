@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 
-SKILL_ROOT = Path(__file__).resolve().parents[1]
+SKILL_ROOT = Path(__file__).resolve().parents[2] / "skill" / "episode-generator"
 REFERENCE_ROOT = SKILL_ROOT / "references"
 MANIFEST_PATH = SKILL_ROOT / "reference-manifest.json"
 
