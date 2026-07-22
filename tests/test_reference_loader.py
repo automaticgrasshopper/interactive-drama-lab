@@ -24,6 +24,12 @@ class ReferenceLoaderTests(unittest.TestCase):
         self.assertEqual(names, {"causal-episode-writing.md", "chinese-dialogue-craft.md"})
         self.assertIn(result["receipt_sha256"], result["bundle"])
 
+    def test_dialogue_review_bundle_includes_dialogue_craft_rules(self):
+        result = loader.load_bundle("dialogue-review")
+        names = {item["name"] for item in result["files"]}
+        self.assertEqual(names, {"causal-episode-writing.md", "chinese-dialogue-craft.md"})
+        self.assertIn("补口语组织（反过度压缩）", result["bundle"])
+
     def test_receipt_round_trip_and_tamper_rejection(self):
         directory = Path(tempfile.mkdtemp())
         result = loader.load_bundle("topology")

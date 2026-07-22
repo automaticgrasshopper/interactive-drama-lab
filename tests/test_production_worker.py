@@ -96,6 +96,32 @@ class SelfSigningReviewManager(ReviewCaptureManager):
         return {"pass": True, "issues": [], "evidence": [], "note": "模型自称通过", "owner": "scene_facts"}
 
 
+class DialogueReviewCaptureManager(FakeManager):
+    def __init__(self, covered_checks):
+        super().__init__()
+        self.covered_checks = covered_checks
+        self.messages = []
+
+    def _json_chat(self, project_id, run_id, messages, **kwargs):
+        self.messages = messages
+        return {
+            "covered_checks": self.covered_checks,
+            "issues": [],
+            "note": "",
+            "owner": "character_exchange",
+        }
+
+
+class DialogueRepairCaptureManager(FakeManager):
+    def __init__(self):
+        super().__init__()
+        self.messages = []
+
+    def _json_chat(self, project_id, run_id, messages, **kwargs):
+        self.messages = messages
+        return {"script": valid_script("你还能走吗？")}
+
+
 class ProductionWorkerTests(unittest.TestCase):
     def test_backend_reference_loader_issues_private_receipt(self):
         manager = object.__new__(ProductionManager)
@@ -246,6 +272,32 @@ class ProductionWorkerTests(unittest.TestCase):
         review = ProductionManager._review(manager, "p", "r", "causal", {"nodes": [node]}, node, {"1": []}, [], script_digest(node["script"]))
         self.assertFalse(review["pass"])
         self.assertTrue(any("覆盖不完整" in issue for issue in review["issues"]))
+
+    def test_dialogue_review_requires_oral_organization_and_anti_compression(self):
+        legacy_checks = ["话茬承接", "单句信息负载", "现场目的", "人物声音", "口语自然度"]
+        manager = DialogueReviewCaptureManager(legacy_checks)
+        node = {"id": "1", "script": valid_script("你还能走吗？"), "relationship_state": "同伴"}
+        review = ProductionManager._review(manager, "p", "r", "dialogue", {"nodes": [node]}, node, {"1": []}, [], script_digest(node["script"]))
+        self.assertFalse(review["pass"])
+        self.assertTrue(any("口语组织、反过度压缩" in issue for issue in review["issues"]))
+        self.assertIn("不得仅因句子短而判错", manager.messages[0]["content"])
+
+    def test_dialogue_review_passes_only_after_all_seven_checks_are_covered(self):
+        checks = ["话茬承接", "单句信息负载", "现场目的", "人物声音", "口语自然度", "口语组织", "反过度压缩"]
+        manager = DialogueReviewCaptureManager(checks)
+        node = {"id": "1", "script": valid_script("你还能走吗？"), "relationship_state": "同伴"}
+        review = ProductionManager._review(manager, "p", "r", "dialogue", {"nodes": [node]}, node, {"1": []}, [], script_digest(node["script"]))
+        self.assertTrue(review["pass"])
+        self.assertEqual(review["required_checks"], checks)
+
+    def test_dialogue_repair_prompt_preserves_functional_spoken_markers(self):
+        manager = DialogueRepairCaptureManager()
+        node = {"id": "1", "script": valid_script("你还能走吗？")}
+        ProductionManager._repair(manager, "p", "r", {"nodes": [node]}, node, {"1": []}, [], {"issues": ["S01-L01｜反过度压缩｜关系指向不足"]}, "dialogue")
+        system = manager.messages[0]["content"]
+        self.assertIn("不得默认追求最短表达", system)
+        self.assertIn("承担对象、承接、态度或关系功能的口语成分不得删除", system)
+        self.assertIn("不得为显得口语而强行加口水", system)
 
 
 if __name__ == "__main__":
