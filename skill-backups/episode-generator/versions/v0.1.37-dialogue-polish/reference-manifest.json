@@ -1,20 +1,18 @@
 {
-  "skill_version": "v0.1.38",
+  "skill_version": "v0.1.37",
   "phases": {
     "upstream": [
       "upstream-input-translation.md",
       "public-output-and-progress.md"
     ],
     "emotional-spine": [
-      "emotional-spine-state-graph.md",
-      "fantasy-space-genre-rhythm.md"
+      "emotional-spine-state-graph.md"
     ],
     "causal-graph": [
       "emotional-spine-state-graph.md"
     ],
     "topology": [
       "emotional-spine-state-graph.md",
-      "fantasy-space-genre-rhythm.md",
       "public-output-and-progress.md"
     ],
     "production-cards": [

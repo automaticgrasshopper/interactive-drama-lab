@@ -63,7 +63,7 @@ description: "当outline-generator 已经产出 游戏企划 和，以及asset-d
 
 ## 阶段二：情绪脊与分支拓扑
 
-完整读取`references/emotional-spine-state-graph.md`和`references/fantasy-space-genre-rhythm.md`：
+完整读取`references/emotional-spine-state-graph.md`：
 
 1. 按体量确定结构引擎、节点规模、互动预算和结局数。
 2. 先建立全篇 PAD/VAD 主干情绪脊，不碰分支拓扑。

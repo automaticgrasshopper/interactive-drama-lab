@@ -10,11 +10,11 @@ from backend.production_worker import ProductionManager, REQUIRED_BACKEND_REFERE
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class EpisodePipelineV037Test(unittest.TestCase):
-    def test_manifest_and_skill_are_v037(self):
+class EpisodePipelineV038Test(unittest.TestCase):
+    def test_manifest_and_skill_are_v038(self):
         manifest = json.loads((ROOT / "skill" / "episode-generator" / "reference-manifest.json").read_text(encoding="utf-8"))
         skill = (ROOT / "skill" / "episode-generator" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertEqual(manifest["skill_version"], "v0.1.37")
+        self.assertEqual(manifest["skill_version"], "v0.1.38")
         self.assertNotIn("当前规范版本：", skill)
         self.assertIn("# 分集规划师", skill)
         self.assertNotIn("情绪脊分集规划师", skill)
@@ -30,10 +30,23 @@ class EpisodePipelineV037Test(unittest.TestCase):
         self.assertIn("### 带差异地合流", reference)
         self.assertIn("### 收扇", reference)
 
-    def test_story_rhythm_platform_is_aligned_to_v037(self):
+    def test_v038_topology_patch_is_loaded_without_replacing_v01_spine(self):
+        manifest = json.loads((ROOT / "skill" / "episode-generator" / "reference-manifest.json").read_text(encoding="utf-8"))
+        patch_name = "fantasy-space-genre-rhythm.md"
+        self.assertIn(patch_name, manifest["phases"]["emotional-spine"])
+        self.assertIn(patch_name, manifest["phases"]["topology"])
+        self.assertNotIn(patch_name, manifest["phases"]["episode-writing"])
+        patch = (ROOT / "skill" / "episode-generator" / "references" / patch_name).read_text(encoding="utf-8")
+        self.assertIn("三维目标与让位关系", patch)
+        self.assertIn("幻想、反讽与认同账", patch)
+        self.assertIn("恋爱题材的关系角色节奏", patch)
+        self.assertIn("关键节点的题材透镜", patch)
+        self.assertLess(len(patch), 5000)
+
+    def test_story_rhythm_platform_is_aligned_to_v038(self):
         platform = (ROOT / "h5" / "影视互动游戏故事节奏验证.html").read_text(encoding="utf-8")
-        self.assertIn("episode-generator v0.1.37 分集规划师", platform)
-        self.assertIn("0.1.37-workbench", platform)
+        self.assertIn("episode-generator v0.1.38 分集规划师", platform)
+        self.assertIn("0.1.38-workbench", platform)
         self.assertIn("人话台词校验", platform)
         self.assertIn("dialogue-polish-only", platform)
         self.assertNotIn("episode-generator v0.1.36", platform)

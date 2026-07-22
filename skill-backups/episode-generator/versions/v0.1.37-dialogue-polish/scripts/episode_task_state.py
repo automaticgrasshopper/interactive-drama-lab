@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic private task ledger for episode-generator v0.1.38."""
+"""Deterministic private task ledger for episode-generator v0.1.37."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any
 
 
 VERSION = "atomic-task-ledger-v1"
-SKILL_VERSION = "v0.1.38"
+SKILL_VERSION = "v0.1.37"
 STATUSES = {"pending", "running", "complete", "needs_fix", "blocked"}
 
 
