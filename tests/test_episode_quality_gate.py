@@ -23,6 +23,18 @@ def load_gate():
     return module
 
 
+def load_assembler():
+    sys.path.insert(0, str(SCRIPT_ROOT))
+    try:
+        spec = importlib.util.spec_from_file_location("validate_and_assemble_scripts", ASSEMBLER_PATH)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.pop(0)
+
+
 EPISODE = """# 分集编号
 
 episode-001
@@ -124,6 +136,12 @@ class EpisodeQualityGateTests(unittest.TestCase):
         return {
             "script_sha256": packet["script_sha256"],
             "reference_sha256": packet["reference_sha256"],
+            "comprehension": {
+                "character_task": {"answer": "甲回到旧屋确认屋内情况。", "proof": "正文写明甲推开门并查看仍亮着的灯。"},
+                "trigger_cost": {"answer": "屋内的灯仍亮着，意味着可能有人。", "proof": "甲进门后首先看见桌上的灯仍亮着。"},
+                "action_result": {"answer": "甲推门进入并出声确认自己回来。", "proof": "正文连续写出推门、看灯和说我回来了。"},
+                "next_entry": {"answer": "甲等待屋内的人或异常作出回应。", "proof": "结尾停在甲向屋内出声之后，形成等待回应的压力。"},
+            },
             "covered_checks": list(packet["required_checks"]),
             "issues": [],
             "evidence": evidence,
@@ -135,7 +153,20 @@ class EpisodeQualityGateTests(unittest.TestCase):
         packet = gate.build_packet(self.project(), "episode-001")
         self.assertIn("七项完整覆盖", packet["reference"])
         self.assertIn("甲：我回来了。", packet["script"])
-        self.assertEqual(packet["skill_version"], "v0.1.42")
+        self.assertNotIn("甲确认屋内是否有人", packet["script"])
+        self.assertNotIn("后续节点编号列表", packet["script"])
+        self.assertEqual(packet["skill_version"], "v0.1.43")
+
+    def test_comprehension_gate_requires_all_four_answers_and_proofs(self):
+        gate = load_gate()
+        project = self.project()
+        packet = gate.build_packet(project, "episode-001")
+        review = self.valid_review(packet)
+        review["comprehension"]["trigger_cost"].pop("proof")
+        review["comprehension"]["next_entry"]["proof"] = "正文不清楚，无法提供依据。"
+        errors = gate.validate_review(packet, review)
+        self.assertTrue(any("触发代价" in error for error in errors))
+        self.assertTrue(any("下一入口" in error for error in errors))
 
     def test_missing_receipt_blocks_next_stage(self):
         gate = load_gate()
@@ -186,6 +217,40 @@ class EpisodeQualityGateTests(unittest.TestCase):
         passed = subprocess.run([sys.executable, str(ASSEMBLER_PATH), str(project), str(output)], capture_output=True, text=True)
         self.assertEqual(passed.returncode, 0, passed.stdout + passed.stderr)
         self.assertTrue(output.is_file())
+
+    def test_nine_field_contract_rejects_topology_drift(self):
+        assembler = load_assembler()
+        node = {
+            "title": "开场",
+            "ending": False,
+            "successors": ["episode-002"],
+            "choices": [("打开门", "episode-002")],
+            "question": "要打开门吗？",
+        }
+        choice_episode = (
+            EPISODE
+            .replace("## 后续节点编号列表\n\n无", "## 后续节点编号列表\n\nepisode-002")
+            .replace("# 是否结局\n\n是", "# 是否结局\n\n否")
+            .replace("# 关联角色\n\n甲", "# 关联角色\n\n无")
+            .replace("# 关联场景\n\n旧屋", "# 关联场景\n\n无")
+            .replace("# 关联道具\n\n旧灯", "# 关联道具\n\n无")
+            .replace("## 是否为分支节点\n\n否", "## 是否为分支节点\n\n是")
+            .replace("## 是否有选择问题\n\n否", "## 是否有选择问题\n\n是")
+            .replace("## 选择问题\n\n无", "## 选择问题\n\n要打开门吗？")
+            .replace(
+                "## 选项列表\n\n无",
+                "## 选项列表\n\n- 选项编号：1\n  - 选项文字：打开门\n  - 目标分集编号：episode-002",
+            )
+            .replace("## 默认下一分集编号\n\n无", "## 默认下一分集编号\n\nepisode-002")
+        )
+        self.assertEqual(assembler.validate_episode("episode-001", node, choice_episode, []), [])
+        drifted = choice_episode.replace("选项文字：打开门", "选项文字：推开门").replace(
+            "## 默认下一分集编号\n\nepisode-002",
+            "## 默认下一分集编号\n\nepisode-999",
+        )
+        issues = assembler.validate_episode("episode-001", node, drifted, [])
+        self.assertTrue(any("选项文字错误" in issue for issue in issues))
+        self.assertTrue(any("默认下一分集错误" in issue for issue in issues))
 
 
 if __name__ == "__main__":

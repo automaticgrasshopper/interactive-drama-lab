@@ -136,10 +136,18 @@ class QualityReviewCaptureManager(FakeManager):
         ]
         self.issues = issues or []
         self.kwargs = {}
+        self.messages = []
 
     def _json_chat(self, project_id, run_id, messages, **kwargs):
         self.kwargs = kwargs
+        self.messages = messages
         return {
+            "comprehension": {
+                "character_task": {"answer": "甲要确认自己能否离开现场。", "proof": "正文中甲走到门边并向同伴确认。"},
+                "trigger_cost": {"answer": "同伴的行动能力仍然不明确。", "proof": "甲直接询问对方是否还能继续行走。"},
+                "action_result": {"answer": "甲走到门边并询问同伴状态。", "proof": "正文写出走到门边和你还能走吗。"},
+                "next_entry": {"answer": "同伴必须回答并决定是否继续移动。", "proof": "结尾的问题逼出同伴的立即回应。"},
+            },
             "covered_checks": self.covered_checks,
             "issues": self.issues,
             "evidence": [{
@@ -332,12 +340,42 @@ class ProductionWorkerTests(unittest.TestCase):
 
     def test_independent_quality_review_uses_its_own_reference_and_digest(self):
         manager = QualityReviewCaptureManager()
-        node = {"id": "episode-001", "script": valid_script(), "next": []}
-        data = {"nodes": [node], "characters": [], "scenes": [], "props": []}
-        review = ProductionManager._episode_quality_review(manager, "p", "r", data, node, {"episode-001": []}, [])
+        prior = {
+            "id": "episode-001",
+            "working_summary": "甲已进入办公室并锁好身后的门。",
+            "exit_state": "作者预期出口，不得泄漏",
+            "next": [{"to": "episode-002"}],
+        }
+        node = {
+            "id": "episode-002",
+            "script": valid_script(),
+            "entry_state": "作者入口答案，不得泄漏",
+            "exit_state": "作者出口答案，不得泄漏",
+            "next": [{"to": "episode-003"}],
+        }
+        future = {"id": "episode-003", "production_card": {"entry_state": "后续条件，不得泄漏"}, "next": []}
+        data = {"nodes": [prior, node, future], "characters": [], "scenes": [], "props": []}
+        review = ProductionManager._episode_quality_review(
+            manager,
+            "p",
+            "r",
+            data,
+            node,
+            {"episode-001": [], "episode-002": ["episode-001"], "episode-003": ["episode-002"]},
+            [],
+        )
         self.assertTrue(review["pass"])
         self.assertEqual(review["digest"], script_digest(node["script"]))
         self.assertEqual(manager.kwargs["reference_phase"], "episode-quality-review")
+        payload = json.loads(manager.messages[-1]["content"])
+        self.assertNotIn("entry_state", payload)
+        self.assertNotIn("exit_state", payload)
+        self.assertNotIn("successor_entry_conditions", payload)
+        self.assertNotIn("next", payload)
+        self.assertEqual(
+            payload["incoming_results"],
+            [{"id": "episode-001", "actual_facts": "甲已进入办公室并锁好身后的门。"}],
+        )
 
     def test_independent_quality_review_rejects_incomplete_coverage(self):
         manager = QualityReviewCaptureManager(covered_checks=["事实来源与知情"])
@@ -346,6 +384,22 @@ class ProductionWorkerTests(unittest.TestCase):
         review = ProductionManager._episode_quality_review(manager, "p", "r", data, node, {"episode-001": []}, [])
         self.assertFalse(review["pass"])
         self.assertTrue(any("复检覆盖不完整" in issue for issue in review["issues"]))
+
+    def test_independent_quality_review_rejects_missing_comprehension(self):
+        manager = QualityReviewCaptureManager()
+        original = manager._json_chat
+
+        def without_comprehension(project_id, run_id, messages, **kwargs):
+            result = original(project_id, run_id, messages, **kwargs)
+            result.pop("comprehension")
+            return result
+
+        manager._json_chat = without_comprehension
+        node = {"id": "episode-001", "script": valid_script(), "next": []}
+        data = {"nodes": [node], "characters": [], "scenes": [], "props": []}
+        review = ProductionManager._episode_quality_review(manager, "p", "r", data, node, {"episode-001": []}, [])
+        self.assertFalse(review["pass"])
+        self.assertTrue(any("理解门证据不完整" in issue for issue in review["issues"]))
 
 
 if __name__ == "__main__":

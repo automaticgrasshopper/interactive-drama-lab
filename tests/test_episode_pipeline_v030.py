@@ -10,13 +10,13 @@ from backend.production_worker import ProductionManager, REQUIRED_BACKEND_REFERE
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class EpisodePipelineV041Test(unittest.TestCase):
+class EpisodePipelineV043Test(unittest.TestCase):
     def test_skill_package_contains_only_runtime_files(self):
         skill_root = ROOT / "skill" / "episode-generator"
         files = {
             path.relative_to(skill_root).as_posix()
             for path in skill_root.rglob("*")
-            if path.is_file() and "__pycache__" not in path.parts
+            if path.is_file() and "__pycache__" not in path.parts and ".DS_Store" not in path.parts
         }
         self.assertEqual(
             files,
@@ -37,10 +37,10 @@ class EpisodePipelineV041Test(unittest.TestCase):
             },
         )
 
-    def test_manifest_and_skill_are_v041(self):
+    def test_manifest_and_skill_are_v043(self):
         manifest = json.loads((ROOT / "skill" / "episode-generator" / "reference-manifest.json").read_text(encoding="utf-8"))
         skill = (ROOT / "skill" / "episode-generator" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertEqual(manifest["skill_version"], "v0.1.42")
+        self.assertEqual(manifest["skill_version"], "v0.1.43")
         self.assertNotIn("当前规范版本：", skill)
         self.assertIn("# 分集规划师", skill)
         self.assertNotIn("情绪脊分集规划师", skill)
@@ -56,10 +56,10 @@ class EpisodePipelineV041Test(unittest.TestCase):
         self.assertIn("### 带差异地合流", reference)
         self.assertIn("### 收扇", reference)
 
-    def test_story_rhythm_platform_is_aligned_to_v041(self):
+    def test_story_rhythm_platform_is_aligned_to_v043(self):
         platform = (ROOT / "h5" / "影视互动游戏故事节奏验证.html").read_text(encoding="utf-8")
-        self.assertIn("episode-generator v0.1.42 分集规划师", platform)
-        self.assertIn("0.1.42-workbench", platform)
+        self.assertIn("episode-generator v0.1.43 分集规划师", platform)
+        self.assertIn("0.1.43-workbench", platform)
         self.assertIn("人话台词校验", platform)
         self.assertIn("dialogue-polish-then-independent-review", platform)
         self.assertNotIn("episode-generator v0.1.36", platform)
@@ -78,7 +78,7 @@ class EpisodePipelineV041Test(unittest.TestCase):
             {"upstream", "topology", "episode-writing", "dialogue-polish", "episode-quality-review"},
         )
 
-    def test_backend_v041_uses_one_compact_postwriting_quality_gate(self):
+    def test_backend_v043_uses_one_compact_postwriting_quality_gate(self):
         worker = (ROOT / "backend" / "production_worker.py").read_text(encoding="utf-8")
         self.assertIn('"pipeline": "episode-writing → dialogue-polish → episode-quality-review"', worker)
         self.assertIn('reference_phase="episode-quality-review"', worker)

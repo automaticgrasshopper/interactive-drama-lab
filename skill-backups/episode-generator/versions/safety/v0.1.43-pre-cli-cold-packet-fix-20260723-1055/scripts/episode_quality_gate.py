@@ -51,17 +51,6 @@ def read_episode(cache_root: Path, episode_id: str) -> tuple[Path, str]:
     return path, text
 
 
-def complete_script(artifact: str) -> str:
-    match = re.search(
-        r"^## 完整剧本\n\n(.*?)(?=^# 剧本分析)",
-        artifact,
-        re.MULTILINE | re.DOTALL,
-    )
-    if not match or not match.group(1).strip():
-        raise ValueError("分集缺少完整剧本正文")
-    return match.group(1).strip()
-
-
 def current_reference() -> tuple[str, str, str]:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     version = str(manifest.get("skill_version") or "")
@@ -75,15 +64,14 @@ def current_reference() -> tuple[str, str, str]:
 
 
 def build_packet(cache_root: Path, episode_id: str) -> dict[str, Any]:
-    path, artifact = read_episode(cache_root, episode_id)
-    script = complete_script(artifact)
+    path, script = read_episode(cache_root, episode_id)
     version, reference, reference_sha = current_reference()
     return {
         "packet_version": "episode-quality-gate-v1",
         "skill_version": version,
         "episode_id": episode_id,
         "script_path": str(path),
-        "script_sha256": sha256(artifact),
+        "script_sha256": sha256(script),
         "reference_name": REFERENCE_NAME,
         "reference_sha256": reference_sha,
         "required_checks": REQUIRED_CHECKS,

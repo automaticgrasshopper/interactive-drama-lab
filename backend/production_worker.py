@@ -57,6 +57,13 @@ REQUIRED_BACKEND_REFERENCE_PHASES = {
     "dialogue-polish",
     "episode-quality-review",
 }
+EPISODE_COMPREHENSION_FIELDS = {
+    "character_task": "人物任务",
+    "trigger_cost": "触发代价",
+    "action_result": "行动结果",
+    "next_entry": "下一入口",
+}
+EPISODE_COMPREHENSION_FAILURE_MARKERS = ("正文不清楚", "无法判断", "无法确认", "信息不足", "未说明")
 
 
 def visible_count(value: Any) -> int:
@@ -282,7 +289,7 @@ class ProductionManager:
         return {
             "role": "user",
             "content": (
-                "【v0.1.42 长项目压缩】本轮只写清楚各分集的具体事件、选择后果、连接和结局，不得省略分集或边。"
+                "【v0.1.43 长项目压缩】本轮只写清楚各分集的具体事件、选择后果、连接和结局，不得省略分集或边。"
                 "一个节点就是一集，使用 episode-NNN；每集 text 用能复述的短梗概表达：人物目标、阻力、实际结果和下一催化。script 留空。"
                 "不展开执行卡、情绪坐标、候选方案、审查过程或逐集分析。"
             ),
@@ -293,7 +300,7 @@ class ProductionManager:
         return {
             "role": "user",
             "content": (
-                "【episode-generator v0.1.42 覆盖指令】忽略上文关于情绪数值、容量公式、候选淘汰、互动配额、生成日志、生产卡和分镜字段的要求。"
+                "【episode-generator v0.1.43 覆盖指令】忽略上文关于情绪数值、容量公式、候选淘汰、互动配额、生成日志、生产卡和分镜字段的要求。"
                 "本轮只整理故事主线和分集拓扑：资产沿用上游，每个流程节点就是一集，必须使用 episode-NNN。"
                 "选择写在当前集结尾，每个选项直接指向另一集；选择结果、反馈、汇合和结局节点也必须各自是一集。禁止把多个节点折叠进一集。"
                 "只在玩家确实拥有两个以上合理行动时设置选择，不为凑类型或数量增加互动。"
@@ -967,10 +974,13 @@ class ProductionManager:
             "episode_id": node.get("id"),
             "script_sha256": digest,
             "script": node.get("script"),
-            "entry_state": node.get("entry_state") or "",
-            "exit_state": node.get("exit_state") or "",
-            "incoming_results": context["incoming_memories"],
-            "successor_entry_conditions": context["successor_entry_conditions"],
+            "incoming_results": [
+                {
+                    "id": item["id"],
+                    "actual_facts": item["audience_summary"],
+                }
+                for item in context["incoming_memories"]
+            ],
             "formal_assets": {
                 "characters": [item.get("name") for item in data.get("characters") or []],
                 "scenes": [item.get("name") for item in data.get("scenes") or []],
@@ -981,9 +991,14 @@ class ProductionManager:
         system = (
             f"你是 episode-generator {current_episode_skill_version()} 的逐集独立复检员。"
             "这是正文与整场人话复写完成后的第二遍审查，不得沿用作者自检，只判不改。"
-            "逐场通读并绑定给定正文SHA；问题必须可定位且归属 causal、dialogue 或 ending。"
+            "先只凭已经发生的有限前情和正文完成理解门四项，再逐场通读七项，并绑定给定正文SHA。"
+            "不得推测作者预期出口或后续剧情；结尾只判断是否逼出具体行动、问题或真实选择。"
+            "问题必须可定位且归属 causal、dialogue 或 ending。"
             "普通话检查必须在evidence中分别给dialogue_location/dialogue_proof和narration_location/narration_proof。"
-            "只返回JSON：{\"covered_checks\":[\"逐字检查项\"],\"issues\":[\"归属｜位置｜具体问题\"],\"evidence\":[{\"check\":\"检查项\"}],"
+            "只返回JSON：{\"comprehension\":{\"character_task\":{\"answer\":\"普通话复述\",\"proof\":\"正文依据\"},"
+            "\"trigger_cost\":{\"answer\":\"普通话复述\",\"proof\":\"正文依据\"},\"action_result\":{\"answer\":\"普通话复述\",\"proof\":\"正文依据\"},"
+            "\"next_entry\":{\"answer\":\"普通话复述\",\"proof\":\"正文依据\"}},\"covered_checks\":[\"逐字检查项\"],"
+            "\"issues\":[\"归属｜位置｜具体问题\"],\"evidence\":[{\"check\":\"检查项\"}],"
             "\"note\":\"简短结论\"}。没有实际问题时issues必须为空，不得仅因句子短或个人风格判错。"
         )
         result = self._json_chat(
@@ -998,6 +1013,15 @@ class ProductionManager:
         )
         covered = {str(item) for item in result.get("covered_checks") or []}
         issues = [str(item) for item in result.get("issues") or []] if isinstance(result.get("issues"), list) else ["复检结果缺少问题列表"]
+        comprehension = result.get("comprehension") if isinstance(result.get("comprehension"), dict) else {}
+        for key, label in EPISODE_COMPREHENSION_FIELDS.items():
+            item = comprehension.get(key) if isinstance(comprehension.get(key), dict) else {}
+            answer = str(item.get("answer") or "").strip()
+            proof = str(item.get("proof") or "").strip()
+            if len(answer) < 4 or len(proof) < 6:
+                issues.append(f"理解门证据不完整｜当前集｜{label}")
+            elif any(marker in answer or marker in proof for marker in EPISODE_COMPREHENSION_FAILURE_MARKERS):
+                issues.append(f"理解门未通过｜当前集｜{label}")
         missing = [item for item in required_checks if item not in covered]
         if missing:
             issues.append("复检覆盖不完整｜当前集｜" + "、".join(missing))
@@ -1013,6 +1037,7 @@ class ProductionManager:
             "issues": issues,
             "covered_checks": sorted(covered),
             "required_checks": required_checks,
+            "comprehension": comprehension,
             "note": str(result.get("note") or ""),
             "evidence": evidence,
             "digest": digest,
@@ -1557,7 +1582,7 @@ class ProductionManager:
         return node.get("lightweight_status") == "已复检" and quality.get("pass") is True and quality.get("digest") == digest
 
     def _finish_from_checkpoint(self, project_id: str, run_id: str, data: dict[str, Any], pipeline: dict[str, Any]) -> None:
-        """Run the v0.1.42 write → dialogue polish → independent episode review pipeline."""
+        """Run the v0.1.43 write → dialogue polish → independent episode review pipeline."""
         order, predecessors, topology = self._graph(data)
         total = len(order)
         forge = data.get("__episodeForge") if isinstance(data.get("__episodeForge"), dict) else {}
