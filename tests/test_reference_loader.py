@@ -30,6 +30,20 @@ class ReferenceLoaderTests(unittest.TestCase):
         self.assertEqual(names, {"causal-episode-writing.md", "chinese-dialogue-craft.md"})
         self.assertIn("补口语组织（反过度压缩）", result["bundle"])
 
+    def test_written_text_profile_is_conditional_and_small(self):
+        base = loader.load_bundle("episode-writing")
+        profiled = loader.load_bundle("episode-writing", ("written-text",))
+        self.assertNotIn("written-text-to-dialogue.md", {item["name"] for item in base["files"]})
+        self.assertIn("written-text-to-dialogue.md", {item["name"] for item in profiled["files"]})
+        reference = next(item for item in profiled["files"] if item["name"] == "written-text-to-dialogue.md")
+        self.assertLess(reference["chars"], 1400)
+        for phase in ("dialogue-polish", "episode-quality-review"):
+            names = {
+                item["name"]
+                for item in loader.load_bundle(phase, ("written-text",))["files"]
+            }
+            self.assertIn("written-text-to-dialogue.md", names)
+
     def test_episode_quality_review_is_small_and_isolated(self):
         result = loader.load_bundle("episode-quality-review")
         self.assertEqual({item["name"] for item in result["files"]}, {"episode-quality-review.md"})

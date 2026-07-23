@@ -10,7 +10,7 @@ from backend.production_worker import ProductionManager, REQUIRED_BACKEND_REFERE
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class EpisodePipelineV043Test(unittest.TestCase):
+class EpisodePipelineV044Test(unittest.TestCase):
     def test_skill_package_contains_only_runtime_files(self):
         skill_root = ROOT / "skill" / "episode-generator"
         files = {
@@ -30,6 +30,7 @@ class EpisodePipelineV043Test(unittest.TestCase):
                 "references/episode-quality-review.md",
                 "references/public-output-and-progress.md",
                 "references/upstream-input-translation.md",
+                "references/written-text-to-dialogue.md",
                 "scripts/validate_and_assemble_scripts.py",
                 "scripts/validate_emotional_topology.py",
                 "scripts/validate_topology.py",
@@ -37,10 +38,10 @@ class EpisodePipelineV043Test(unittest.TestCase):
             },
         )
 
-    def test_manifest_and_skill_are_v043(self):
+    def test_manifest_and_skill_are_v044(self):
         manifest = json.loads((ROOT / "skill" / "episode-generator" / "reference-manifest.json").read_text(encoding="utf-8"))
         skill = (ROOT / "skill" / "episode-generator" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertEqual(manifest["skill_version"], "v0.1.43")
+        self.assertEqual(manifest["skill_version"], "v0.1.44")
         self.assertNotIn("当前规范版本：", skill)
         self.assertIn("# 分集规划师", skill)
         self.assertNotIn("情绪脊分集规划师", skill)
@@ -56,10 +57,10 @@ class EpisodePipelineV043Test(unittest.TestCase):
         self.assertIn("### 带差异地合流", reference)
         self.assertIn("### 收扇", reference)
 
-    def test_story_rhythm_platform_is_aligned_to_v043(self):
+    def test_story_rhythm_platform_is_aligned_to_v044(self):
         platform = (ROOT / "h5" / "影视互动游戏故事节奏验证.html").read_text(encoding="utf-8")
-        self.assertIn("episode-generator v0.1.43 分集规划师", platform)
-        self.assertIn("0.1.43-workbench", platform)
+        self.assertIn("episode-generator v0.1.44 分集规划师", platform)
+        self.assertIn("0.1.44-workbench", platform)
         self.assertIn("人话台词校验", platform)
         self.assertIn("dialogue-polish-then-independent-review", platform)
         self.assertNotIn("episode-generator v0.1.36", platform)
@@ -78,13 +79,20 @@ class EpisodePipelineV043Test(unittest.TestCase):
             {"upstream", "topology", "episode-writing", "dialogue-polish", "episode-quality-review"},
         )
 
-    def test_backend_v043_uses_one_compact_postwriting_quality_gate(self):
+    def test_backend_v044_uses_one_compact_postwriting_quality_gate(self):
         worker = (ROOT / "backend" / "production_worker.py").read_text(encoding="utf-8")
         self.assertIn('"pipeline": "episode-writing → dialogue-polish → episode-quality-review"', worker)
         self.assertIn('reference_phase="episode-quality-review"', worker)
         self.assertNotIn("_continuity_only_review", worker)
         self.assertNotIn("length_anchor", worker)
         self.assertNotIn("90%—110%", worker)
+
+    def test_written_text_reference_is_loaded_only_for_matching_current_node(self):
+        data = {"synopsis": "主角曾收到一封信。"}
+        plain_node = {"id": "episode-001", "text": "主角当面追问朋友。"}
+        text_node = {"id": "episode-002", "text": "主角打开短信，内容改变了行动。"}
+        self.assertNotIn("written-text", ProductionManager._reference_profiles(data, plain_node))
+        self.assertIn("written-text", ProductionManager._reference_profiles(data, text_node))
 
     def test_every_topology_node_normalizes_to_one_episode(self):
         data = {

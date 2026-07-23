@@ -1334,9 +1334,13 @@ flowchart TD
         +'  "scenes":[{"name":"正式场景名","time":"日/夜","inout":"内/外","look":"场景描述"}],\n'
         +'  "props":[{"name":"正式道具名","level":"core/normal","look":"固定外观","func":"剧情用途","appears":"分集id，顿号分隔"}],\n'
         +'  "outline":[{"stage":"起/承/转/合","minutes":"大致时间段","summary":"具体故事推进"}],\n'
-        +'  "nodes":[{"id":"episode-001","node_title":"分集标题","kind":"normal/choice/major/minor","sub":"结局节点可写end或mid","cast":"出场角色，顿号分隔","loc":"正式场景名","time":"日/夜 内/外","text":"本集梗概","choice_question":"仅选择集填写","next":[{"to":"episode-002","label":"具体行动选项或继续"}],"script":""}]\n'
+        +'  "nodes":[{"id":"episode-001","node_title":"分集标题","kind":"normal/choice/major/minor","sub":"结局节点可写end或mid","cast":"出场角色，顿号分隔","loc":"正式场景名","time":"日/夜 内/外","text":"本集梗概","choice_question":"仅选择集填写","next":[{"to":"episode-002","label":"具体行动选项或继续"}],"script":""}],\n'
+        +'  "beats":[{"t":0,"name":"拍名","V":-0.6,"D":-0.7,"note":"这一拍发生什么"}],\n'
+        +'  "payoffs":[{"beat":"翻盘拍名","flip":"D轴从被压到掌控翻了什么盘","enabledBy":"促成翻盘的choice节点id","irony":"该爽点下观众已知/主角未知的风险"}],\n'
+        +'  "flowEnter":0\n'
         +'}\n'
-        +'硬规则：编号连续且唯一；所有节点从 episode-001 可达；普通集只有一个后续；选择集有2—4个不同目标；同一选择的不同选项不得直接指向同一集；major和minor均为结局且没有后续；major与minor数量之和等于总结局数。';
+        +'硬规则：编号连续且唯一；所有节点从 episode-001 可达；普通集只有一个后续；选择集有2—4个不同目标；同一选择的不同选项不得直接指向同一集；major和minor均为结局且没有后续；major与minor数量之和等于总结局数。\n'
+        +'情绪脊验证字段（只进 JSON，不进玩家可见文本）：beats 按情绪脊真实走势打点，t＝分钟、V 与 D 均必给、取 −1 到 1，至少 5 拍覆盖全程且含拐点（D 负翻正的翻盘拍、V 正翻负的跌落拍）；力度谱：开场压制 V≤−0.35、高潮 V≥+0.8、最高−最低落差≥1.4、收尾回正 +0.2～+0.5、两个释放拍（V＞+0.4）之间须有 V≤−0.2 回落；payoffs 至少 1 条且 enabledBy 必须是真实 choice 节点 id；flowEnter＝玩家大概第几分钟进入心流。';
       document.getElementById('req').value=forgeReq;
       return;
     }
@@ -1503,7 +1507,7 @@ flowchart TD
   var SYS='你是互动短剧结构生成器，遵循《互动短剧设计规则书》。⓪ 用户输入第一性：用户已写到的任何颗粒度（描述或上传原稿里的大纲/分场/人物/场景/道具/台词/镜头/分支/抉择/结局）都是最高权威，一律原样采纳、禁止改写或用你的创意顶掉，你只补空白层并叠加节奏/结构/校验层；冲突时取更细颗粒度的一方；标了「第一性/原稿」的内容优先级高于本系统提示的默认创作倾向。⚠ 第零优先：先做输入自洽检验（容量公式：主线≥15分＋每条完整情感弧光≈20分＋每名露脸角色≈5分），用户内容承诺与时长矛盾时，真实意图＝内容承诺，上调时长并重定引擎，裁决写进 consistency。核心：① 题材层：判断题材够不够成为产品；弱题材靠类型融合破局（底色＝用户点的类型，融一个供能类型当惊喜），每阶段配强敌＋可克服难关；必须有受限的金手指（金手指不限异能/强能力：历史权谋·谍战中智力、乙女纯爱中主角魅力本身也算，同须限定使用规则与场景）；需推荐或融合题材时优先取当下男频/女频热门池（男频：历史模拟器/无限流/系统文/悬疑恐怖/盗墓冒险/末日生存/修仙炼丹/游戏竞技；女频：宫斗宅斗/综艺想象/年代发家/萌宝萌娃/穿书逆袭/纯爱百合），非封闭，用户点名池外照做。② 引擎由时长定（新口径：短10–15／中15–25／长25＋）：短（10–15分）＝结局树（装置先行→一次兑现＋一记反转→抉择树→2–4结局）；中（15–25分）＝过渡（主干＋关键分支＋汇合）；长（25分以上）＝情绪弧（起承转合七拍＋PAD坐标V/A/D＋反差催化剂）。③ 前五分钟必有一个教学交互点，落在第一个情节点高潮；起段固定 1 个选错即死。④ 结局数＝三种之和(末段主结局＋中间大结局0–1＋小结局/死路)，用户输入的就是总数；先按题材定主结局(下限2，≤10min纯爱/抽象可1)、再按余量铺小结局(N≥5尽量多于主结局)，中间大结局＝隐藏结局仅0–1；分配按软区间表(见执行卡【3】)；每个结局一个鲜明的价值/情绪落点。⑤ 一句话定位须含期待/反转/钩子/情绪四要素。⑥ 大纲与节点文字必须具体可执行：写真实场景、真实事件、画面内的人，禁止“主角遇到困难”这类空话。〔INST〕⑦ 剧本层：台词口语化（默认中文，用户提及西幻/具体国家用该语种）、固定镜头为主、以台词传信息传情感、对话符合人设、人物先建置后出场；先产出人物全状态卡与场景日夜状态卡。角色分类用四类固定标签：恋爱类＝主角/男主/女主/配角/NPC，非恋爱类＝主角/主配/配角/NPC；NPC＝跨场出现但没戏、只需固定形象的功能角色也要列。道具分两级入 props：核心道具（金手指载体/世界规则物证/异性信物/反转扳机，至少一项功能）与普通道具（跨场需固定形象）；单场无功能道具不列。〔/INST〕⑧ 反俗套：装置三选一弃第一直觉（高频装置默认禁用）；反转必须连锁链≥2环、禁外部事故；每个爽点＝D轴翻盘×玩家抉择促成×反讽风险，登记进 payoffs。⑨ 单点情节题材透镜：每个关键情节先落地一件具体的事，再过题材透镜换成题材独有的反差物（融合题材从供能类型取），收口在题材逻辑内升级禁止常识性收口，钩子留下一段催化剂口子（最强＝双义钩子）；平情节只许当铺陈不许作节点落点。〔INST〕台词比重高于动作，全部script通读顺畅。〔/INST〕⑩ 力度谱：开场压制V∈[−0.6,−0.35]且D≤−0.5；首个释放点落差≥0.7；中段最强压制V≤−0.6落差≥1.0反号；高潮释放V≥+0.8落差≥1.4且D翻正；收尾V∈[+0.2,+0.5]；释放强度看落差；两个释放拍之间必有V≤−0.2回落。收到【输入】后只返回规定 JSON，不要多余文字。';
   var EXEC=(document.getElementById('execcard').textContent||'').trim();
   var RB=(document.getElementById('rulebook').textContent||'').trim();
-  var FORGE_SYS='你是 episode-generator v0.1.43 分集规划师。继承用户已经确认的游戏企划和正式角色、场景、道具，只整理故事主线与分集拓扑。用户明确写出的主线、人物关系、世界规则、关键事件、节点数量和结局优先。情绪脊是唯一上层驱动：用人物幻想、现实风险、现实落点、控制权变化和下一催化组织起、承、转、合。一个流程节点就是一集，不存在剧情节点到分集的二次映射。拓扑最小单元是玩家动作、状态写入、独立结果。每集只围绕一个主要问题，梗概写清人物目标、具体阻力、本集核心变化和下一催化。只在玩家确实拥有两个以上合理行动时设置选择；每个选项先进入不同结果集，汇合时保留未解决的关系、信息、风险、资源和承诺差异。不要输出情绪坐标、容量公式、候选方案、互动配额、生成日志、自评、生产卡、分镜字段或完整剧本。只返回用户要求的合法 JSON。';
+  var FORGE_SYS='你是 episode-generator v0.1.44 分集规划师。继承用户已经确认的游戏企划和正式角色、场景、道具，只整理故事主线与分集拓扑。用户明确写出的主线、人物关系、世界规则、关键事件、节点数量和结局优先。情绪脊是唯一上层驱动：用人物幻想、现实风险、现实落点、控制权变化和下一催化组织起、承、转、合。一个流程节点就是一集，不存在剧情节点到分集的二次映射。拓扑最小单元是玩家动作、状态写入、独立结果。每集只围绕一个主要问题，梗概写清人物目标、具体阻力、本集核心变化和下一催化。只在玩家确实拥有两个以上合理行动时设置选择；每个选项先进入不同结果集，汇合时保留未解决的关系、信息、风险、资源和承诺差异。情绪脊坐标（beats 的 V/D）与爽点登记（payoffs）只进 JSON 字段供工作台验证拓扑与情绪脊，绝不写进任何玩家可见文本（梗概/台词/选项/结局）。除此之外不输出容量公式、候选方案、互动配额、生成日志、自评、生产卡、分镜字段或完整剧本。只返回用户要求的合法 JSON。';
   // 与当前 episode-generator 对齐：保留本台既有 JSON 接口，只以这份规则裁决“剧本该怎么写”。
   var EPISODE_WRITING_POLICY='\n\n【分集规划师·剧本写作与校验口径（写正文与正文校验的唯一标准，优先于其它写作提法执行）】\n'
     +'交付物是能直接给演员与分镜用的互动影视剧本，不是大纲、小说梗概、设定说明或台词合集。保持本台 JSON 字段与节点跳转不变；每个 nodes[].script 必须是完整现场剧本；本台专有约定（五个戏剧字段 dramatic_core/emotional_owner/power_shift/information_gap/dialogue_intent、无数值系统、PAD 不可见、场景分日夜、道具两级表、引号内原句台词）全部照旧保留。\n'
@@ -1720,7 +1724,7 @@ flowchart TD
   function logLine(s){ logHead+=s+'\n'; logEl.textContent=logHead; logEl.scrollTop=logEl.scrollHeight; }
   function logStream(chainText){ logEl.textContent=logHead+chainText; logEl.scrollTop=logEl.scrollHeight; }
 
-  // ===== v0.1.43 终检：只验证可交付结构，不再重审内容或计算情绪数值 =====
+  // ===== v0.1.44 终检：只验证可交付结构，不再重审内容或计算情绪数值 =====
   function validateData(d){
     var hard=[], soft=[];
     function chk(name,ok,detail){ hard.push({name:name,ok:!!ok,detail:detail||''}); }
@@ -1755,7 +1759,7 @@ flowchart TD
     }
     if(d.__episodeForge){
       var ef=d.__episodeForge, detail='已写作 '+(ef.generated||0)+'/'+(ef.total||ns.length)+'、台词锁稿 '+(ef.locked||0)+'/'+(ef.total||ns.length);
-      chk('v0.1.43 分集生产链完成',ef.status==='completed',detail);
+      chk('v0.1.44 分集生产链完成',ef.status==='completed',detail);
       var noScript=ns.filter(function(n){return !String(n.script||'').trim();});
       chk('全部分集均有完整剧本',noScript.length===0,noScript.map(function(n){return n.id;}).join('、'));
       var unlocked=ns.filter(function(n){return n.lightweight_status!=='已口语化'||!String(n.dialogue_polished_digest||'').trim();});
@@ -2104,7 +2108,7 @@ flowchart TD
     aa.href=u; aa.download='校准数据_'+out.length+'条_'+new Date().toISOString().slice(0,10)+'.json'; aa.click(); URL.revokeObjectURL(u);
   });
 
-  // ===== v0.1.43 分集工坊：冻结拓扑 → 逐集写作 → 人话复写 → 独立复检 → 锁稿 =====
+  // ===== v0.1.44 分集工坊：冻结拓扑 → 逐集写作 → 人话复写 → 独立复检 → 锁稿 =====
   function jsonFromText(s){
     s=String(s||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
     var a=s.indexOf('{'),b=s.lastIndexOf('}'); if(a>=0&&b>a)s=s.slice(a,b+1);
@@ -2154,7 +2158,7 @@ flowchart TD
     return {title:storyTitle(d),logline:d.logline||'',synopsis:d.synopsis||'',characters:chars,scenes:d.scenes||[],props:d.props||[],topology:g.topology,current:n,predecessors:g.pred[n.id]||[],incoming_memories:(g.pred[n.id]||[]).map(function(id){var p=(d.nodes||[]).filter(function(x){return x.id===id;})[0];return p?{id:id,audience_summary:p.audience_summary||p.working_summary||'',exit_state:p.exit_state||''}:null;}).filter(Boolean)};
   }
   function writeEpisode(d,n,g){
-    var sys='你是 episode-generator v0.1.43 的分集编剧（写作口径严格依 references/causal-episode-writing.md 与 chinese-dialogue-craft.md）。拓扑已冻结，只写当前一集，不改编号、连接、选项、结局和正式资产名。'
+    var sys='你是 episode-generator v0.1.44 的分集编剧（写作口径严格依 references/causal-episode-writing.md 与 chinese-dialogue-craft.md）。拓扑已冻结，只写当前一集，不改编号、连接、选项、结局和正式资产名。'
       +'【相邻因果拍】从人物已面对的具体事情开始，按需写出：触发（看见/听见/遭遇什么）→判断（依已知怎样理解，可错但来源清楚）→欲望（此刻想保住/得到/阻止/确认什么）→行动→阻力（空间/人物/规则/时间/能力）→调整（追问/改口/换法/求助/放弃/加码）→即时后果（位置/关系/物件/证据/风险/知情/权限的可见变化）→下一压力。不缺会让因果断裂的那一拍。'
       +'【完整场面】本集主要冲突至少完整演一次：先用一种办法，对方/环境/规则形成有效阻力使其不能直接奏效，再调整/加码/让步/换法才取得该节即时后果；多角色场至少一轮带阻力的直接交锅，不用旁白概述立场。'
       +'【不跳过程】跑向/伸手/打开/使用/追赶/对峙写出接触、距离、阻力、打断或即时风险，不直跳事后；物件证据角色组织先有现场来源；角色拒绝/等待/观察/不行动也触发世界反应，世界不静止等玩家；只写当前认知与有限内心，不全知解释幕后。'
@@ -2174,7 +2178,7 @@ flowchart TD
     if(genStopped)throw new Error('stopped');
     if(onRound)onRound(1,'人话台词校验');
     var before=String(n.script||''), skeleton=nonDialogueSkeleton(before);
-    var sys='你是 episode-generator v0.1.43 的整场人话台词复写编剧（严格依 references/chinese-dialogue-craft.md 的两步轻量复写）。只改台词，锁定动作、事实、因果、选择、结尾、场次与正式资产名，不增删事实与行动。'
+    var sys='你是 episode-generator v0.1.44 的整场人话台词复写编剧（严格依 references/chinese-dialogue-craft.md 的两步轻量复写）。只改台词，锁定动作、事实、因果、选择、结尾、场次与正式资产名，不增删事实与行动。'
       +'第一步去作者腔：把像说明/总结/金句的承重台词改成人物针对眼前对象会说的话，优先改成确认/追问/拒绝/补充，必要时拆成自然来回。硬判据（命中即改）：角色互换后仍成立、连续三句都在交代信息、人物直接总结自身动机/主题/关系/选择逻辑。'
       +'第二步补口语组织（反过度压缩，去作者腔不等于压短句子）：逐句查①对象（这句对谁说，能否从紧邻动作唯一确定；同时承担指责/划界/求助/靠近时对象与关系指向必须说出来）②承接（对上一句是接/顶/躲/岔，把逻辑结论式回应拆成先接住或顶回再追问的两拍）③态度（关键关系话轮能指出携带立场/关系/情绪的字词；纯事实回答/危急口令/程序确认可以没有，但需被相邻话轮或现场动作接住）④删字测试（新补的字删掉后态度不丢就是废字，去掉）。称谓、代词、状态副词、语气词、动词重叠只要承担对象/关系/时间承接/态度/话轮功能就不是废字，不得为简洁删。'
       +'两条硬失败：①连续四个话轮都只剩最短语义骨架、无复述/迟疑/改口/态度/关系成分（危急口令/无线电协作/程序确认例外）；②复写后句子更短但删掉了有作用的称谓/代词/状态副词/语气词/关系指向（“你还能走吗”压成“能走吗”、“跟上我”压成“跟上”）。功能信息（规则/代价/因果）必须仍一遍听懂，不因口语化变谜。不得修改场次、动作骨架、事实、选择、结局和正式资产名。只返回JSON。';
@@ -2192,7 +2196,7 @@ flowchart TD
       if(genStopped)throw new Error('stopped');
       attempt++;if(onRound)onRound(attempt,'逐集独立复检');
       return sha256Text(n.script).then(function(digest){
-        var sys='你是 episode-generator v0.1.43 的逐集独立复检员。这是正文与整场人话复写完成后的第二遍审查，不得沿用作者自检，只判不改。先只凭已经实际发生的有限前情和正文完成理解门四项，再逐场通读给定七项，并绑定当前正文SHA。不得推测作者预期出口或后续剧情；结尾只判断是否逼出具体行动、问题或真实选择。普通话检查必须把台词与非台词描述分别顺读，并在证据中分别给dialogue_location/dialogue_proof与narration_location/narration_proof。问题必须写成“归属｜位置｜具体问题”，归属只用 causal、dialogue 或 ending。不得因句子短、留白或个人偏好判错。只返回JSON。';
+        var sys='你是 episode-generator v0.1.44 的逐集独立复检员。这是正文与整场人话复写完成后的第二遍审查，不得沿用作者自检，只判不改。先只凭已经实际发生的有限前情和正文完成理解门四项，再逐场通读给定七项，并绑定当前正文SHA。不得推测作者预期出口或后续剧情；结尾只判断是否逼出具体行动、问题或真实选择。普通话检查必须把台词与非台词描述分别顺读，并在证据中分别给dialogue_location/dialogue_proof与narration_location/narration_proof。问题必须写成“归属｜位置｜具体问题”，归属只用 causal、dialogue 或 ending。不得因句子短、留白或个人偏好判错。只返回JSON。';
         var payload={episode_id:n.id,script_sha256:digest,script:n.script,incoming_results:(g.pred[n.id]||[]).map(function(id){var p=(d.nodes||[]).filter(function(x){return x.id===id;})[0];return p?{id:id,actual_facts:p.audience_summary||p.working_summary||''}:null;}).filter(Boolean),formal_assets:{characters:(d.characters||[]).map(function(x){return x.name;}),scenes:(d.scenes||[]).map(function(x){return x.name;}),props:(d.props||[]).map(function(x){return x.name;})},required_checks:checks};
         return llmJson([{role:'system',content:sys},{role:'user',content:JSON.stringify(payload)+'\n返回：{"comprehension":{"character_task":{"answer":"普通话复述","proof":"正文依据"},"trigger_cost":{"answer":"普通话复述","proof":"正文依据"},"action_result":{"answer":"普通话复述","proof":"正文依据"},"next_entry":{"answer":"普通话复述","proof":"正文依据"}},"covered_checks":["逐字检查项"],"issues":["问题"],"evidence":[{"check":"检查项"}],"note":"简短结论"}'}],false).then(function(x){
           var covered=(x&&Array.isArray(x.covered_checks))?x.covered_checks:[],issues=(x&&Array.isArray(x.issues))?x.issues.slice():['复检结果缺少问题列表'];
@@ -2204,7 +2208,7 @@ flowchart TD
           n.episode_audit={digest:digest,reviews:[{name:'quality',pass:issues.length===0,digest:digest,comprehension:comprehension,covered_checks:covered,required_checks:checks,issues:issues,evidence:evidence,note:(x&&x.note)||''}]};
           if(!issues.length){n.lightweight_status='已复检';return;}
           if(attempt>=3)throw new Error(n.id+' 逐集独立复检连续三次未通过');
-          var repairSys='你是 episode-generator v0.1.43 的逐集定点返修编剧。只修独立复检登记的问题，保留冻结拓扑、选项、状态效果、结局、正式资产名和无关场次。对白问题只改现有说话人的台词；因果或结尾问题用最小动作改动补足。不得用主题总结替代可见后果。只返回JSON。';
+          var repairSys='你是 episode-generator v0.1.44 的逐集定点返修编剧。只修独立复检登记的问题，保留冻结拓扑、选项、状态效果、结局、正式资产名和无关场次。对白问题只改现有说话人的台词；因果或结尾问题用最小动作改动补足。不得用主题总结替代可见后果。只返回JSON。';
           return llmJson([{role:'system',content:repairSys},{role:'user',content:JSON.stringify({context:forgeContext(d,n,g),script:n.script,issues:issues})+'\n返回：{"script":"返修后的完整剧本","entry_state":"当前入口事实","exit_state":"当前出口事实","working_summary":"本集实际发生的事"}'}],false).then(function(fixed){
             if(!fixed||!fixed.script)throw new Error(n.id+' 逐集复检返修未返回完整剧本');
             n.script=fixed.script;['entry_state','exit_state','working_summary'].forEach(function(k){if(fixed[k])n[k]=fixed[k];});
@@ -2218,7 +2222,7 @@ flowchart TD
   function forgeProject(d){
     if(!skillForgeOn()||!extOn('script_inst'))return Promise.resolve(d);
     var g=nodeGraph(d),ns=g.order,strict=inputPolicy().strict,writeIndex=0,auditIndex=0;
-    d.__episodeForge={version:'0.1.43-workbench',topology_frozen:true,status:'running',phase:'scripts',total:ns.length,generated:0,reviewed:0,locked:0,review_policy:'dialogue-polish-then-independent-review'};
+    d.__episodeForge={version:'0.1.44-workbench',topology_frozen:true,status:'running',phase:'scripts',total:ns.length,generated:0,reviewed:0,locked:0,review_policy:'dialogue-polish-then-independent-review'};
     pipelineSet('topology',100,'拓扑、流程图与情绪脊硬规则通过','pass');
     pipelineSet('scripts',0,'准备生成 '+ns.length+' 集完整剧本','active');
     pipelineOverall('生成全量剧本','active');
@@ -2370,7 +2374,7 @@ flowchart TD
           pipelineOverall('已交付','pass');
           logLine('✓ 生产与验收全部通过，已交付。分集剧本页会显示每集的同摘要锁稿状态与验收详情。');
           histSave({ time:new Date().toLocaleString('zh-CN',{hour12:false}), title:storyTitle(d), logline:(d.logline||''), synopsis:(d.synopsis||''), runId:d.__runId,
-            params:'时长'+lastT+'分/结局'+lastE+'/'+(tags.length?tags.join('＋'):'无标签')+'/'+model+'/'+(skillForgeOn()?'v0.1.43逐集独立复检':'快速草稿'),
+            params:'时长'+lastT+'分/结局'+lastE+'/'+(tags.length?tags.join('＋'):'无标签')+'/'+model+'/'+(skillForgeOn()?'v0.1.44逐集独立复检':'快速草稿'),
             pass:va.pass, attempts:attempt, log:logEl.textContent, analysisText:analysisText, json:c,
             input:{ brief:briefTxt, tags:tagsNow.slice(), dur:genDurSel, ends:genEndsSel, forgeMode:document.getElementById('forgeMode').value, docs:(DOCS.length?DOCS.map(function(dd){return {name:dd.name,text:dd.text};}):null), images:(IMAGES.length?IMAGES.map(function(im){return {name:im.name,type:im.type,dataUrl:im.dataUrl};}):null), intent:inputPolicy().label } });
           rememberBackendTask(null);

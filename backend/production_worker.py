@@ -289,7 +289,7 @@ class ProductionManager:
         return {
             "role": "user",
             "content": (
-                "【v0.1.43 长项目压缩】本轮只写清楚各分集的具体事件、选择后果、连接和结局，不得省略分集或边。"
+                "【v0.1.44 长项目压缩】本轮只写清楚各分集的具体事件、选择后果、连接和结局，不得省略分集或边。"
                 "一个节点就是一集，使用 episode-NNN；每集 text 用能复述的短梗概表达：人物目标、阻力、实际结果和下一催化。script 留空。"
                 "不展开执行卡、情绪坐标、候选方案、审查过程或逐集分析。"
             ),
@@ -300,7 +300,7 @@ class ProductionManager:
         return {
             "role": "user",
             "content": (
-                "【episode-generator v0.1.43 覆盖指令】忽略上文关于情绪数值、容量公式、候选淘汰、互动配额、生成日志、生产卡和分镜字段的要求。"
+                "【episode-generator v0.1.44 覆盖指令】忽略上文关于情绪数值、容量公式、候选淘汰、互动配额、生成日志、生产卡和分镜字段的要求。"
                 "本轮只整理故事主线和分集拓扑：资产沿用上游，每个流程节点就是一集，必须使用 episode-NNN。"
                 "选择写在当前集结尾，每个选项直接指向另一集；选择结果、反馈、汇合和结局节点也必须各自是一集。禁止把多个节点折叠进一集。"
                 "只在玩家确实拥有两个以上合理行动时设置选择，不为凑类型或数量增加互动。"
@@ -360,11 +360,20 @@ class ProductionManager:
     @staticmethod
     def _reference_profiles(data: Any, node: Any = None) -> tuple[str, ...]:
         text = json.dumps({"data": data, "node": node}, ensure_ascii=False)
+        node_text = json.dumps(node, ensure_ascii=False) if node is not None else ""
         profiles = []
         if any(word in text for word in ("悬疑", "惊悚", "犯罪", "反转", "秘密", "证据")):
             profiles.append("suspense")
         if any(word in text for word in ("谈判", "审讯", "威胁", "举证", "对质")):
             profiles.append("confrontation")
+        written_text_markers = (
+            "信件", "书信", "来信", "信封", "短信", "短讯", "聊天记录", "聊天框",
+            "纸条", "字条", "便笺", "日记", "书页", "看书", "读书", "邮件", "电邮",
+            "报告", "病历", "档案", "通知", "名单", "清单", "告示", "海报",
+            "屏幕文字", "终端文字", "新闻标题", "留言", "备忘录",
+        )
+        if node_text and any(marker in node_text for marker in written_text_markers):
+            profiles.append("written-text")
         return tuple(profiles)
 
     def _load_reference_context(
@@ -1582,7 +1591,7 @@ class ProductionManager:
         return node.get("lightweight_status") == "已复检" and quality.get("pass") is True and quality.get("digest") == digest
 
     def _finish_from_checkpoint(self, project_id: str, run_id: str, data: dict[str, Any], pipeline: dict[str, Any]) -> None:
-        """Run the v0.1.43 write → dialogue polish → independent episode review pipeline."""
+        """Run the v0.1.44 write → dialogue polish → independent episode review pipeline."""
         order, predecessors, topology = self._graph(data)
         total = len(order)
         forge = data.get("__episodeForge") if isinstance(data.get("__episodeForge"), dict) else {}
