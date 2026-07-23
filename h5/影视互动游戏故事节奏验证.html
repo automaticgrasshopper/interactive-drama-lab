@@ -1728,6 +1728,8 @@ flowchart TD
   function validateData(d){
     var hard=[], soft=[];
     function chk(name,ok,detail){ hard.push({name:name,ok:!!ok,detail:detail||''}); }
+    // 完整剧本导入（strict）时，生成型硬规则降为软提示，不拦不重跑
+    function chkI(name,ok,detail){ if(inputPolicy&&inputPolicy().strict){ if(!ok) soft.push(name+(detail?('：'+detail):'')); } else chk(name,ok,detail); }
     var ns=Array.isArray(d.nodes)?d.nodes:[], byId={};
     ns.forEach(function(n){ if(n&&n.id)byId[n.id]=n; });
     chk('存在分集节点',ns.length>0,'实际 '+ns.length+' 集');
@@ -1768,6 +1770,38 @@ flowchart TD
       var episodes=Array.isArray(d.episodes)?d.episodes:[], badContract=episodes.filter(function(ep){return required.some(function(k){return !Object.prototype.hasOwnProperty.call(ep,k);});});
       chk('九字段分集结果完整',episodes.length===ns.length&&badContract.length===0,'分集结果 '+episodes.length+'/'+ns.length);
     }
+    // ===== 情绪脊 / 力度谱校验（按规则书正文；情绪对照与叠加验证页的数据源）=====
+    var beats=Array.isArray(d.beats)?d.beats:[];
+    chk('beats ≥ 5 拍（情绪脊验证数据）', beats.length>=5, 'beats '+beats.length+' 拍');
+    // D 轴翻盘拍（被压→掌控，爽点前提）
+    var hasDVal=beats.some(function(b){return b.D!=null;}), flip=false, minD=1;
+    beats.forEach(function(b){ if(b.D==null) return; if(minD<=-0.3 && +b.D>=0.3) flip=true; minD=Math.min(minD,+b.D); });
+    chkI('存在 D 轴翻盘拍（被压→掌控，爽点前提）', hasDVal&&flip, hasDVal?'':'beats 未给 D 值');
+    // 爽点登记 payoffs（翻盘×拉择促成×反讽）
+    var choiceIdSet={}; ns.forEach(function(n){ if(n.kind==='choice'||n.kind==='interaction') choiceIdSet[n.id]=1; });
+    var pf=Array.isArray(d.payoffs)?d.payoffs:[];
+    chkI('爽点登记 payoffs（翻盘×拉择促成×反讽）', pf.length>0&&pf.every(function(p){return p.enabledBy&&choiceIdSet[p.enabledBy]&&(p.irony||'').length>0;}), pf.length?'':'缺 payoffs 或 enabledBy 不是真实拉择节点');
+    // 力度谱软指标（按参数版本 P.force；阅读规则书数值）
+    if(beats.length>=3 && typeof P!=='undefined' && P.force){
+      var F=P.force, vs=beats.map(function(b){return +b.V;});
+      var openV=vs[0]; if(openV>F.openMax+0.05) soft.push('开场压制不足：首拍 V='+openV.toFixed(2)+'（要求 ≤'+F.openMax+'），前段没压制、后续释放缺落差。');
+      var peakV=Math.max.apply(null,vs), troughV=Math.min.apply(null,vs), drop=peakV-troughV;
+      if(peakV<F.peakMin) soft.push('高潮强度不足：全篇最高 V='+peakV.toFixed(2)+'（要求 ≥+'+F.peakMin+'）。');
+      if(drop<F.dropMin) soft.push('总落差不足：最高−最低='+drop.toFixed(2)+'（要求 ≥'+F.dropMin+'）——压制不深则释放无力。');
+      var lastSweet=-1, inflate=false;
+      for(var vi=0;vi<vs.length;vi++){ if(vs[vi]>F.sweet){ if(lastSweet>=0){ var dip=false; for(var vj=lastSweet+1;vj<vi;vj++){ if(vs[vj]<=F.dip) dip=true; } if(!dip) inflate=true; } lastSweet=vi; } }
+      if(inflate) soft.push('释放点过密：两个释放拍（V＞+'+F.sweet+'）之间没有 V≤'+F.dip+' 的回落，后一个释放体感会贬值。');
+      var lastV=vs[vs.length-1]; if(lastV>F.endHi+0.1) soft.push('收尾过高：末拍 V='+lastV.toFixed(2)+'（建议 +'+F.endLo+'～+'+F.endHi+'），从高点回落收束留余味。');
+    }
+    // 心流点：flowEnter 应在首个正向拐点之后、且不晚于全程 40%
+    if(d.flowEnter!=null && beats.length>=2){
+      var fe=+d.flowEnter, T2=lastT, firstRiseT=null;
+      for(var ri=1;ri<beats.length;ri++){ if(+beats[ri].V > +beats[ri-1].V){ firstRiseT=+beats[ri].t; break; } }
+      if(fe > T2*0.4) soft.push('心流点偏晚：第 '+fe+' 分（全程 '+T2+' 分的 '+Math.round(fe/T2*100)+'%），超 40% 才抓住人，前段易流失。');
+      if(firstRiseT!=null && fe < firstRiseT-1) soft.push('心流点偏早：第 '+fe+' 分早于首个正向拐点（第 '+firstRiseT+' 分），此前情绪仍在下行。');
+    }
+    // 情绪对照页的逐拍偏移分析（有本案例 beats 才出）
+    try{ if(typeof deviationIssues==='function'){ var dev=deviationIssues(); if(dev&&dev.length) soft=soft.concat(dev); } }catch(e){}
     return {hard:hard,soft:soft,pass:hard.every(function(h){return h.ok;})};
   }
   function analysisHtml(va, attempt){
