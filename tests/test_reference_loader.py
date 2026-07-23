@@ -53,8 +53,9 @@ class ReferenceLoaderTests(unittest.TestCase):
             / "written-text-to-dialogue.md"
         ).read_text(encoding="utf-8")
         self.assertIn("画内文字也不能单独充当动作坐标", reference)
+        self.assertIn("若没有后续作用，直接删除", reference)
         self.assertIn("删除叙述中引号里的文字后", reference)
-        self.assertIn("他在刚念完的第一行旁压下一道指痕", reference)
+        self.assertIn("他把还能辨清的内容复述完", reference)
 
     def test_episode_quality_review_is_small_and_isolated(self):
         result = loader.load_bundle("episode-quality-review")
