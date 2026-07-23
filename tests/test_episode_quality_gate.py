@@ -155,7 +155,7 @@ class EpisodeQualityGateTests(unittest.TestCase):
         self.assertIn("甲：我回来了。", packet["script"])
         self.assertNotIn("甲确认屋内是否有人", packet["script"])
         self.assertNotIn("后续节点编号列表", packet["script"])
-        self.assertEqual(packet["skill_version"], "v0.1.45")
+        self.assertEqual(packet["skill_version"], "v0.1.46")
 
     def test_comprehension_gate_requires_all_four_answers_and_proofs(self):
         gate = load_gate()

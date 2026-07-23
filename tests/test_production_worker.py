@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from backend.production_worker import ProductionManager, action_skeleton, current_episode_skill_version, dialogue_review_packet, normalize_scene_heading, public_error_message, script_digest
+from backend.production_worker import ProductionManager, action_skeleton, current_episode_skill_version, dialogue_review_packet, normalize_scene_heading, public_error_message, script_digest, written_text_coordinate_issues
 
 
 def valid_script(dialogue: str = "这件事我现在就去办。") -> str:
@@ -162,6 +162,17 @@ class QualityReviewCaptureManager(FakeManager):
 
 
 class ProductionWorkerTests(unittest.TestCase):
+    def test_written_text_cannot_be_an_action_coordinate(self):
+        bad = "沈砚在“明夜”与“三更”下各压一道指痕，随即收起抄页。"
+        fixed = (
+            "沈砚：明夜三更，淮河芦苇渡口。\n"
+            "他在刚念完的第一行旁压下一道指痕。\n"
+            "沈砚：火油两桶，进中间那辆车。\n"
+            "他在下一行旁又压一道指痕。"
+        )
+        self.assertTrue(written_text_coordinate_issues(bad))
+        self.assertEqual(written_text_coordinate_issues(fixed), [])
+
     def test_backend_reference_loader_issues_private_receipt(self):
         manager = object.__new__(ProductionManager)
         manager._reference_receipts = {}

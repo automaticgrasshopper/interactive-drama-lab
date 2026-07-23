@@ -64,6 +64,15 @@ EPISODE_COMPREHENSION_FIELDS = {
     "next_entry": "下一入口",
 }
 EPISODE_COMPREHENSION_FAILURE_MARKERS = ("正文不清楚", "无法判断", "无法确认", "信息不足", "未说明")
+WRITTEN_TEXT_ACTION_COORDINATE = re.compile(
+    r"(?:"
+    r"[“\"][^”\"\n]{1,40}[”\"](?:\s*与\s*[“\"][^”\"\n]{1,40}[”\"])?"
+    r"[^\n]{0,24}(?:压|按|圈|划|画|指|盖|标|点)"
+    r"|"
+    r"(?:压|按|圈|划|画|指|盖|标|点)[^\n]{0,24}"
+    r"[“\"][^”\"\n]{1,40}[”\"]"
+    r")"
+)
 
 
 def visible_count(value: Any) -> int:
@@ -104,6 +113,21 @@ def action_skeleton(value: Any) -> str:
             continue
         lines.append(line)
     return "\n".join(lines)
+
+
+def written_text_coordinate_issues(value: Any) -> list[str]:
+    """Reject narration that uses unreadable on-screen words as action coordinates."""
+    issues = []
+    for number, line in enumerate(str(value or "").splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or re.match(r"^[^：:\n]{1,20}[：:]", stripped):
+            continue
+        if WRITTEN_TEXT_ACTION_COORDINATE.search(stripped):
+            issues.append(
+                f"dialogue｜第{number}行｜画内文字被当作动作坐标；"
+                "先用台词说清所指事实，再以行序或刚念完的位置承接动作"
+            )
+    return issues
 
 
 def normalize_scene_heading(node: dict[str, Any]) -> bool:
@@ -289,7 +313,7 @@ class ProductionManager:
         return {
             "role": "user",
             "content": (
-                "【v0.1.45 长项目压缩】本轮只写清楚各分集的具体事件、选择后果、连接和结局，不得省略分集或边。"
+                "【v0.1.46 长项目压缩】本轮只写清楚各分集的具体事件、选择后果、连接和结局，不得省略分集或边。"
                 "一个节点就是一集，使用 episode-NNN；每集 text 用能复述的短梗概表达：人物目标、阻力、实际结果和下一催化。script 留空。"
                 "不展开执行卡、情绪坐标、候选方案、审查过程或逐集分析。"
             ),
@@ -300,7 +324,7 @@ class ProductionManager:
         return {
             "role": "user",
             "content": (
-                "【episode-generator v0.1.45 覆盖指令】忽略上文关于情绪数值、容量公式、候选淘汰、互动配额、生成日志、生产卡和分镜字段的要求。"
+                "【episode-generator v0.1.46 覆盖指令】忽略上文关于情绪数值、容量公式、候选淘汰、互动配额、生成日志、生产卡和分镜字段的要求。"
                 "本轮只整理故事主线和分集拓扑：资产沿用上游，每个流程节点就是一集，必须使用 episode-NNN。"
                 "选择写在当前集结尾，每个选项直接指向另一集；选择结果、反馈、汇合和结局节点也必须各自是一集。禁止把多个节点折叠进一集。"
                 "只在玩家确实拥有两个以上合理行动时设置选择，不为凑类型或数量增加互动。"
@@ -1040,6 +1064,8 @@ class ProductionManager:
             if len(str(plain.get(field) or "").strip()) < (2 if field.endswith("location") else 6):
                 issues.append("普通话复检证据不完整｜当前集｜台词与描述必须分别举证")
                 break
+        issues.extend(written_text_coordinate_issues(node.get("script")))
+        issues = list(dict.fromkeys(issues))
         return {
             "name": "quality",
             "pass": not issues,
@@ -1591,7 +1617,7 @@ class ProductionManager:
         return node.get("lightweight_status") == "已复检" and quality.get("pass") is True and quality.get("digest") == digest
 
     def _finish_from_checkpoint(self, project_id: str, run_id: str, data: dict[str, Any], pipeline: dict[str, Any]) -> None:
-        """Run the v0.1.45 write → dialogue polish → independent episode review pipeline."""
+        """Run the v0.1.46 write → dialogue polish → independent episode review pipeline."""
         order, predecessors, topology = self._graph(data)
         total = len(order)
         forge = data.get("__episodeForge") if isinstance(data.get("__episodeForge"), dict) else {}

@@ -44,6 +44,18 @@ class ReferenceLoaderTests(unittest.TestCase):
             }
             self.assertIn("written-text-to-dialogue.md", names)
 
+    def test_written_text_reference_forbids_text_only_action_coordinates(self):
+        reference = (
+            Path(__file__).parents[1]
+            / "skill"
+            / "episode-generator"
+            / "references"
+            / "written-text-to-dialogue.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("画内文字也不能单独充当动作坐标", reference)
+        self.assertIn("删除叙述中引号里的文字后", reference)
+        self.assertIn("他在刚念完的第一行旁压下一道指痕", reference)
+
     def test_episode_quality_review_is_small_and_isolated(self):
         result = loader.load_bundle("episode-quality-review")
         self.assertEqual({item["name"] for item in result["files"]}, {"episode-quality-review.md"})
