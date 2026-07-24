@@ -1,5 +1,9 @@
 # 分集 Skill 会话记忆与后续实验
 
+> **历史归档说明（2026-07-24）**
+>
+> 本文是平台与 Skill 解耦前的实验记录，仅供方法演进与血缘追溯，不再作为当前路径、同步或维护指引。文中的平台内 `skill/episode-generator/`、手动上传目录、备份目录及双向同步流程均已废弃。`episode-generator` 及其他互动内容 Skills 现统一维护于独立仓库 `automaticgrasshopper/interactive-content-skills`；互动节奏平台与该仓库之间不建立代码、文件或运行时依赖，实验结果只通过中性实验报告交流。
+
 记录日期：2026-07-17
 
 ## 一、当前目标
