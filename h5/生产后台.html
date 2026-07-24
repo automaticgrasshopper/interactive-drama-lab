@@ -80,8 +80,24 @@ async function showTask(projectId,runId){try{const j=await api('/api/tasks/'+enc
   const body='===== 生成日志（全流程） =====\n'+(log||'（本次任务没有日志：可能是旧任务，或日志写入前已完成。）')+'\n\n===== 任务状态（摘要） =====\n'+JSON.stringify(meta,null,2);
   $('assetBody').textContent=body;$('assetMask').style.display='flex'}catch(e){msg('gitMsg',e.message,'err')}}
 async function stopTask(projectId,runId){if(!confirm('停止这项后台生产任务？'))return;try{await api('/api/tasks/'+encodeURIComponent(projectId)+'/'+encodeURIComponent(runId)+'/stop',{method:'POST'});msg('gitMsg','已发送停止请求，任务会在当前步骤结束后停下。','ok');setTimeout(load,3200)}catch(e){msg('gitMsg',e.message,'err')}}
-function removeLocalTask(runId,title){try{const k='gen_history_v1';const a=JSON.parse(localStorage.getItem(k)||'[]').filter(r=>(r.runId||'')!==runId&&(r.title||'')!==title);localStorage.setItem(k,JSON.stringify(a))}catch(e){}}
-async function deleteTask(projectId,runId,title){if(!confirm('删除本地任务“'+(title||runId)+'”？\n\n仓库归档不会在这里修改。'))return;try{await api('/api/tasks/'+encodeURIComponent(projectId)+'/'+encodeURIComponent(runId),{method:'DELETE'});removeLocalTask(runId,title);msg('gitMsg','本地任务已删除。','ok');await load()}catch(e){msg('gitMsg',e.message,'err')}}
+async function removeLocalTask(runId,title){
+  // 同一项目的一套数据必须联动删除：编剧记录 + 绑定分镜记录 + 对应 CG 图片缓存。
+  try{const k='gen_history_v1';const a=JSON.parse(localStorage.getItem(k)||'[]').filter(r=>(r.runId||'')!==runId&&(r.title||'')!==title);localStorage.setItem(k,JSON.stringify(a))}catch(e){}
+  let dropped=[];
+  try{
+    const k='sb_history_v1',a=JSON.parse(localStorage.getItem(k)||'[]'),prefix='bs:'+String(title||'')+'|';
+    const keep=a.filter(r=>{const linked=String(r.boundStory||'')===String(title||'')||String(r.mergeKey||'').indexOf(prefix)===0;if(linked)dropped.push(r);return !linked});
+    localStorage.setItem(k,JSON.stringify(keep));
+  }catch(e){}
+  // 分镜 CG 存在 IndexedDB sb_cg/img；按被删记录 id 前缀清掉，避免元数据删了但图片仍占空间。
+  if(dropped.length&&window.indexedDB){
+    await new Promise(resolve=>{const q=indexedDB.open('sb_cg',1);q.onerror=()=>resolve();q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('img'))q.result.createObjectStore('img')};q.onsuccess=()=>{const db=q.result;if(!db.objectStoreNames.contains('img')){db.close();resolve();return}const ids=new Set(dropped.map(r=>String(r.id||'')).filter(Boolean));const tx=db.transaction('img','readwrite'),st=tx.objectStore('img'),cur=st.openCursor();cur.onsuccess=e=>{const c=e.target.result;if(c){for(const id of ids){if(String(c.key).indexOf(id+'|')===0){c.delete();break}}c.continue()}};tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>{db.close();resolve()}}});
+  }
+  // 共享数据包台账同步销据；用户单传分镜不在此列。
+  try{const k='dp_ledger_v1',m=JSON.parse(localStorage.getItem(k)||'{}');delete m[title];localStorage.setItem(k,JSON.stringify(m))}catch(e){}
+  return dropped.length;
+}
+async function deleteTask(projectId,runId,title){if(!confirm('删除本地任务“'+(title||runId)+'”？\n\n将同时删除该项目的编剧记录、绑定分镜和本机 CG 缓存；用户单传分镜不受影响。\n仓库归档不会在这里修改。'))return;try{await api('/api/tasks/'+encodeURIComponent(projectId)+'/'+encodeURIComponent(runId),{method:'DELETE'});const sbCount=await removeLocalTask(runId,title);msg('gitMsg','本地任务已删除'+(sbCount?'，并清理 '+sbCount+' 条绑定分镜及其 CG。':'。'),'ok');await load()}catch(e){msg('gitMsg',e.message,'err')}}
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function settingsPayload(){const p={provider:$('provider').value,base_url:$('base').value.trim(),model:$('model').value.trim(),validator_model:$('validator').value.trim(),image_model:$('imageModel').value.trim(),auto_commit:$('autoCommit').checked};if($('key').value.trim())p.api_key=$('key').value.trim();return p}
 async function openAsset(btn){try{const html=await fetch(btn.dataset.file).then(r=>{if(!r.ok)throw new Error('资料读取失败');return r.text()});const doc=new DOMParser().parseFromString(html,'text/html');const node=doc.getElementById(btn.dataset.script);if(!node)throw new Error('未找到对应规则内容');const text=(node.textContent||'').trim();$('assetTitle').textContent=btn.dataset.title;$('assetMeta').textContent=text.length+' 字符';$('assetBody').textContent=text;$('assetMask').style.display='flex'}catch(e){msg('gitMsg',e.message,'err')}}
