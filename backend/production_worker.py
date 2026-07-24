@@ -321,6 +321,34 @@ class ProductionManager:
         }
 
     @staticmethod
+    def _duration_engine_instruction(duration: int) -> dict[str, str]:
+        if duration <= 15:
+            rule = (
+                "当前单线时长属于短片（T≤15）：必须用结局树。装置先行，前15%完成世界/装置/代价暗示；"
+                "随后一次兑现加一记反转；设置1–3个会改变结局的抉择，形成2–4个价值落点鲜明的结局。"
+                "禁止套长片七拍、四段互动配额或多章情绪弧。"
+            )
+        elif duration <= 30:
+            rule = (
+                "当前单线时长属于中片（15<T≤30）：必须用主干＋关键分支＋可见后果＋带差异汇合的过渡逻辑。"
+                "故事要有完整起承转合；只在关键行动处设分支，每个选项先进入不同结果集，再携带关系/信息/风险/资源差异汇合。"
+                "禁止套短片密集结局树，也禁止强套长片多章和四段满载配额。"
+            )
+        else:
+            rule = (
+                "当前单线时长属于长片（30<T≤60）：必须用完整情绪弧。主干走完起承转合与七拍，"
+                "分支强收敛但保留状态差异，末段用阶梯式岔点分配主结局；四段互动数量按T/60缩放。"
+            )
+        return {
+            "role": "user",
+            "content": (
+                f"【单线时长硬分档】T={duration}分钟，T表示从开头到一个结局的一次完整观看路径，不是全分支素材相加。"
+                + rule
+                + "60分钟是硬上限；不得自行上调，内容超载时裁剪次要支线、功能角色或次要弧光。"
+            ),
+        }
+
+    @staticmethod
     def _lightweight_topology_instruction() -> dict[str, str]:
         return {
             "role": "user",
@@ -409,7 +437,8 @@ class ProductionManager:
         self._log(project_id, run_id, f"题材输入：{'、'.join(tags) if tags else '未手动选择标签'}")
         self._log(project_id, run_id, f"系统检测：{'、'.join(detected) if detected else '通用剧情规则'}；依据为输入中的题材词、事件类型与交流场景")
         self._log(project_id, run_id, f"故事任务：{brief[:240] or '未提供简述'}")
-        self._log(project_id, run_id, f"体量裁决：{duration} 分钟 · {endings} 个结局 · {'长项目分段协议' if compact_mode else '标准拓扑协议'}")
+        engine = "短片结局树" if duration <= 15 else "中片过渡结构" if duration <= 30 else "长片情绪弧"
+        self._log(project_id, run_id, f"体量裁决：单线 {duration} 分钟 · {endings} 个结局 · {engine} · {'长项目分段协议' if compact_mode else '标准拓扑协议'}")
         self._log(project_id, run_id, f"输入方式：{summary.get('intent') or '直接描述'}；附件：文稿 {len(summary.get('docs') or [])} 份、图片 {len(summary.get('images') or [])} 张")
         recommendations = [item for item in summary.get("ai_recommendations") or [] if isinstance(item, dict)]
         for item in recommendations:
@@ -1791,9 +1820,11 @@ class ProductionManager:
                 self._reference_profiles(base_messages),
             )
             duration, endings = int(payload.get("duration") or 20), int(payload.get("endings") or 3)
-            compact_mode = duration >= 30 or endings >= 6
+            if duration < 1 or duration > 60:
+                raise RuntimeError("单次完整观看路径时长必须在 1–60 分钟内；超过 60 分钟请先裁剪支线、角色或次要弧光")
+            compact_mode = duration > 30 or endings >= 6
             self._log_input_decisions(project_id, run_id, payload, base_messages, duration, endings, compact_mode)
-            topology_base = list(base_messages) + [self._lightweight_topology_instruction()] + ([self._compact_topology_instruction()] if compact_mode else [])
+            topology_base = list(base_messages) + [self._duration_engine_instruction(duration), self._lightweight_topology_instruction()] + ([self._compact_topology_instruction()] if compact_mode else [])
             round_no, json_failures, messages = 1, 0, list(topology_base)
             while True:
                 self._check_stop(project_id, run_id)
@@ -1821,7 +1852,7 @@ class ProductionManager:
                     if len(json_text) >= 18000 and not compact_mode:
                         compact_mode = True
                         json_failures = 0
-                        topology_base = list(base_messages) + [self._lightweight_topology_instruction(), self._compact_topology_instruction()]
+                        topology_base = list(base_messages) + [self._duration_engine_instruction(duration), self._lightweight_topology_instruction(), self._compact_topology_instruction()]
                         self._log(project_id, run_id, f"  ↳ 检测到结构化输出在 {len(json_text)} 字符附近截断，切换长项目分段协议；这不是剧情返工")
                     elif compact_mode and len(json_text) >= 18000 and json_failures >= 2:
                         raise RuntimeError("长项目分段协议下 JSON 仍连续两次被截断，已停止以避免重复消耗") from exc
