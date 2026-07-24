@@ -40,10 +40,9 @@ REFERENCE_LOADER = (
     / "load_reference_bundle.py"
 )
 REFERENCE_MANIFEST = (
-    Path(__file__).resolve().parents[1]
-    / "skill"
-    / "episode-generator"
-    / "reference-manifest.json"
+    Path(__file__).resolve().parent
+    / "execution"
+    / "execution_manifest.json"
 )
 DIALOGUE_PREPARER = (
     Path(__file__).resolve().parent
@@ -180,12 +179,13 @@ def public_error_message(value: Any) -> str:
     return text[:240] + ("…" if len(text) > 240 else "")
 
 
-def current_episode_skill_version() -> str:
+def execution_schema_version() -> str:
+    # 平台自有数据结构版本（不是 skill 版本，不对外展示）
     try:
-        value = str(json.loads(REFERENCE_MANIFEST.read_text(encoding="utf-8")).get("skill_version") or "")
+        value = str(json.loads(REFERENCE_MANIFEST.read_text(encoding="utf-8")).get("execution_schema_version") or "")
     except (OSError, json.JSONDecodeError):
         value = ""
-    return value if re.fullmatch(r"v\d+\.\d+\.\d+", value) else "v0.1.25"
+    return value if re.fullmatch(r"v\d+", value) else "v1"
 
 
 class ProductionStopped(RuntimeError):
@@ -324,7 +324,7 @@ class ProductionManager:
         return {
             "role": "user",
             "content": (
-                "【episode-generator v0.1.47 覆盖指令】忽略上文关于情绪数值、容量公式、候选淘汰、互动配额、生成日志、生产卡和分镜字段的要求。"
+                "【平台执行覆盖指令】忽略上文关于情绪数值、容量公式、候选淘汰、互动配额、生成日志、生产卡和分镜字段的要求。"
                 "本轮只整理故事主线和分集拓扑：资产沿用上游，每个流程节点就是一集，必须使用 episode-NNN。"
                 "选择写在当前集结尾，每个选项直接指向另一集；选择结果、反馈、汇合和结局节点也必须各自是一集。禁止把多个节点折叠进一集。"
                 "只在玩家确实拥有两个以上合理行动时设置选择，不为凑类型或数量增加互动。"
@@ -424,7 +424,7 @@ class ProductionManager:
             payload = json.loads(process.stdout)
         except json.JSONDecodeError as exc:
             raise RuntimeError("reference 装载凭证不可解析") from exc
-        if payload.get("skill_version") != current_episode_skill_version() or payload.get("phase") != phase:
+        if payload.get("execution_schema_version") != execution_schema_version() or payload.get("phase") != phase:
             raise RuntimeError("reference 装载版本或阶段不匹配")
         receipt = str(payload.get("receipt_sha256") or "")
         bundle = str(payload.get("bundle") or "")
@@ -942,7 +942,7 @@ class ProductionManager:
 
     def _write_episode(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]]) -> None:
         system = (
-            f"你是 episode-generator {current_episode_skill_version()} 分集规划师的逐集编剧。"
+            "你是分集逐集编剧。"
             "拓扑已经冻结，只写当前一集，不改分集编号、连接、选项目标、状态效果、结局属性和正式资产名。"
             "用网文的因果清晰度写可拍摄现场：从人物已经面对的具体事情开始，按需要写出触发、判断、欲望、行动、阻力、调整、即时后果和下一压力；"
             "不得跳过移动、接触、失败尝试或代价直接抵达结果。场次使用【场景名称·时段·内/外】，动作按正常段落顺写，对白统一使用人物：台词。"
@@ -964,7 +964,7 @@ class ProductionManager:
         """Run one whole-episode spoken-Chinese pass without adding an audit layer."""
         before = str(node.get("script") or "")
         system = (
-            f"你是 episode-generator {current_episode_skill_version()} 的整场人话润色编剧。"
+            "你是整场人话润色编剧。"
             "通读完整剧本后直接润色对白，不逐句评分、不输出问题清单。让人物真正接话，允许打断、省略、反问、口语垫词和必要冗余；"
             "去掉说明书对白、过分整齐的短句、书面结论和所有角色同一种声音。"
             "必须保留原说话人、场次、动作骨架、事实、选择、结局和正式资产名。只返回JSON。"
@@ -1022,7 +1022,7 @@ class ProductionManager:
             "required_checks": required_checks,
         }
         system = (
-            f"你是 episode-generator {current_episode_skill_version()} 的逐集独立复检员。"
+            "你是逐集独立复检员。"
             "这是正文与整场人话复写完成后的第二遍审查，不得沿用作者自检，只判不改。"
             "先只凭已经发生的有限前情和正文完成理解门四项，再逐场通读七项，并绑定给定正文SHA。"
             "不得推测作者预期出口或后续剧情；结尾只判断是否逼出具体行动、问题或真实选择。"
@@ -1084,7 +1084,7 @@ class ProductionManager:
         issues = [str(item) for item in review.get("issues") or []]
         dialogue_only = bool(issues) and all(item.startswith("dialogue｜") for item in issues)
         system = (
-            f"你是 episode-generator {current_episode_skill_version()} 的逐集定点返修编剧。"
+            "你是逐集定点返修编剧。"
             "只修独立复检登记的问题，保留冻结拓扑、选项、状态效果、结局属性、正式资产名和无关场次。"
             "对白问题只改现有说话人的台词；因果或结尾问题用最小动作改动补足，不新增世界规则或未来事实。"
             "不得用主题总结替代可见后果。只返回JSON。"
@@ -1135,7 +1135,7 @@ class ProductionManager:
             return
         by_id = {str(node.get("id")): node for node in data.get("nodes") or []}
         system = (
-            f"你是 episode-generator {current_episode_skill_version()} 生产卡展开器。工作台已独立完成上游题材与资产准备；拓扑、正式输入和资产名已经冻结。"
+            "你是生产卡展开器。工作台已独立完成上游题材与资产准备；拓扑、正式输入和资产名已经冻结。"
             "只把当前一个分集容器的紧凑生产卡展开为可执行卡。"
             "不写正文、不改变成员剧情节点、边、选择、结局或资产。"
             "每张卡必须写清本集作用与冲突、前后承接、定性体验功能、开场处境、核心事件、人物第一反应、"
@@ -1319,7 +1319,7 @@ class ProductionManager:
         self._log(project_id, run_id, f"  ↳ {node.get('id')} 连续两次未过，已返回生产卡检查并解冻当前节点")
 
     def _freeze(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]]) -> None:
-        system = f"你是 episode-generator {current_episode_skill_version()} 状态回写员。当前执行组全部节点已经通过同一正文指纹的机械、场面事实、人物交流和隔离观众复核。只从冻结正文提取实际发生的状态；禁止写作者计划、未来答案、路线评价或主题解释。只返回JSON。"
+        system = "你是状态回写员。当前执行组全部节点已经通过同一正文指纹的机械、场面事实、人物交流和隔离观众复核。只从冻结正文提取实际发生的状态；禁止写作者计划、未来答案、路线评价或主题解释。只返回JSON。"
         prompt = json.dumps({"episode_id": node.get("id"), "predecessors": predecessors.get(str(node.get("id")), []), "entry_state": node.get("entry_state"), "script": node.get("script")}, ensure_ascii=False) + '\n返回：{"audience_summary":"60–100个汉字","exit_state":"人物位置、关系、知情、道具归属、未决行动"}'
         while True:
             result = self._json_chat(
@@ -1514,7 +1514,7 @@ class ProductionManager:
             "causal": ["人物知情时间", "证据与道具连续性", "事件顺序", "分支汇合", "状态边界"],
             "dialogue": ["关系触发", "行动优先级", "对白现场性", "人物声音", "朴素中文"],
         }[kind]
-        system = f"你是 episode-generator {current_episode_skill_version()} 全剧终检员。" + specs[kind] + ' 只判不改，只报告会破坏理解、连续性或人物成立的真实问题。不得声明PASS。返回JSON：{"covered_checks":["逐字检查项"],"issues":["问题"],"affected_ids":["分集id"]}。'
+        system = "你是全剧终检员。" + specs[kind] + ' 只判不改，只报告会破坏理解、连续性或人物成立的真实问题。不得声明PASS。返回JSON：{"covered_checks":["逐字检查项"],"issues":["问题"],"affected_ids":["分集id"]}。'
         result = self._json_chat(
             project_id,
             run_id,
@@ -1622,8 +1622,8 @@ class ProductionManager:
         total = len(order)
         forge = data.get("__episodeForge") if isinstance(data.get("__episodeForge"), dict) else {}
         forge.update({
-            "version": current_episode_skill_version() + "-backend",
-            "cache_version": "episode-cache-" + current_episode_skill_version(),
+            "version": execution_schema_version() + "-platform",
+            "cache_version": "episode-cache-" + execution_schema_version(),
             "status": "running",
             "total": total,
             "pipeline": "episode-writing → dialogue-polish → episode-quality-review",
@@ -1683,7 +1683,7 @@ class ProductionManager:
         self._assert_reference_receipts(project_id, run_id)
         pipeline["audit"] = {"pct": 100, "label": "逐集独立复检已全部通过", "state": "pass"}
         pipeline["overall"] = {"label": "已交付", "state": "pass"}
-        self._log(project_id, run_id, f"✓ {current_episode_skill_version()} 分集主体已完成。")
+        self._log(project_id, run_id, "✓ 分集主体已完成。")
         self._update_pipeline(project_id, run_id, pipeline, phase="completed", status="completed", result_data=data)
 
     def _resume(self, project_id: str, run_id: str, data: dict[str, Any]) -> None:

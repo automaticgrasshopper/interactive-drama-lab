@@ -39,7 +39,7 @@ DATAPACKS_DIR = H5_DIR / "datapacks"
 DATA_DIR = ROOT / "data" / "projects"
 RUNTIME_DIR = ROOT / ".runtime"
 SETTINGS_PATH = RUNTIME_DIR / "settings.json"
-EPISODE_SKILL_PATH = ROOT / "skill" / "episode-generator" / "SKILL.md"
+EXECUTION_MANIFEST_PATH = ROOT / "backend" / "execution" / "execution_manifest.json"
 RUNS = RunStore(DATA_DIR)
 
 
@@ -108,14 +108,13 @@ def public_settings() -> dict[str, Any]:
     }
 
 
-def episode_skill_version() -> str:
-    """Read the displayed version from the Skill's authoritative header."""
+def execution_schema_version() -> str:
+    """Platform-owned execution schema version (internal; not a Skill version)."""
     try:
-        text = EPISODE_SKILL_PATH.read_text(encoding="utf-8")
-    except OSError:
-        return "未知"
-    match = re.search(r"当前规范版本：`([^`]+)`", text)
-    return match.group(1) if match else "未知"
+        manifest = json.loads(EXECUTION_MANIFEST_PATH.read_text(encoding="utf-8"))
+        return str(manifest.get("execution_schema_version") or "v1")
+    except (OSError, json.JSONDecodeError):
+        return "v1"
 
 
 PRODUCTION = ProductionManager(RUNS, load_settings)
@@ -375,7 +374,7 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         if path == "/api/health":
-            self._json(200, {"ok": True, "service": "interactive-drama-backend", "api_version": 8, "episode_skill_version": episode_skill_version(), "system": platform.system(), "platform": platform.platform(), "capabilities": ["all_tasks", "git_archive_tasks", "task_delete", "git_task_delete", "project_delete", "production_resume", "execution_group_pipeline", "reference_bundle_gate", "precise_restart", "safe_git_sync"], "root": str(ROOT)})
+            self._json(200, {"ok": True, "service": "interactive-drama-backend", "api_version": 8, "execution_schema_version": execution_schema_version(), "system": platform.system(), "platform": platform.platform(), "capabilities": ["all_tasks", "git_archive_tasks", "task_delete", "git_task_delete", "project_delete", "production_resume", "execution_group_pipeline", "reference_bundle_gate", "precise_restart", "safe_git_sync"], "root": str(ROOT)})
             return
         if path == "/api/settings":
             self._json(200, {"ok": True, "settings": public_settings()})

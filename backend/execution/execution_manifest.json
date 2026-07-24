@@ -1,0 +1,79 @@
+{
+  "execution_schema_version": "v1",
+  "provenance": {
+    "derived_from": "episode-generator",
+    "declared_version": "v0.1.47",
+    "source_commit": "b192a74034a9cb450851303224793cea861fdb86",
+    "relationship": "historical-origin-only",
+    "note": "首版执行规则迁移自 episode-generator v0.1.47; 迁移后为平台自有资产, 不读取skill/不跟随skill版本/不自动同步"
+  },
+  "phases": {
+    "upstream": [
+      "upstream-input-translation.md",
+      "public-output-and-progress.md"
+    ],
+    "emotional-spine": [
+      "emotional-spine-state-graph.md"
+    ],
+    "causal-graph": [
+      "emotional-spine-state-graph.md"
+    ],
+    "topology": [
+      "emotional-spine-state-graph.md",
+      "public-output-and-progress.md"
+    ],
+    "production-cards": [
+      "causal-episode-writing.md"
+    ],
+    "episode-writing": [
+      "causal-episode-writing.md",
+      "chinese-dialogue-craft.md"
+    ],
+    "dialogue-polish": [
+      "causal-episode-writing.md",
+      "chinese-dialogue-craft.md"
+    ],
+    "episode-quality-review": [
+      "episode-quality-review.md"
+    ],
+    "scene-review": [
+      "causal-episode-writing.md"
+    ],
+    "dialogue-review": [
+      "causal-episode-writing.md",
+      "chinese-dialogue-craft.md"
+    ],
+    "isolated-audience": [
+      "causal-episode-writing.md"
+    ],
+    "state-writeback": [
+      "emotional-spine-state-graph.md",
+      "causal-episode-writing.md"
+    ],
+    "continuity-review": [
+      "emotional-spine-state-graph.md",
+      "causal-episode-writing.md"
+    ],
+    "whole-play-review": [
+      "emotional-spine-state-graph.md",
+      "causal-episode-writing.md"
+    ]
+  },
+  "profiles": {
+    "suspense": {},
+    "confrontation": {},
+    "power-reversal": {},
+    "evidence-verification": {},
+    "written-text": {
+      "episode-writing": [
+        "written-text-to-dialogue.md"
+      ],
+      "dialogue-polish": [
+        "written-text-to-dialogue.md"
+      ],
+      "episode-quality-review": [
+        "written-text-to-dialogue.md"
+      ]
+    }
+  }
+}

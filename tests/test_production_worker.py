@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from backend.production_worker import ProductionManager, action_skeleton, current_episode_skill_version, dialogue_review_packet, normalize_scene_heading, public_error_message, script_digest, written_text_coordinate_issues
+from backend.production_worker import ProductionManager, action_skeleton, execution_schema_version, dialogue_review_packet, normalize_scene_heading, public_error_message, script_digest, written_text_coordinate_issues
 
 
 def valid_script(dialogue: str = "这件事我现在就去办。") -> str:
@@ -177,12 +177,12 @@ class ProductionWorkerTests(unittest.TestCase):
         manager = object.__new__(ProductionManager)
         manager._reference_receipts = {}
         bundle = manager._load_reference_context("p", "r", "episode-writing")
-        self.assertIn("episode-generator-reference-bundle", bundle)
+        self.assertIn("execution-reference-bundle", bundle)
         self.assertIn("episode-writing", manager._reference_receipts[("p", "r")])
 
     def test_backend_tracks_current_reference_manifest_version(self):
-        manifest = json.loads((Path(__file__).parents[1] / "skill" / "episode-generator" / "reference-manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(current_episode_skill_version(), manifest["skill_version"])
+        manifest = json.loads((Path(__file__).parents[1] / "backend" / "execution" / "execution_manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(execution_schema_version(), manifest["execution_schema_version"])
 
     def test_completion_gate_rejects_missing_reference_phase(self):
         manager = object.__new__(ProductionManager)

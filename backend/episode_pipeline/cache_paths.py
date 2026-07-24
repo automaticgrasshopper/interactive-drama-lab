@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve episode-generator's private cache outside the public Canvas tree."""
+"""Resolve the platform episode private cache outside the public Canvas tree."""
 
 from __future__ import annotations
 

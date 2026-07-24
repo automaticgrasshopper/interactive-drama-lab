@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate deterministic structure and file coverage for episode-generator caches."""
+"""Validate deterministic structure and file coverage for platform episode caches."""
 
 from __future__ import annotations
 

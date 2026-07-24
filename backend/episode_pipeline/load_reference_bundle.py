@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 
 
-SKILL_ROOT = Path(__file__).resolve().parents[2] / "skill" / "episode-generator"
-REFERENCE_ROOT = SKILL_ROOT / "references"
-MANIFEST_PATH = SKILL_ROOT / "reference-manifest.json"
+# 平台自有执行资产（迁移自 episode-generator v0.1.47，迁移后不再读取 skill/）
+EXECUTION_ROOT = Path(__file__).resolve().parents[1] / "execution"
+REFERENCE_ROOT = EXECUTION_ROOT / "references"
+MANIFEST_PATH = EXECUTION_ROOT / "execution_manifest.json"
 
 
 def sha256_text(text: str) -> str:
@@ -24,7 +25,7 @@ def read_manifest() -> tuple[dict[str, Any], str]:
     raw = MANIFEST_PATH.read_text(encoding="utf-8")
     manifest = json.loads(raw)
     if not isinstance(manifest, dict) or not isinstance(manifest.get("phases"), dict):
-        raise ValueError("reference-manifest.json 缺少 phases")
+        raise ValueError("execution_manifest.json 缺少 phases")
     return manifest, sha256_text(raw)
 
 
@@ -68,7 +69,7 @@ def load_bundle(phase: str, profiles: tuple[str, ...] = ()) -> dict[str, Any]:
         files.append({"name": name, "sha256": digest, "chars": len(content)})
         sections.append(f"<reference name=\"{name}\" sha256=\"{digest}\">\n{content}\n</reference>")
     receipt_core = {
-        "skill_version": manifest.get("skill_version"),
+        "execution_schema_version": manifest.get("execution_schema_version"),
         "phase": phase,
         "profiles": list(profiles),
         "manifest_sha256": manifest_sha,
@@ -78,10 +79,10 @@ def load_bundle(phase: str, profiles: tuple[str, ...] = ()) -> dict[str, Any]:
         json.dumps(receipt_core, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     )
     bundle = (
-        f"<episode-generator-reference-bundle version=\"{manifest.get('skill_version')}\" "
+        f"<execution-reference-bundle version=\"{manifest.get('execution_schema_version')}\" "
         f"phase=\"{phase}\" receipt=\"{receipt_sha}\">\n"
         + "\n\n".join(sections)
-        + "\n</episode-generator-reference-bundle>"
+        + "\n</execution-reference-bundle>"
     )
     return receipt_core | {"receipt_sha256": receipt_sha, "bundle": bundle}
 

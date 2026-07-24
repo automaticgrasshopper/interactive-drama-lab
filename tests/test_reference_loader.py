@@ -47,8 +47,8 @@ class ReferenceLoaderTests(unittest.TestCase):
     def test_written_text_reference_forbids_text_only_action_coordinates(self):
         reference = (
             Path(__file__).parents[1]
-            / "skill"
-            / "episode-generator"
+            / "backend"
+            / "execution"
             / "references"
             / "written-text-to-dialogue.md"
         ).read_text(encoding="utf-8")

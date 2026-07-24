@@ -11,67 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class EpisodePipelineV047Test(unittest.TestCase):
-    def test_skill_package_contains_only_runtime_files(self):
-        skill_root = ROOT / "skill" / "episode-generator"
-        files = {
-            path.relative_to(skill_root).as_posix()
-            for path in skill_root.rglob("*")
-            if path.is_file() and "__pycache__" not in path.parts and ".DS_Store" not in path.parts
-        }
-        self.assertEqual(
-            files,
-            {
-                "SKILL.md",
-                "agents/openai.yaml",
-                "reference-manifest.json",
-                "references/causal-episode-writing.md",
-                "references/chinese-dialogue-craft.md",
-                "references/emotional-spine-state-graph.md",
-                "references/episode-quality-review.md",
-                "references/public-output-and-progress.md",
-                "references/upstream-input-translation.md",
-                "references/written-text-to-dialogue.md",
-                "scripts/validate_and_assemble_scripts.py",
-                "scripts/validate_emotional_topology.py",
-                "scripts/validate_topology.py",
-                "scripts/episode_quality_gate.py",
-            },
-        )
-
-    def test_manifest_and_skill_are_v047(self):
-        manifest = json.loads((ROOT / "skill" / "episode-generator" / "reference-manifest.json").read_text(encoding="utf-8"))
-        skill = (ROOT / "skill" / "episode-generator" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertEqual(manifest["skill_version"], "v0.1.47")
-        self.assertNotIn("当前规范版本：", skill)
-        self.assertIn("# 分集规划师", skill)
-        self.assertNotIn("情绪脊分集规划师", skill)
-        self.assertNotIn("对白情绪词正负分", skill)
-
-    def test_emotional_spine_reference_matches_original_v01_topology(self):
-        reference = (ROOT / "skill" / "episode-generator" / "references" / "emotional-spine-state-graph.md").read_text(encoding="utf-8")
-        original = (ROOT / "skill-backups" / "episode-generator" / "versions" / "v0.1" / "references" / "emotional-spine-and-branching.md").read_text(encoding="utf-8")
-        self.assertEqual(reference, original)
-        self.assertIn("## 二、建立 PAD/VAD 情绪脊", reference)
-        self.assertIn("## 三、从情绪脊识别天然岔点", reference)
-        self.assertIn("## 四、分支开扇与编织带原则", reference)
-        self.assertIn("### 带差异地合流", reference)
-        self.assertIn("### 收扇", reference)
-
-    def test_story_rhythm_platform_is_aligned_to_v047(self):
+    def test_story_rhythm_platform_is_decoupled_from_skill(self):
         platform = (ROOT / "h5" / "影视互动游戏故事节奏验证.html").read_text(encoding="utf-8")
-        self.assertIn("episode-generator v0.1.47 分集规划师", platform)
-        self.assertIn("0.1.47-workbench", platform)
-        self.assertIn("人话台词校验", platform)
-        self.assertIn("dialogue-polish-then-independent-review", platform)
-        self.assertNotIn("episode-generator v0.1.36", platform)
-        self.assertNotIn("0.1.36-workbench", platform)
-        self.assertNotIn("全剧压缩校验", platform)
-        self.assertNotIn("single four-gate check", platform)
-        self.assertNotIn("逐集制作卡完整", platform)
-        self.assertNotIn("全部分集同摘要三审锁稿", platform)
-        self.assertNotIn("存在 D 轴翻盘拍", platform)
-        self.assertNotIn("beats ≥5 拍", platform)
-        self.assertNotIn("释放点过密", platform)
+        self.assertNotIn("episode-generator v0.1.47 分集规划师", platform)
+        self.assertNotIn("分集 Skill 读取中", platform)
+        self.assertNotIn("episodeSkillVersion", platform)
+        self.assertIn("beats ≥ 5 拍", platform)
+        self.assertIn("人话台词复写", platform)
 
     def test_backend_runtime_has_required_dependency_phases(self):
         self.assertEqual(

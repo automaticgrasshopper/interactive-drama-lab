@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic private task ledger for episode-generator v0.1.47."""
+"""Deterministic private task ledger for the platform episode execution schema."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any
 
 
 VERSION = "atomic-task-ledger-v1"
-SKILL_VERSION = "v0.1.47"
+EXECUTION_SCHEMA_VERSION = "v1"
 STATUSES = {"pending", "running", "complete", "needs_fix", "blocked"}
 
 
@@ -190,7 +190,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.command == "init":
-        ledger = {"ledger_version": VERSION, "skill_version": SKILL_VERSION, "tasks": planning_tasks()}
+        ledger = {"ledger_version": VERSION, "execution_schema_version": EXECUTION_SCHEMA_VERSION, "tasks": planning_tasks()}
     else:
         ledger = load(args.ledger)
     if args.command == "expand":

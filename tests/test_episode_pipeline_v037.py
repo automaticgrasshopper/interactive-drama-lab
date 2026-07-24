@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_ROOT = ROOT / "skill" / "episode-generator" / "scripts"
+SCRIPT_ROOT = ROOT / "backend" / "execution" / "scripts"
 
 
 def load_module(name: str, path: Path):
