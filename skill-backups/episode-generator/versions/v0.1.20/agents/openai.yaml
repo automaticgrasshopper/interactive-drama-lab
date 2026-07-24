@@ -1,4 +1,0 @@
-interface:
-  display_name: "NXP-分集规划师"
-  short_description: "生成互动分集剧本，并以真实台词证据复核对白和关系"
-  default_prompt: "Use $episode-generator 完成分集规划与剧本；对白先严格抽取、只润色并原位写回，再复核姓名知情、关系距离和功能信息，最后交付流程图、大纲与完整剧本。"

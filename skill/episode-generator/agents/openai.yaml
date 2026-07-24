@@ -1,4 +1,0 @@
-interface:
-  display_name: "分集规划师"
-  short_description: "用情绪脊驱动可执行拓扑与因果清晰的互动影游剧本"
-  default_prompt: "Use $episode-generator 读取企划与正式资产，以情绪脊生成可执行状态拓扑，再用相邻因果拍写完全部分集剧本。"

@@ -1,4 +1,0 @@
-interface:
-  display_name: "NXP-分集规划师"
-  short_description: "连续生成分集流程图与完整互动剧本"
-  default_prompt: "Use $episode-generator 通过阶段装载脚本强制注入并验证全部必需 reference，再连续完成上游转译、拓扑、逐集写作、定点修复和最终组装。人物交流使用确定性全量编号、整场判断和仅问题输出，不新增模型调用。所有凭证、缓存与复核记录严格私有；只把分集流程图和完整剧本直接写成 Canvas 一级文件。"

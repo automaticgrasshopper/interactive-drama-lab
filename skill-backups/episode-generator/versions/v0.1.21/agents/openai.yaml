@@ -1,4 +1,0 @@
-interface:
-  display_name: "NXP-分集规划师"
-  short_description: "先转译冗长上游，再生成并复核互动分集剧本"
-  default_prompt: "Use $episode-generator 先把完整企划和资产白名单转译为结构简化、情绪脊明确、核心因果闭合的唯一制作参考，再建立拓扑、生成完整剧本并完成三层复核。"

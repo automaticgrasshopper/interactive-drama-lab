@@ -1,4 +1,0 @@
-interface:
-  display_name: "大纲生成师"
-  short_description: "将故事描述和体量视角画风选择转成互动影游大纲企划基础稿"
-  default_prompt: "Use $outline-generator 根据故事描述、故事体量、视角、结局数、画面比例和期望画风生成互动影游大纲企划。"
