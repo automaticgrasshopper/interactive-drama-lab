@@ -4,3 +4,6 @@ __pycache__/
 .episode-generator-cache/
 skill/nxp-episode-generator.bak-*/
 skill/nxp-episode-checker.bak-*/
+
+# 后台生产任务是运行时状态/日志，不是项目资产，永远不进 Git。
+data/projects/*/tasks/

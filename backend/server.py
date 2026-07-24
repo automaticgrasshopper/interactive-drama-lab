@@ -272,7 +272,8 @@ def git_archived_tasks(include_data: bool = False) -> list[dict[str, Any]]:
         raw_by_key[dedupe] = payload
 
     for path, (ref, state) in selected.items():
-        match = re.match(r"data/projects/[^/]+/(tasks|runs)/[^/]+\.json$", path)
+        # tasks/ 是后台运行时状态/日志，不是项目归档；Git 归档只认正式 runs/ 与 datapacks。
+        match = re.match(r"data/projects/[^/]+/runs/[^/]+\.json$", path)
         is_pack = path.startswith("h5/datapacks/") and (path.endswith(".script.json") or path.endswith(".sb.json"))
         if not match and not is_pack:
             continue
@@ -683,7 +684,11 @@ class Handler(SimpleHTTPRequestHandler):
         settings = load_settings()
         commit_result = None
         if settings["auto_commit"]:
-            commit_result = self.commit_paths([str(target.relative_to(ROOT))], f"保存生成记录 {title}")
+            # 只提交正式项目元数据和本次 run；tasks/ 是运行时状态/日志，禁止顺手带入 Git。
+            commit_result = self.commit_paths([
+                str((target / "project.json").relative_to(ROOT)),
+                str((runs_dir / f"{run_id}.json").relative_to(ROOT)),
+            ], f"保存生成记录 {title}")
             if settings["auto_push"] and commit_result.get("status") == "committed":
                 push = run_git("push", "origin", "HEAD")
                 if push.returncode:

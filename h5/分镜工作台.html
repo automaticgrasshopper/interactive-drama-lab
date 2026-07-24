@@ -496,6 +496,15 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   // 一次性迁移：旧记录把 base64(存在 localStorage 的 r.images) 挪进 IDB 并从 localStorage 删除，减负
   function sbMigrateOnce(){ var a=sbHistAll(),changed=false; a.forEach(function(r){ if(!r.id){ r.id=newRecId(); changed=true; } if(!r.stylePreset){ r.stylePreset=legacyStyleSnapshot(); r.styleId=r.stylePreset&&r.stylePreset.id; changed=true; } if(r.images && Object.keys(r.images).length){ r.imgNos=r.imgNos||[]; Object.keys(r.images).forEach(function(no){ idbPut(r.id+'|'+no,r.images[no]); if(r.imgNos.indexOf(no)<0) r.imgNos.push(no); }); delete r.images; changed=true; } }); if(changed){ try{ localStorage.setItem(HSKEY,JSON.stringify(a)); }catch(e){} } }
   try{ sbMigrateOnce(); }catch(e){}
+  // 一次性清理早期资产指纹回归测试残留：它不是用户项目，不应出现在分镜记录里。
+  try{
+    if(!localStorage.getItem('sb_fingerprint_test_cleaned_v1')){
+      var __old=sbHistAll(),__keep=[];
+      __old.forEach(function(r){ if(String(r.title||'').trim()==='指纹测试'){ idbDropRec(r); } else __keep.push(r); });
+      localStorage.setItem(HSKEY,JSON.stringify(__keep));
+      localStorage.setItem('sb_fingerprint_test_cleaned_v1','1');
+    }
+  }catch(e){}
   function sbEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   // 同剧本合并键：优先 boundStory；否则用 grammar/title + 首节点集号前缀，尽量把同一剧本的多批归一起
   function sbMergeKey(board, nodes, boundStoryName, styleId){
