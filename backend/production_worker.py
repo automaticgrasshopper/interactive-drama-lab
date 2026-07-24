@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import json
 import re
@@ -374,12 +375,21 @@ class ProductionManager:
         )
 
     def _log(self, project_id: str, run_id: str, message: str) -> None:
-        # Internal production details never enter the user-visible response log.
-        return
+        # 后台专用生成日志：内部推理/装载凭证/分阶段决策写进 task 记录，仅供生产后台排查，不进前端可见 response_text。
+        stamp = dt.datetime.now().strftime("%H:%M:%S")
+        try:
+            self.runs.append_log(project_id, run_id, f"[{stamp}] {message}\n")
+        except Exception:  # noqa: BLE001
+            pass
 
     def _log_chunk(self, project_id: str, run_id: str, chunk: str) -> None:
-        # Streamed reasoning and structured-output diagnostics remain private.
-        return
+        # 流式推理与结构化输出诊断：同样只入后台日志，前端不公开。
+        if not chunk:
+            return
+        try:
+            self.runs.append_log(project_id, run_id, chunk)
+        except Exception:  # noqa: BLE001
+            pass
 
     @staticmethod
     def _reference_profiles(data: Any, node: Any = None) -> tuple[str, ...]:

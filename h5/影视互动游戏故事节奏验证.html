@@ -329,7 +329,7 @@
         </div>
       </div>
     </div>
-    <div style="font-size:13.5px;font-weight:700;color:#3a4255;margin-bottom:6px;">生成日志</div>
+    <div style="font-size:13.5px;font-weight:700;color:#3a4255;margin-bottom:6px;">进行阶段</div>
     <div id="genlog" style="display:none;background:#14181f;color:#d5dae4;border-radius:14px;padding:14px 16px;font-size:12px;line-height:1.8;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;max-height:440px;overflow:auto;margin-bottom:8px;"></div>
 
     <div style="font-size:13px;font-weight:700;color:#3a4255;margin-bottom:10px;border-top:1px solid #f2f3f6;padding-top:14px;display:none;">或 · 手动复制粘贴桥</div>
@@ -1218,8 +1218,8 @@ flowchart TD
 
 
   var lastT=10, lastE=3;
-  document.getElementById('dur').addEventListener('change', function(){ if(this.value==='ai'){ recNote('时长已设为「AI 推荐」：点「一键生成」时由模型按你的描述/标签推定，推理过程写进生成日志。'); } else { lastT=parseInt(this.value,10)||10; recNote(''); } });
-  document.getElementById('ends').addEventListener('change', function(){ if(this.value==='ai'){ recNote('结局数已设为「AI 推荐」：点「一键生成」时由模型推定，推理过程写进生成日志。'); } else { lastE=parseInt(this.value,10)||3; recNote(''); } });
+  document.getElementById('dur').addEventListener('change', function(){ if(this.value==='ai'){ recNote('时长已设为「AI 推荐」：点「一键生成」时由模型按你的描述/标签推定，推理过程记录在生产后台的生成日志里。'); } else { lastT=parseInt(this.value,10)||10; recNote(''); } });
+  document.getElementById('ends').addEventListener('change', function(){ if(this.value==='ai'){ recNote('结局数已设为「AI 推荐」：点「一键生成」时由模型推定，推理过程记录在生产后台的生成日志里。'); } else { lastE=parseInt(this.value,10)||3; recNote(''); } });
 
 
   // ===== 对接模型：打包请求 + 渲染返回 =====
@@ -2943,7 +2943,7 @@ flowchart TD
     if(kind==='dur'){ var lng=['修仙','西幻','异世界','历史权谋','无限流','系统流','末世','热血'], sht=['恐怖','悬疑','丧尸','谍战']; var v=20; tags.forEach(function(t){ if(lng.indexOf(t)>=0)v+=12; if(sht.indexOf(t)>=0)v-=5; }); return { value:Math.max(5,Math.min(120,Math.round(v/10)*10)), why:'离线按题材粗估' }; }
     return { value:Math.max(2,Math.min(6,Math.round(2+lastT/40))), why:'离线按时长粗估' };
   }
-  // 「AI 推荐」：下拉保持显示 AI 推荐；真正的推定在「一键生成」链条里完成，推理进生成日志
+  // 「AI 推荐」：下拉保持显示 AI 推荐；真正的推定在「一键生成」链条里完成，推理进后台生成日志
   function resolveOne(kind, done){
     var brief=(document.getElementById('brief').value||'').trim(), tags=pickedList();
     var chain = (kind==='dur')
@@ -2971,7 +2971,7 @@ flowchart TD
         logLine('▸ AI 推荐·结局数 → '+r.v+' 个'+(r.offline?'（模型不可用，离线估算）':''));
         if(r.reasoning) logLine('  推理：'+r.reasoning);
         if(r.why) logLine('  结论：'+r.why);
-        recNote('AI 推荐已定：时长 '+lastT+' 分 / 结局 '+lastE+' 个（推理见生成日志）');
+        recNote('AI 推荐已定：时长 '+lastT+' 分 / 结局 '+lastE+' 个（推理见后台生成日志）');
         cb();
       });
     }
@@ -2980,7 +2980,7 @@ flowchart TD
         logLine('▸ AI 推荐·时长 → '+r.v+' 分钟'+(r.offline?'（模型不可用，离线估算）':''));
         if(r.reasoning) logLine('  推理：'+r.reasoning);
         if(r.why) logLine('  结论：'+r.why);
-        if(!needEnds) recNote('AI 推荐已定：时长 '+lastT+' 分（推理见生成日志）');
+        if(!needEnds) recNote('AI 推荐已定：时长 '+lastT+' 分（推理见后台生成日志）');
         afterDur();
       });
     } else { afterDur(); }
@@ -3038,9 +3038,8 @@ flowchart TD
       listPacks().then(function(files){
         if(!files.length) return;
         var have={}; histAll().forEach(function(r){ have[key(r)]=1; });
-        var deleted=histDeleted();
         files.reduce(function(chain,fn){ return chain.then(function(){ return fetch('datapacks/'+encodeURIComponent(fn)).then(function(r){return r.ok?r.json():null;}).then(function(p){
-          if(!p||p.kind!=='script') return; var k=p.recKey||p.title; if(have[k]||deleted[histRecordKey({title:p.title||k,time:p.time||''})]) return;
+          if(!p||p.kind!=='script') return; var k=p.recKey||p.title; if(have[k]) return;
           var rec={ title:p.title||k, time:p.time||'', input:p.input||null, json:p.json||(p.data?JSON.stringify(p.data):'') };
           var a=histAll(); a.push(rec); try{ localStorage.setItem(HKEY,JSON.stringify(a)); }catch(e){}
           have[k]=1; var m2=led(); if(!m2[k]) { m2[k]='script@'+(p.time||''); ledSave(m2); }
@@ -3048,11 +3047,15 @@ flowchart TD
       }).catch(function(){});
     }
     // 与后台对账：删除只能在后台做。凡是“曾落过盘（台账有记录）但 datapacks/ 里已不存在”的本地记录，
-    // 视为已被后台删除，从本地清掉并标记已删（防 autoLoad 又加回）。
+    // 视为已被后台删除，从本地清掉（autoLoad 只从现存包恢复，不会再加回）。
     // 从没入过包的记录（如刚生成尚未落盘、file:// 本地预览）一律不动，避免误删。
     function reconcileWithBackend(){
       if(location.protocol==='file:') return Promise.resolve();
       return listPacks().then(function(files){
+        // 保险丝：datapacks/ 一个数据包都没有，视为镜像未就绪/被整体重置（而非逐条删除），
+        // 一律不删任何本地记录，避免把本地历史误清空。只有目录确实有包（镜像是“活”的）时，
+        // 缺失的那条才判定为后台真删除。
+        if(!files.length) return 0;
         var alive={}; files.forEach(function(fn){ alive[fn]=1; });
         var ledger=led(), a=histAll(), removed=0, keep=[];
         a.forEach(function(r){
@@ -3060,9 +3063,8 @@ flowchart TD
           var hadPack=ledger[k] && String(ledger[k]).indexOf('script@')===0;
           if(hadPack){
             var fn=String(k||'rec').replace(/[^\w\u4e00-\u9fff\-]/g,'_').slice(0,40)+'.script.json';
-            if(!alive[fn]){ // 后台已删
-              markHistDeleted(r);
-              delete ledger[k];
+            if(!alive[fn]){ // 镜像活着但这个包不在了 = 后台已删
+              delete ledger[k];   // 只从台账销据；包已不在，autoLoad 也不会把它加回
               removed++;
               return; // 不进 keep
             }
@@ -3074,6 +3076,9 @@ flowchart TD
       }).catch(function(){});
     }
     window.__idlReconcileHist=reconcileWithBackend;
+    // 一次性修复：清掉早期过激对账遗留的“已删除墓碑”（曾把 datapacks 整体重置误判成逐条删除），
+    // 去除后历史才能从后台 datapacks 重新恢复。现在删除以 datapacks/ 为唯一权威源，不再需要墓碑。
+    try{ if(!localStorage.getItem('gen_hist_deltombstone_cleared_v1')){ localStorage.removeItem('gen_history_deleted_v1'); localStorage.setItem('gen_hist_deltombstone_cleared_v1','1'); } }catch(e){}
     try{ autoLoad(); }catch(e){}
 
   })();

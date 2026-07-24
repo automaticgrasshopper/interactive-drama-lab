@@ -94,6 +94,20 @@ class RunStore:
         self._atomic_json(self.task_path(project_id, run_id), record)
         return record
 
+    # 后台专用全流程生成日志：只留在后台记录里，供生产后台排查用，前端不公开。
+    # 末尾保留上限，避免 task.json 无限膨胀。
+    LOG_CAP = 400_000
+
+    def append_log(self, project_id: str, run_id: str, text: str) -> dict[str, Any]:
+        record = self.read(project_id, run_id) or self.create(project_id, run_id, project_id, "generation")
+        merged = str(record.get("production_log") or "") + text
+        if len(merged) > self.LOG_CAP:
+            merged = "…（日志已截断，仅保留最近部分）\n" + merged[-self.LOG_CAP:]
+        record["production_log"] = merged
+        record["updated_at"] = now()
+        self._atomic_json(self.task_path(project_id, run_id), record)
+        return record
+
     def request_stop(self, project_id: str, run_id: str) -> None:
         record = self.read(project_id, run_id)
         if not record or record.get("status") in {"completed", "failed", "stopped"}:
