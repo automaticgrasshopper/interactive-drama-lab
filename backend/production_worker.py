@@ -411,6 +411,14 @@ class ProductionManager:
         self._log(project_id, run_id, f"故事任务：{brief[:240] or '未提供简述'}")
         self._log(project_id, run_id, f"体量裁决：{duration} 分钟 · {endings} 个结局 · {'长项目分段协议' if compact_mode else '标准拓扑协议'}")
         self._log(project_id, run_id, f"输入方式：{summary.get('intent') or '直接描述'}；附件：文稿 {len(summary.get('docs') or [])} 份、图片 {len(summary.get('images') or [])} 张")
+        recommendations = [item for item in summary.get("ai_recommendations") or [] if isinstance(item, dict)]
+        for item in recommendations:
+            source = "离线估算" if item.get("offline") else "模型推定"
+            self._log(project_id, run_id, f"AI 推荐·{item.get('kind')}：{item.get('value')} {item.get('unit') or ''}（{source}）")
+            if item.get("reasoning"):
+                self._log(project_id, run_id, "  推定过程：" + re.sub(r"\s+", " ", str(item.get("reasoning"))).strip())
+            if item.get("conclusion"):
+                self._log(project_id, run_id, "  结论：" + re.sub(r"\s+", " ", str(item.get("conclusion"))).strip())
         self._log(project_id, run_id, "生产链：题材与输入识别 → 分集拓扑 → 逐集写作 → 人话复写 → 独立质量复检 → 锁稿")
 
     def _log_topology_decisions(self, project_id: str, run_id: str, data: dict[str, Any], duration: int, endings: int) -> None:

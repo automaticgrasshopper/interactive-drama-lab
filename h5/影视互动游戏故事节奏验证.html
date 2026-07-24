@@ -1686,7 +1686,7 @@ flowchart TD
   function taskPublicLog(task){
     // 前端只显示规范化进行状态，不读取旧任务 response_text，也不展示后台详细生成过程。
     var p=task&&task.pipeline||{},overall=p.overall||{},scripts=p.scripts||{},audit=p.audit||{};
-    var lines=['▸ 后台生产持续运行'];
+    var lines=['正在生产中……','▸ 后台生产持续运行'];
     if(overall.label)lines.push('  当前阶段：'+overall.label);
     if(scripts.label)lines.push('  分集生产：'+(scripts.pct||0)+'% · '+scripts.label);
     if(audit.label)lines.push('  台词校验：'+(audit.pct||0)+'% · '+audit.label);
@@ -2305,11 +2305,9 @@ flowchart TD
     resolveAIParams(function(){
     if(genStopped){ pipelineOverall('已停止','fail'); logLine('⏹ 已手动停止。'); done(); return; }
     progSet(8,'参数就绪，调用模型…');
-    logLine('▸ 参数｜时长 '+lastT+' 分，结局数 '+lastE+'，题材 '+(tags.length?tags.join('＋'):'（未选）')+'，引擎：'+engineOf(lastT).txt);
-    logLine('▸ 输入意图｜'+inputPolicy().label+'（自动识别，无需手动开关）');
+    logEl.style.display='block';logEl.textContent='正在生产中……\n  当前阶段：正在启动后台生产…';logHead=logEl.textContent+'\n';
     mkReq();
     var sys=buildSys();
-    logLine('▸ 规则注入：执行卡，系统提示 '+sys.length+' 字符');
     var baseUser=document.getElementById('req').value;
     var MARK='===JSON==='; // 生成模式硬规则未过就继续返工；完整原稿导入不擅自改写
     var attempt=0;
@@ -2457,7 +2455,7 @@ flowchart TD
     }
     function startBackgroundProduction(){
       var task={project_id:backendProjectId,run_id:backendRunBase+'-production'};activeBackendTask=task;rememberBackendTask(task);pipelineOverall('后台生产启动中','active');
-      var payload={project_id:task.project_id,run_id:task.run_id,title:briefTxt||tagsNow.join('＋')||'未命名项目',duration:lastT,endings:lastE,input_summary:{brief:briefTxt,tags:tagsNow.slice(),intent:inputPolicy().label,docs:DOCS.map(function(d){return d.name;}),images:IMAGES.map(function(im){return im.name;})},outline:{model:model,temperature:.8,max_tokens:20000,messages:[{role:'system',content:sys},{role:'user',content:userMessageContent(baseUser)}]}};
+      var payload={project_id:task.project_id,run_id:task.run_id,title:briefTxt||tagsNow.join('＋')||'未命名项目',duration:lastT,endings:lastE,input_summary:{brief:briefTxt,tags:tagsNow.slice(),intent:inputPolicy().label,docs:DOCS.map(function(d){return d.name;}),images:IMAGES.map(function(im){return im.name;}),ai_recommendations:aiRecommendationTrace.slice()},outline:{model:model,temperature:.8,max_tokens:20000,messages:[{role:'system',content:sys},{role:'user',content:userMessageContent(baseUser)}]}};
       fetch('/api/production/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(j){if(!r.ok||!j.ok)throw new Error(j.error||('启动失败 HTTP '+r.status));return j;});}).then(function(){logLine('▸ 完整生产链已交给本地后台。现在刷新或切换页面都不会中断。');pollBackgroundProduction();}).catch(function(e){backgroundFail('无法启动后台生产：'+e.message);});
     }
     function done(){ genBusy=false; genAbort=null; activeBackendTask=null; document.getElementById('stopgen').style.display='none'; btn.textContent=old; btn.disabled=false; }
@@ -2943,7 +2941,8 @@ flowchart TD
     if(kind==='dur'){ var lng=['修仙','西幻','异世界','历史权谋','无限流','系统流','末世','热血'], sht=['恐怖','悬疑','丧尸','谍战']; var v=20; tags.forEach(function(t){ if(lng.indexOf(t)>=0)v+=12; if(sht.indexOf(t)>=0)v-=5; }); return { value:Math.max(5,Math.min(120,Math.round(v/10)*10)), why:'离线按题材粗估' }; }
     return { value:Math.max(2,Math.min(6,Math.round(2+lastT/40))), why:'离线按时长粗估' };
   }
-  // 「AI 推荐」：下拉保持显示 AI 推荐；真正的推定在「一键生成」链条里完成，推理进后台生成日志
+  // 「AI 推荐」：下拉保持显示 AI 推荐；详细推定只随任务送入后台生成日志，前端只报阶段。
+  var aiRecommendationTrace=[];
   function resolveOne(kind, done){
     var brief=(document.getElementById('brief').value||'').trim(), tags=pickedList();
     var chain = (kind==='dur')
@@ -2964,22 +2963,19 @@ flowchart TD
     var needEnds=document.getElementById('ends').value==='ai';
     if(!needDur && !needEnds){ cb(); return; }
     progSet(4,'AI 推定参数中…');
-    logLine('▸ 检测到「AI 推荐」：先由模型推定 '+(needDur?'时长':'')+(needDur&&needEnds?' 与 ':'')+(needEnds?'结局数':'')+'…');
+    aiRecommendationTrace=[];
+    logEl.style.display='block';logEl.textContent='正在生产中……\n  当前阶段：AI 推定参数中…';logHead=logEl.textContent+'\n';
     function afterDur(){
       if(!needEnds){ cb(); return; }
       resolveOne('ends', function(r){
-        logLine('▸ AI 推荐·结局数 → '+r.v+' 个'+(r.offline?'（模型不可用，离线估算）':''));
-        if(r.reasoning) logLine('  推理：'+r.reasoning);
-        if(r.why) logLine('  结论：'+r.why);
+        aiRecommendationTrace.push({kind:'结局数',value:r.v,unit:'个',offline:!!r.offline,reasoning:r.reasoning||'',conclusion:r.why||''});
         recNote('AI 推荐已定：时长 '+lastT+' 分 / 结局 '+lastE+' 个（推理见后台生成日志）');
         cb();
       });
     }
     if(needDur){
       resolveOne('dur', function(r){
-        logLine('▸ AI 推荐·时长 → '+r.v+' 分钟'+(r.offline?'（模型不可用，离线估算）':''));
-        if(r.reasoning) logLine('  推理：'+r.reasoning);
-        if(r.why) logLine('  结论：'+r.why);
+        aiRecommendationTrace.push({kind:'时长',value:r.v,unit:'分钟',offline:!!r.offline,reasoning:r.reasoning||'',conclusion:r.why||''});
         if(!needEnds) recNote('AI 推荐已定：时长 '+lastT+' 分（推理见后台生成日志）');
         afterDur();
       });
