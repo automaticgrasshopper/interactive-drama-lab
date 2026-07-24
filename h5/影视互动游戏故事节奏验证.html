@@ -1684,7 +1684,7 @@ flowchart TD
     var overall=p.overall||{};pipelineOverall(overall.label||(task&&task.phase)||'后台生产中',overall.state||((task&&task.status)==='failed'?'fail':'active'));
   }
   function taskPublicLog(task){
-    var text=String(task&&task.response_text||'');if(text.trim())return text;
+    // 前端只显示规范化进行状态，不读取旧任务 response_text，也不展示后台详细生成过程。
     var p=task&&task.pipeline||{},overall=p.overall||{},scripts=p.scripts||{},audit=p.audit||{};
     var lines=['▸ 后台生产持续运行'];
     if(overall.label)lines.push('  当前阶段：'+overall.label);
