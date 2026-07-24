@@ -2065,7 +2065,9 @@ flowchart TD
   });
   document.getElementById('openhist').addEventListener('click', function(){
     var calOn=(typeof extOn==='function'&&extOn('emotion_calib'));document.getElementById('histexport').style.display=calOn?'':'none';document.getElementById('histversions').style.display=calOn?'':'none';
-    refreshHistGitStatus().then(function(){histRender();document.getElementById('histmask').style.display='flex';});
+    // 先与后台对账（后台已删的记录从本地清掉），再拉 Git 状态、渲染。
+    var recon=(typeof window.__idlReconcileHist==='function')?window.__idlReconcileHist():Promise.resolve();
+    Promise.resolve(recon).then(function(){return refreshHistGitStatus();}).then(function(){histRender();document.getElementById('histmask').style.display='flex';});
   });
   document.getElementById('histclose').addEventListener('click', function(){ document.getElementById('histmask').style.display='none'; });
   document.getElementById('histmask').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
@@ -3042,11 +3044,16 @@ flowchart TD
     window.__idlSaveScriptRecord=autoSave;
 
     // 启动自动加载 datapacks/ 里的纯剧本包（仅 http）
+    function listPacks(){
+      // 返回 datapacks/ 下现存的 .script.json 文件名数组（只读，后台为权威源）
+      return fetch('datapacks/').then(function(r){ return r.ok?r.text():''; }).then(function(html){
+        var files=[]; var re=/href="([^"]+\.script\.json)"/gi,m; while((m=re.exec(html))) files.push(decodeURIComponent(m[1].split('/').pop()));
+        return files.filter(function(v,i,s){return s.indexOf(v)===i;});
+      });
+    }
     function autoLoad(){
       if(location.protocol==='file:') return;
-      fetch('datapacks/').then(function(r){ return r.ok?r.text():''; }).then(function(html){
-        var files=[]; var re=/href="([^"]+\.script\.json)"/gi,m; while((m=re.exec(html))) files.push(decodeURIComponent(m[1].split('/').pop()));
-        files=files.filter(function(v,i,s){return s.indexOf(v)===i;});
+      listPacks().then(function(files){
         if(!files.length) return;
         var have={}; histAll().forEach(function(r){ have[key(r)]=1; });
         var deleted=histDeleted();
@@ -3058,6 +3065,33 @@ flowchart TD
         }).catch(function(){}); }); }, Promise.resolve());
       }).catch(function(){});
     }
+    // 与后台对账：删除只能在后台做。凡是“曾落过盘（台账有记录）但 datapacks/ 里已不存在”的本地记录，
+    // 视为已被后台删除，从本地清掉并标记已删（防 autoLoad 又加回）。
+    // 从没入过包的记录（如刚生成尚未落盘、file:// 本地预览）一律不动，避免误删。
+    function reconcileWithBackend(){
+      if(location.protocol==='file:') return Promise.resolve();
+      return listPacks().then(function(files){
+        var alive={}; files.forEach(function(fn){ alive[fn]=1; });
+        var ledger=led(), a=histAll(), removed=0, keep=[];
+        a.forEach(function(r){
+          var k=key(r);
+          var hadPack=ledger[k] && String(ledger[k]).indexOf('script@')===0;
+          if(hadPack){
+            var fn=String(k||'rec').replace(/[^\w\u4e00-\u9fff\-]/g,'_').slice(0,40)+'.script.json';
+            if(!alive[fn]){ // 后台已删
+              markHistDeleted(r);
+              delete ledger[k];
+              removed++;
+              return; // 不进 keep
+            }
+          }
+          keep.push(r);
+        });
+        if(removed){ try{ localStorage.setItem(HKEY,JSON.stringify(keep)); }catch(e){} ledSave(ledger); }
+        return removed;
+      }).catch(function(){});
+    }
+    window.__idlReconcileHist=reconcileWithBackend;
     try{ autoLoad(); }catch(e){}
 
   })();

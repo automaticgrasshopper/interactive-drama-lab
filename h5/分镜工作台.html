@@ -583,7 +583,6 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         +'<button class="hbtn" data-sbact="load" data-i="'+i+'">载入查看</button>'
         +'<button class="hbtn" data-sbact="cg" data-i="'+i+'" style="background:#0e7490;color:#fff;border-color:#0e7490;">🎨 生成CG</button>'
         +'<button class="hbtn" data-sbact="game" data-i="'+i+'"'+(imgN>0?' style="background:#0b7285;color:#fff;border-color:#0b7285;"':' disabled title="尚未生成 CG，无可入库背景图。先点“生成CG”。" style="opacity:.5;cursor:not-allowed;"')+'>▶ 导入游戏'+(imgN>0?'':'（无CG）')+'</button>'
-        +'<button class="hbtn" data-sbact="del" data-i="'+i+'" style="color:#dc2626;border-color:#f3d0d0;">删除</button>'
         +'</div><div class="cgpanel" data-cg="'+i+'" style="display:none;margin-top:10px;"></div></div>';
     }).join('');
   }
@@ -593,7 +592,6 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     var b=e.target.closest('button'); if(!b) return;
     var i=+b.getAttribute('data-i'), a=sbHistAll(), r=a[i]; if(!r) return;
     var act=b.getAttribute('data-sbact');
-    if(act==='del'){ if(!confirm('删除这条分镜记录？')) return; idbDropRec(r); a.splice(i,1); try{localStorage.setItem(HSKEY,JSON.stringify(a));}catch(e){} sbHistRender(); return; }
     if(act==='load'){ window.__lastBoard=r.board; window.__lastNodes=r.nodes||[]; boundStory=r.boundStory||''; window.__promptRecIdx=i; if(r.upstreamChars)upstreamChars=r.upstreamChars; if(r.upstreamScenes)upstreamScenes=r.upstreamScenes; if(r.upstreamRefs)upstreamRefs=r.upstreamRefs; if(r.styleId&&styleById(r.styleId))setSelectedStyle(r.styleId);
       // 回填左侧输入区（免再从上游重点）：优先用记录里存的 src 快照，老记录降级用 nodes 反推 JSON
       try{
