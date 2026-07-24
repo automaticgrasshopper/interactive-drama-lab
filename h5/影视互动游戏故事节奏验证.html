@@ -42,10 +42,6 @@
   .btn.pri { background:#1f2430; color:#fff; }
   .btn.sec { background:#eef1f6; color:#3a4255; flex:0 0 108px; }
   .btn:active { opacity:.85; }
-  .forgebar { margin-top:12px; padding:11px 12px; border:1px solid #e5e7ef; border-radius:12px; background:#f8f9fc; }
-  .forgebar label { display:flex; align-items:center; gap:8px; margin:0; font-size:12.5px; }
-  .forgebar select { margin-left:auto; width:220px; height:34px; border:1px solid #dfe2ea; border-radius:9px; background:#fff; padding:0 30px 0 10px; color:#1f2430; font-weight:650; }
-  .forgebar .hint { margin-top:6px; line-height:1.55; }
   .auditline { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:7px 0 2px; }
   .auditpill { display:inline-flex; align-items:center; gap:4px; border-radius:999px; padding:3px 8px; font-size:10.5px; font-weight:750; background:#f1f3f7; color:#667085; }
   .auditpill.pass { background:#e8f7f0; color:#14845f; }
@@ -231,16 +227,6 @@
         </div>
       </div>
       <div id="recnote" class="hint" style="color:#16a34a;"></div>
-
-      <div class="forgebar">
-        <label>剧本生产方式
-          <select id="forgeMode">
-            <option value="skill" selected>分集工坊 · 逐集三审</option>
-            <option value="quick">快速草稿 · 单次生成</option>
-          </select>
-        </label>
-        <div class="hint" id="forgeHint">先锁拓扑和制作卡，再逐集写作；每集独立做因果、对白、冷读验收。质量高，调用次数也更多。</div>
-      </div>
 
       <div class="btns">
         <button class="btn pri" id="gen">✦ 一键生成</button>
@@ -1283,12 +1269,8 @@ flowchart TD
   }
   function intentBlock(){ var p=inputPolicy(); return '【输入意图自动识别】\n当前梯度：'+p.label+'\n执行口径：'+p.directive+'\n多种输入冲突时，按“用户本轮明确要求 > 上传原稿/图片 > 详细描述 > 题材标签 > 系统默认”裁决，同层冲突取更细颗粒度。\n\n'; }
   function imageBlock(){ if(!IMAGES.length)return ''; return '【用户上传图片】共 '+IMAGES.length+' 张：'+IMAGES.map(function(x){return x.name;}).join('、')+'。图片会以多模态内容随本消息传入。请先识别每张图的作用（人物/场景/道具/画风/构图参考），只锁定图中可见事实，不臆测不可见剧情。\n\n'; }
-  function skillForgeOn(){ var el=document.getElementById('forgeMode'); return !!(el&&el.value==='skill'&&extOn('script_inst')); }
-  document.getElementById('forgeMode').addEventListener('change',function(){
-    document.getElementById('forgeHint').textContent=this.value==='skill'
-      ? '先生成一集一个节点的分集梗概与流程图，再按冻结拓扑逐集写作。'
-      : '一次生成结构与剧本，适合低成本试想法；不执行逐集记忆、独立冷读和锁稿。';
-  });
+  // 已取消“快速草稿”双模式：生成统一走分集工坊·逐集三审（只要剧本实例化规则开着）。
+  function skillForgeOn(){ return extOn('script_inst'); }
   function userMessageContent(text){ if(!IMAGES.length)return text; var out=IMAGES.map(function(x){return {type:'image_url',image_url:{url:x.dataUrl}};}); out.push({type:'text',text:text}); return out; }
   // 供 mkReq / resolveOne 取用的用户原稿块（已截断）
   function docBlock(){
@@ -2411,7 +2393,7 @@ flowchart TD
           histSave({ time:new Date().toLocaleString('zh-CN',{hour12:false}), title:storyTitle(d), logline:(d.logline||''), synopsis:(d.synopsis||''), runId:d.__runId,
             params:'时长'+lastT+'分/结局'+lastE+'/'+(tags.length?tags.join('＋'):'无标签')+'/'+model+'/'+(skillForgeOn()?'v0.1.47逐集独立复检':'快速草稿'),
             pass:va.pass, attempts:attempt, log:logEl.textContent, analysisText:analysisText, json:c,
-            input:{ brief:briefTxt, tags:tagsNow.slice(), dur:genDurSel, ends:genEndsSel, forgeMode:document.getElementById('forgeMode').value, docs:(DOCS.length?DOCS.map(function(dd){return {name:dd.name,text:dd.text};}):null), images:(IMAGES.length?IMAGES.map(function(im){return {name:im.name,type:im.type,dataUrl:im.dataUrl};}):null), intent:inputPolicy().label } });
+            input:{ brief:briefTxt, tags:tagsNow.slice(), dur:genDurSel, ends:genEndsSel, forgeMode:'skill', docs:(DOCS.length?DOCS.map(function(dd){return {name:dd.name,text:dd.text};}):null), images:(IMAGES.length?IMAGES.map(function(im){return {name:im.name,type:im.type,dataUrl:im.dataUrl};}):null), intent:inputPolicy().label } });
           rememberBackendTask(null);
           logLine('▸ 已存入「📜 记录」（右上角），最多保留 100 条。');
           done();
@@ -2461,7 +2443,7 @@ flowchart TD
       box.innerHTML=analysisHtml(va,1)+box.innerHTML;applyTaskPipeline(task);pipelineOverall('已交付','pass');
       logReset();logEl.textContent=String(task.response_text||'');logHead=logEl.textContent+(logEl.textContent?'\n':'');logLine('▸ 已取回后台完整生产结果并渲染。');
       var analysisText=va.hard.map(function(x){return (x.ok?'✓ ':'✗ ')+x.name+(x.detail?('　'+x.detail):'');}).join('\n');
-      histSave({time:new Date().toLocaleString('zh-CN',{hour12:false}),title:storyTitle(d),logline:d.logline||'',synopsis:d.synopsis||'',runId:d.__runId,params:'时长'+lastT+'分/结局'+lastE+'/'+(tags.length?tags.join('＋'):'无标签')+'/'+model+'/后台分集工坊',pass:true,attempts:1,log:logEl.textContent,analysisText:analysisText,json:c,input:{brief:briefTxt,tags:tagsNow.slice(),dur:genDurSel,ends:genEndsSel,forgeMode:document.getElementById('forgeMode').value,docs:(DOCS.length?DOCS.map(function(dd){return {name:dd.name,text:dd.text};}):null),images:(IMAGES.length?IMAGES.map(function(im){return {name:im.name,type:im.type,dataUrl:im.dataUrl};}):null),intent:inputPolicy().label}});
+      histSave({time:new Date().toLocaleString('zh-CN',{hour12:false}),title:storyTitle(d),logline:d.logline||'',synopsis:d.synopsis||'',runId:d.__runId,params:'时长'+lastT+'分/结局'+lastE+'/'+(tags.length?tags.join('＋'):'无标签')+'/'+model+'/后台分集工坊',pass:true,attempts:1,log:logEl.textContent,analysisText:analysisText,json:c,input:{brief:briefTxt,tags:tagsNow.slice(),dur:genDurSel,ends:genEndsSel,forgeMode:'skill',docs:(DOCS.length?DOCS.map(function(dd){return {name:dd.name,text:dd.text};}):null),images:(IMAGES.length?IMAGES.map(function(im){return {name:im.name,type:im.type,dataUrl:im.dataUrl};}):null),intent:inputPolicy().label}});
       rememberBackendTask(null);done();
     }
     function pollBackgroundProduction(){
