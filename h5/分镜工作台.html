@@ -991,7 +991,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         genHammerSeq('char',chars,function(c){return c.name||c.id||'';},charPrompt,30,45,'人物三视图',function(){
           if(gStopped) return pipelineDone(true);
           // 阶段 2：场景图 45–58%
-          genHammerSeq('scene',scenes,function(s){return s.name||s.id||'';},scenePrompt,45,58,'场景图',function(){
+          genHammerSeq('scene',scenes,sceneHamName,scenePrompt,45,58,'场景图',function(){
             if(gStopped) return pipelineDone(true);
             // 阶段 3：CG 分镜 58–95%（锤点驱动）
             genCgSeq(58,95,function(){
@@ -1277,7 +1277,9 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   function currentChars(){ var b=window.__lastBoard; var fromBoard=(b&&b.assets&&Array.isArray(b.assets.characters))?b.assets.characters:[]; return (upstreamChars&&upstreamChars.length)?upstreamChars:fromBoard; }
   function currentScenes(){ var b=window.__lastBoard; var fromBoard=(b&&b.assets&&Array.isArray(b.assets.scenes))?b.assets.scenes:[]; return (upstreamScenes&&upstreamScenes.length)?upstreamScenes:fromBoard; }
   function renderCharSheets(){ renderHammer('pane-char','char',currentChars(),charPrompt,function(c){return c.name||c.id||'';}); }
-  function renderSceneImages(){ renderHammer('pane-scene','scene',currentScenes(),scenePrompt,function(s){return s.name||s.id||'';}); }
+  // 场景图键：用 id 归一形（带时段，如 大厅_夜），与 shot.refScene 同源，保证同场景日/夜各存一张不互盖
+  function sceneHamName(s){ return idToName(s.id)||s.name||''; }
+  function renderSceneImages(){ renderHammer('pane-scene','scene',currentScenes(),scenePrompt,sceneHamName); }
 
   // ================= 镜头衔接自检（故事版用：先验证衔接合理性再给下游） =================
   // 靠 beats.shots 的 link/space 字段扫出可能的衔接问题：未写站位、跨镜断裂、明说越轴无过渡。
