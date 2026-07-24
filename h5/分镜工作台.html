@@ -677,7 +677,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   // 取各镜的 img 提示词（按节点/镜号），由视觉导演规则编译当前记录的画风 Preset。
   function sbImgPrompts(r){
     var ps=(r.board&&Array.isArray(r.board.prompts))?r.board.prompts:[];
-    return ps.map(function(p){ return { no:String(p.no), prompt:compileStillPrompt(p.img||p.video||p.text||'',r) }; });
+    return ps.map(function(p){ return { no:String(p.no), prompt:compileStillPrompt((p.img||p.video||p.text||'')+assetFingerprint(r.board,String(p.no)),r) }; });
   }
   // ===== 锤点驱动：按本镜 refChar/refScene 取已生成的三视图/场景图当参考图（图生图锁一致性）=====
   // @id 归一：去掉 @char_/@scene_ 前缀、空白，与锤点图的 name 键对齐
@@ -1104,7 +1104,19 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   // 当前分镜提示词面板对应的记录索引（生成后=0；载入查看时为对应索引），生成的图写回该记录 images
   window.__promptRecIdx=0;
   // 取当前 prompts 面板对应的记录的出图提示词，静帧/视频分别注入 Preset 规则。
-  function promptImgText(no,img,video,rec){ return compileStillPrompt(img||video||'',rec); }
+  // ★ 资产指纹：把本镜引用资产的固化特征文字（场景 layout/light、人物 look）确定性拼进提示词，
+  // 不再依赖 LLM 每镜自行复述（复述不一致＝漂移源）；与母图参考图构成图+文双锚
+  function assetFingerprint(board,no){
+    var s=shotByNo(board,no); if(!s||!board||!board.assets) return '';
+    var out=[];
+    var sc=idToName(s.refScene);
+    if(sc){ (board.assets.scenes||[]).forEach(function(x){ if(idToName(x.id)===sc||x.name===sc){ var f=[x.name,x.time,x.layout||x.look,x.light].filter(Boolean).join('，'); if(f) out.push('【场景固化】'+f); } }); }
+    String(s.refChar||'').split(/[\u3001,\s]+/).map(idToName).filter(Boolean).slice(0,2).forEach(function(cn){
+      (board.assets.characters||[]).forEach(function(x){ if(idToName(x.id)===cn||x.name===cn){ var f=[x.name,x.look].filter(Boolean).join('，'); if(f) out.push('【人物固化】'+f); } });
+    });
+    return out.length?('\n'+out.join('\n')+'\n以上固化特征与参考图为准，不得更改。'):'';
+  }
+  function promptImgText(no,img,video,rec){ return compileStillPrompt((img||video||'')+assetFingerprint(rec&&rec.board,no),rec); }
   function renderPrompts(d){
     var ps=Array.isArray(d.prompts)?d.prompts:[];
     if(!ps.length){
@@ -1262,6 +1274,22 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     if(bar) bar.style.display='block'; var prog=8; if(barI)barI.style.width='8%';
     var timer=setInterval(function(){ prog=Math.min(90,prog+Math.random()*12); if(barI)barI.style.width=prog+'%'; },300);
     var sourceRefs=(upstreamRefs||[]).map(function(x){return typeof x==='string'?x:x&&x.dataUrl;}).filter(Boolean).slice(0,4);
+    // ★ 资产固化：重出时以已有母图为基准（排参考图首位），同一资产多次生成不再独立随机；日/夜另一时段已有图也作同空间锚
+    var prior=hamGet(kind,name);
+    var sibling=null;
+    if(kind==='scene'&&!prior){
+      // 同场景另一时段的母图（如 大厅_日 ↔ 大厅_夜）：同一屋子只换光线
+      var base=String(name).replace(/_(日|夜|黄昏|清晨|黎明|傍晚)$/,'');
+      var all=hamAll(), pre=hamPrefix(kind);
+      for(var k in all){ if(k.indexOf(pre)===0){ var nm=k.slice(pre.length); if(nm!==name && nm.replace(/_(日|夜|黄昏|清晨|黎明|傍晚)$/,'')===base){ sibling=hamGet(kind,nm); if(sibling) break; } } }
+    }
+    var anchor=prior||sibling;
+    if(anchor){
+      sourceRefs=[anchor].concat(sourceRefs).slice(0,4);
+      prompt+=(prior
+        ? ' Use the first reference image as the identity baseline of this exact '+(kind==='char'?'character':'location')+': keep the same '+(kind==='char'?'face, hairstyle, body and outfit':'room, architecture, furniture layout and set dressing')+', only adjust per the description above.'
+        : ' The first reference image is the SAME location at a different time of day: keep the same room, architecture, furniture layout and set dressing, change only the lighting and atmosphere.');
+    }
     sbGenImage(prompt,function(err,url){
       clearInterval(timer);
       if(err){ if(barI)barI.style.width='0%'; if(bar)bar.style.display='none'; alert('生成失败：'+err.message); if(paneId)renderHammerRefresh(paneId); if(cb)cb(err); return; }
