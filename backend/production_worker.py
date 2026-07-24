@@ -383,13 +383,54 @@ class ProductionManager:
             pass
 
     def _log_chunk(self, project_id: str, run_id: str, chunk: str) -> None:
-        # 流式推理与结构化输出诊断：同样只入后台日志，前端不公开。
+        # 流式生成内容与结构化输出诊断：同样只入后台日志，前端不公开。
         if not chunk:
             return
         try:
             self.runs.append_log(project_id, run_id, chunk)
         except Exception:  # noqa: BLE001
             pass
+
+    def _log_input_decisions(self, project_id: str, run_id: str, payload: dict[str, Any], base_messages: list[dict[str, Any]], duration: int, endings: int, compact_mode: bool) -> None:
+        summary = payload.get("input_summary") if isinstance(payload.get("input_summary"), dict) else {}
+        tags = [str(item) for item in summary.get("tags") or [] if str(item).strip()]
+        profiles = self._reference_profiles({"messages": base_messages, "summary": summary})
+        profile_names = {"suspense": "悬疑/惊悚/犯罪", "confrontation": "谈判/审讯/对质", "written-text": "书面信息/文字证据"}
+        detected = [profile_names.get(item, item) for item in profiles]
+        brief = re.sub(r"\s+", " ", str(summary.get("brief") or payload.get("title") or "")).strip()
+        self._log(project_id, run_id, "========== 输入识别与生产裁决 ==========")
+        self._log(project_id, run_id, f"题材输入：{'、'.join(tags) if tags else '未手动选择标签'}")
+        self._log(project_id, run_id, f"系统检测：{'、'.join(detected) if detected else '通用剧情规则'}；依据为输入中的题材词、事件类型与交流场景")
+        self._log(project_id, run_id, f"故事任务：{brief[:240] or '未提供简述'}")
+        self._log(project_id, run_id, f"体量裁决：{duration} 分钟 · {endings} 个结局 · {'长项目分段协议' if compact_mode else '标准拓扑协议'}")
+        self._log(project_id, run_id, f"输入方式：{summary.get('intent') or '直接描述'}；附件：文稿 {len(summary.get('docs') or [])} 份、图片 {len(summary.get('images') or [])} 张")
+        self._log(project_id, run_id, "生产链：题材与输入识别 → 分集拓扑 → 逐集写作 → 人话复写 → 独立质量复检 → 锁稿")
+
+    def _log_topology_decisions(self, project_id: str, run_id: str, data: dict[str, Any], duration: int, endings: int) -> None:
+        nodes = [item for item in data.get("nodes") or [] if isinstance(item, dict)]
+        choices = [item for item in nodes if item.get("kind") in ("choice", "interaction") or len(item.get("next") or []) > 1]
+        majors = [item for item in nodes if item.get("kind") == "major"]
+        minors = [item for item in nodes if item.get("kind") == "minor"]
+        self._log(project_id, run_id, "========== 拓扑判定结果 ==========")
+        self._log(project_id, run_id, f"结构规模：{len(nodes)} 集 · {len(choices)} 个互动岔点 · {len(majors)} 个正式结局 · {len(minors)} 个失败/小结局（目标结局数 {endings}）")
+        self._log(project_id, run_id, f"正式资产：角色 {len(data.get('characters') or [])} · 场景 {len(data.get('scenes') or [])} · 道具 {len(data.get('props') or [])}")
+        if data.get("logline"):
+            self._log(project_id, run_id, "一句话定位：" + re.sub(r"\s+", " ", str(data.get("logline")))[:260])
+        if choices:
+            self._log(project_id, run_id, "互动节点：" + "；".join(f"{n.get('id')}（{n.get('node_title') or n.get('text') or '未命名'} → {len(n.get('next') or [])} 路）" for n in choices))
+        ending_items = majors + minors
+        if ending_items:
+            self._log(project_id, run_id, "结局分配：" + "；".join(f"{n.get('id')}={n.get('node_title') or n.get('text') or n.get('kind')}" for n in ending_items))
+        self._log(project_id, run_id, f"硬校验：节点连通、结局总数、选择出口、终点无后继均已通过；按 {duration} 分钟体量进入逐集生产")
+
+    def _log_episode_brief(self, project_id: str, run_id: str, node: dict[str, Any], index: int, total: int, predecessors: dict[str, list[str]]) -> None:
+        node_id = str(node.get("id") or index)
+        title = node.get("episode_title") or node.get("node_title") or node.get("text") or "未命名"
+        next_ids = [str(edge.get("to")) for edge in node.get("next") or [] if isinstance(edge, dict) and edge.get("to")]
+        self._log(project_id, run_id, f"========== 第 {index}/{total} 集 · {node_id} · {title} ==========")
+        self._log(project_id, run_id, f"本集任务：{node.get('dramatic_core') or (node.get('production_card') or {}).get('dramatic_task') or node.get('text') or '按冻结拓扑完成本集冲突'}")
+        self._log(project_id, run_id, f"人物/场景：{node.get('cast') or '按正式角色表'} · {node.get('loc') or '按正式场景表'}")
+        self._log(project_id, run_id, f"因果边界：前置 {('、'.join(predecessors.get(node_id, [])) or '起点')} → 后续 {('、'.join(next_ids) or '结局')}；拓扑连接不得改写")
 
     @staticmethod
     def _reference_profiles(data: Any, node: Any = None) -> tuple[str, ...]:
@@ -999,6 +1040,7 @@ class ProductionManager:
             raise RuntimeError("整场人话润色改变了非台词骨架")
         node["script"] = revised
         node["dialogue_polished_digest"] = script_digest(revised)
+        self._log(project_id, run_id, f"  ✓ {node.get('id')} 人话复写完成：对白已按人物关系、现场目的、接话逻辑和朴素中文重整；动作骨架校验一致")
 
     def _episode_quality_review(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]]) -> dict[str, Any]:
         """Run one independent, digest-bound second pass over the current episode."""
@@ -1133,6 +1175,8 @@ class ProductionManager:
             review = self._episode_quality_review(project_id, run_id, data, node, predecessors, topology)
             self._set_review(node, review)
             if review.get("pass"):
+                covered = "、".join(str(item) for item in review.get("covered_checks") or [])
+                self._log(project_id, run_id, f"  ✓ {node.get('id')} 独立复检通过（第 {attempt + 1} 轮）：{covered or '全部必检项'}")
                 return
             if attempt == 2:
                 raise RuntimeError(f"{node.get('id')} 逐集独立复检连续三次未通过")
@@ -1650,6 +1694,7 @@ class ProductionManager:
             self._check_stop(project_id, run_id)
             node_id = str(node.get("id"))
             forge["current_episode"] = node_id
+            self._log_episode_brief(project_id, run_id, node, index, total, predecessors)
             if not str(node.get("script") or "").strip():
                 node["lightweight_status"] = "待写作"
                 self._write_episode(project_id, run_id, data, node, predecessors, topology)
@@ -1673,6 +1718,7 @@ class ProductionManager:
                     node["lightweight_status"] = "已口语化"
                 self._ensure_episode_quality(project_id, run_id, data, node, predecessors, topology)
                 node["lightweight_status"] = "已复检"
+            self._log(project_id, run_id, f"  ✓ {node.get('id')} 已锁稿：正文 {visible_count(node.get('script'))} 可见字；人话复写与独立复检凭证已绑定当前正文摘要")
             self.runs.update(project_id, run_id, result_data=data)
             forge["reviewed"] = index
             forge["locked"] = sum(1 for item in order if self._is_locked(item))
@@ -1693,7 +1739,8 @@ class ProductionManager:
         self._assert_reference_receipts(project_id, run_id)
         pipeline["audit"] = {"pct": 100, "label": "逐集独立复检已全部通过", "state": "pass"}
         pipeline["overall"] = {"label": "已交付", "state": "pass"}
-        self._log(project_id, run_id, "✓ 分集主体已完成。")
+        self._log(project_id, run_id, "========== 最终交付 ==========")
+        self._log(project_id, run_id, f"✓ 全部 {total} 集完成并锁稿：拓扑、逐集正文、人话复写、独立复检、状态回写均已完成。")
         self._update_pipeline(project_id, run_id, pipeline, phase="completed", status="completed", result_data=data)
 
     def _resume(self, project_id: str, run_id: str, data: dict[str, Any]) -> None:
@@ -1730,6 +1777,7 @@ class ProductionManager:
             )
             duration, endings = int(payload.get("duration") or 20), int(payload.get("endings") or 3)
             compact_mode = duration >= 30 or endings >= 6
+            self._log_input_decisions(project_id, run_id, payload, base_messages, duration, endings, compact_mode)
             topology_base = list(base_messages) + [self._lightweight_topology_instruction()] + ([self._compact_topology_instruction()] if compact_mode else [])
             round_no, json_failures, messages = 1, 0, list(topology_base)
             while True:
@@ -1768,6 +1816,8 @@ class ProductionManager:
                     json_failures = 0
                     errors = self._outline_errors(data, duration, endings)
                 if not errors:
+                    self._log(project_id, run_id, f"  ✓ 第 {round_no} 轮拓扑硬校验通过")
+                    self._log_topology_decisions(project_id, run_id, data, duration, endings)
                     break
                 self._log(project_id, run_id, "  ↳ 未通过：" + "；".join(errors))
                 messages = list(topology_base) + [{"role": "user", "content": "上一版未通过硬规则，必须完整重做并修正：\n- " + "\n- ".join(errors)}]

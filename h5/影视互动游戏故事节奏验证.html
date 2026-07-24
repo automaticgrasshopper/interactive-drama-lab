@@ -1686,7 +1686,7 @@ flowchart TD
   function taskPublicLog(task){
     var text=String(task&&task.response_text||'');if(text.trim())return text;
     var p=task&&task.pipeline||{},overall=p.overall||{},scripts=p.scripts||{},audit=p.audit||{};
-    var lines=['▸ 后台生产持续运行（内部推理与装载凭证不公开）'];
+    var lines=['▸ 后台生产持续运行'];
     if(overall.label)lines.push('  当前阶段：'+overall.label);
     if(scripts.label)lines.push('  分集生产：'+(scripts.pct||0)+'% · '+scripts.label);
     if(audit.label)lines.push('  台词校验：'+(audit.pct||0)+'% · '+audit.label);
@@ -2457,7 +2457,7 @@ flowchart TD
     }
     function startBackgroundProduction(){
       var task={project_id:backendProjectId,run_id:backendRunBase+'-production'};activeBackendTask=task;rememberBackendTask(task);pipelineOverall('后台生产启动中','active');
-      var payload={project_id:task.project_id,run_id:task.run_id,title:briefTxt||tagsNow.join('＋')||'未命名项目',duration:lastT,endings:lastE,outline:{model:model,temperature:.8,max_tokens:20000,messages:[{role:'system',content:sys},{role:'user',content:userMessageContent(baseUser)}]}};
+      var payload={project_id:task.project_id,run_id:task.run_id,title:briefTxt||tagsNow.join('＋')||'未命名项目',duration:lastT,endings:lastE,input_summary:{brief:briefTxt,tags:tagsNow.slice(),intent:inputPolicy().label,docs:DOCS.map(function(d){return d.name;}),images:IMAGES.map(function(im){return im.name;})},outline:{model:model,temperature:.8,max_tokens:20000,messages:[{role:'system',content:sys},{role:'user',content:userMessageContent(baseUser)}]}};
       fetch('/api/production/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(j){if(!r.ok||!j.ok)throw new Error(j.error||('启动失败 HTTP '+r.status));return j;});}).then(function(){logLine('▸ 完整生产链已交给本地后台。现在刷新或切换页面都不会中断。');pollBackgroundProduction();}).catch(function(e){backgroundFail('无法启动后台生产：'+e.message);});
     }
     function done(){ genBusy=false; genAbort=null; activeBackendTask=null; document.getElementById('stopgen').style.display='none'; btn.textContent=old; btn.disabled=false; }
