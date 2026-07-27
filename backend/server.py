@@ -375,7 +375,7 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         if path == "/api/health":
-            self._json(200, {"ok": True, "service": "interactive-drama-backend", "api_version": 8, "execution_schema_version": execution_schema_version(), "system": platform.system(), "platform": platform.platform(), "capabilities": ["all_tasks", "git_archive_tasks", "task_delete", "git_task_delete", "project_delete", "production_resume", "execution_group_pipeline", "reference_bundle_gate", "precise_restart", "safe_git_sync"], "root": str(ROOT)})
+            self._json(200, {"ok": True, "service": "interactive-drama-backend", "api_version": 9, "execution_schema_version": execution_schema_version(), "system": platform.system(), "platform": platform.platform(), "capabilities": ["all_tasks", "git_archive_tasks", "task_delete", "git_task_delete", "project_delete", "production_resume", "execution_group_pipeline", "reference_bundle_gate", "precise_restart", "force_backend_exit", "safe_git_sync"], "root": str(ROOT)})
             return
         if path == "/api/settings":
             self._json(200, {"ok": True, "settings": public_settings()})
