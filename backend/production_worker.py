@@ -1166,6 +1166,13 @@ class ProductionManager:
         )
         payload = {
             "characters": [{key: item.get(key) for key in ("name", "role", "desc", "voice")} for item in data.get("characters") or []],
+            "locked_facts": {
+                "entry_state": node.get("entry_state") or "",
+                "exit_state": node.get("exit_state") or "",
+                "working_summary": node.get("working_summary") or "",
+                "facts_lock_digest": node.get("facts_lock_digest") or "",
+            },
+            "read_only_script_context": before,
             "dialogue_lines": numbered_dialogue_lines(before),
         }
         request_text = json.dumps(payload, ensure_ascii=False) + '\n返回：{"replacements":[{"number":对白编号,"text":"只写冒号后的新台词"}]}'
@@ -1195,10 +1202,16 @@ class ProductionManager:
         node["dialogue_polished_digest"] = script_digest(revised)
         self._log(project_id, run_id, f"  ✓ {node.get('id')} 人话复写完成：平台原位替换 {len(result.get('replacements') or [])} 行台词；动作与叙述逐字保留")
 
-    def _episode_quality_review(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]], receipt_feedback: list[str] | None = None) -> dict[str, Any]:
+    def _episode_quality_review(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]], receipt_feedback: list[str] | None = None, *, facts_only: bool = False) -> dict[str, Any]:
         """Run one independent, digest-bound second pass over the current episode."""
         digest = script_digest(node.get("script"))
         required_checks = [
+            "事实来源与知情",
+            "首次出现与必要交代",
+            "因果相邻与可见后果",
+            "话茬与现场目的",
+            "结尾画面与下一入口",
+        ] if facts_only else [
             "事实来源与知情",
             "首次出现与必要交代",
             "因果相邻与可见后果",
@@ -1226,11 +1239,17 @@ class ProductionManager:
             },
             "required_checks": required_checks,
             "receipt_feedback": list(receipt_feedback or []),
+            "review_scope": "只查事实、因果、关系承接与结尾入口；普通话措辞留给最后人话复写" if facts_only else "完整七项复检",
         }
         system = (
+            "你是逐集事实锁定复检员。"
+            "这是人话复写之前的事实层审查，只查事实来源、知情、因果、关系承接和结尾入口；不评价口语风格。"
+            "先只凭已经发生的有限前情和正文完成理解门四项，再逐场通读 required_checks，并绑定给定正文SHA。"
+            if facts_only else
             "你是逐集独立复检员。"
             "这是正文与整场人话复写完成后的第二遍审查，不得沿用作者自检，只判不改。"
             "先只凭已经发生的有限前情和正文完成理解门四项，再逐场通读七项，并绑定给定正文SHA。"
+        ) + (
             "不得推测作者预期出口或后续剧情；结尾只判断是否逼出具体行动、问题或真实选择。"
             "问题必须可定位且归属 causal、dialogue 或 ending。"
             "普通话检查必须在evidence中分别给dialogue_location/dialogue_proof和narration_location/narration_proof。"
@@ -1266,16 +1285,17 @@ class ProductionManager:
         if missing:
             receipt_issues.append("复检覆盖不完整｜当前集｜" + "、".join(missing))
         evidence = result.get("evidence") if isinstance(result.get("evidence"), list) else []
-        plain = next((item for item in evidence if isinstance(item, dict) and item.get("check") == "普通话表达与叙述可读"), {})
-        for field in ("dialogue_location", "dialogue_proof", "narration_location", "narration_proof"):
-            if len(str(plain.get(field) or "").strip()) < (2 if field.endswith("location") else 6):
-                receipt_issues.append("普通话复检证据不完整｜当前集｜台词与描述必须分别举证")
-                break
+        if not facts_only:
+            plain = next((item for item in evidence if isinstance(item, dict) and item.get("check") == "普通话表达与叙述可读"), {})
+            for field in ("dialogue_location", "dialogue_proof", "narration_location", "narration_proof"):
+                if len(str(plain.get(field) or "").strip()) < (2 if field.endswith("location") else 6):
+                    receipt_issues.append("普通话复检证据不完整｜当前集｜台词与描述必须分别举证")
+                    break
         script_issues.extend(written_text_coordinate_issues(node.get("script")))
         script_issues = list(dict.fromkeys(script_issues))
         receipt_issues = list(dict.fromkeys(receipt_issues))
         return {
-            "name": "quality",
+            "name": "facts" if facts_only else "quality",
             "pass": not script_issues and not receipt_issues,
             "issues": script_issues,
             "receipt_issues": receipt_issues,
@@ -1286,6 +1306,36 @@ class ProductionManager:
             "evidence": evidence,
             "digest": digest,
         }
+
+    def _verify_registered_issues(self, project_id: str, run_id: str, node: dict[str, Any], issues: list[str]) -> list[str]:
+        """Verify only previously registered defects; do not discover new defects after a local patch."""
+        result = self._json_chat(
+            project_id,
+            run_id,
+            [{
+                "role": "system",
+                "content": (
+                    "你是局部修稿验收员。只核对 registered_issues 是否已由当前正文解决，不得重新扫描或新增问题。"
+                    "逐项返回 resolved=true/false；false必须简述仍缺什么。只返回JSON。"
+                ),
+            }, {
+                "role": "user",
+                "content": json.dumps({"registered_issues": issues, "script": node.get("script")}, ensure_ascii=False)
+                + '\n返回：{"results":[{"issue":"原问题","resolved":true,"note":"依据或仍缺内容"}]}',
+            }],
+            validator=True,
+            max_tokens=2600,
+            temperature=0.05,
+            reference_phase="episode-quality-review",
+            reference_profiles=self._reference_profiles({"node": node}),
+        )
+        rows = result.get("results") if isinstance(result.get("results"), list) else []
+        unresolved = []
+        for index, issue in enumerate(issues):
+            row = rows[index] if index < len(rows) and isinstance(rows[index], dict) else {}
+            if row.get("resolved") is not True:
+                unresolved.append(str(issue) + ("｜仍缺：" + str(row.get("note")) if row.get("note") else ""))
+        return unresolved
 
     def _repair_episode_quality(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]], review: dict[str, Any]) -> None:
         """Repair only independently registered episode-quality issues."""
@@ -1369,47 +1419,52 @@ class ProductionManager:
         self._log(project_id, run_id, f"  ↳ {node.get('id')} 因果定点返修：平台应用 {len(result.get('patches') or [])} 个行级补丁，其余原文逐字保留")
 
     def _ensure_episode_quality(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]]) -> None:
-        """Review, repair script issues only, and never mistake an incomplete receipt for a script defect."""
-        for attempt in range(3):
-            digest = script_digest(node.get("script"))
-            previous = self._audit_map(node).get("quality") or {}
-            if previous.get("pass") and previous.get("digest") == digest:
-                return
-            review: dict[str, Any] = {}
-            receipt_feedback: list[str] = []
-            for receipt_attempt in range(3):
-                review = self._episode_quality_review(
-                    project_id, run_id, data, node, predecessors, topology, receipt_feedback
-                )
-                receipt_feedback = [str(item) for item in review.get("receipt_issues") or []]
-                self._set_review(node, review)
-                self.runs.update(project_id, run_id, result_data=data)
-                if not receipt_feedback:
-                    break
-                self._log(
-                    project_id,
-                    run_id,
-                    f"  ↳ {node.get('id')} 复检回执第 {receipt_attempt + 1} 次不完整，只重做回执、不改剧本："
-                    + "；".join(receipt_feedback),
-                )
-            if receipt_feedback:
-                raise RuntimeError(f"{node.get('id')} 复检员连续三次未提交完整回执：" + "；".join(receipt_feedback))
-            script_issues = [str(item) for item in review.get("issues") or []]
-            if not script_issues:
-                review["pass"] = True
-                self._set_review(node, review)
-                self.runs.update(project_id, run_id, result_data=data)
-                covered = "、".join(str(item) for item in review.get("covered_checks") or [])
-                self._log(project_id, run_id, f"  ✓ {node.get('id')} 独立复检通过（正文第 {attempt + 1} 轮）：{covered or '全部必检项'}")
-                return
-            self._log(
-                project_id,
-                run_id,
-                f"  ↳ {node.get('id')} 独立复检正文问题（第 {attempt + 1} 轮）：" + "；".join(script_issues),
+        """Lock facts first: scan once, repair registered defects, then verify only that fixed list."""
+        current_digest = script_digest(node.get("script"))
+        previous = self._audit_map(node).get("facts") or {}
+        if previous.get("pass") and previous.get("digest") == current_digest and node.get("facts_lock_digest") == current_digest:
+            return
+        review: dict[str, Any] = {}
+        receipt_feedback: list[str] = []
+        for receipt_attempt in range(3):
+            review = self._episode_quality_review(
+                project_id, run_id, data, node, predecessors, topology, receipt_feedback, facts_only=True
             )
-            if attempt == 2:
-                raise RuntimeError(f"{node.get('id')} 逐集独立复检连续三次未通过：" + "；".join(script_issues))
-            self._repair_episode_quality(project_id, run_id, data, node, predecessors, topology, review)
+            receipt_feedback = [str(item) for item in review.get("receipt_issues") or []]
+            self._set_review(node, review)
+            self.runs.update(project_id, run_id, result_data=data)
+            if not receipt_feedback:
+                break
+            self._log(
+                project_id, run_id,
+                f"  ↳ {node.get('id')} 事实检查回执第 {receipt_attempt + 1} 次不完整，只重做回执、不改正文："
+                + "；".join(receipt_feedback),
+            )
+        if receipt_feedback:
+            raise RuntimeError(f"{node.get('id')} 事实检查连续三次未提交完整回执：" + "；".join(receipt_feedback))
+        registered = [str(item) for item in review.get("issues") or []]
+        if registered:
+            self._log(project_id, run_id, f"  ↳ {node.get('id')} 首次事实检查登记 {len(registered)} 个局部问题：" + "；".join(registered))
+        unresolved = list(registered)
+        for repair_round in range(3):
+            if not unresolved:
+                break
+            patch_review = dict(review)
+            patch_review["issues"] = unresolved
+            self._repair_episode_quality(project_id, run_id, data, node, predecessors, topology, patch_review)
+            self.runs.update(project_id, run_id, result_data=data)
+            unresolved = self._verify_registered_issues(project_id, run_id, node, registered)
+            if unresolved:
+                self._log(project_id, run_id, f"  ↳ {node.get('id')} 局部问题验收仍有 {len(unresolved)} 项未解决（不新增问题）：" + "；".join(unresolved))
+        if unresolved:
+            raise RuntimeError(f"{node.get('id')} 局部补丁连续三轮仍未解决原登记问题：" + "；".join(unresolved))
+        final_digest = script_digest(node.get("script"))
+        review.update({"pass": True, "issues": [], "receipt_issues": [], "digest": final_digest, "registered_issues": registered})
+        node["facts_lock_digest"] = final_digest
+        node["lightweight_status"] = "事实已锁"
+        self._set_review(node, review)
+        self.runs.update(project_id, run_id, result_data=data)
+        self._log(project_id, run_id, f"  ✓ {node.get('id')} 事实层已锁：首次登记 {len(registered)} 项，局部修补后仅验原问题，不再整集新增检查项")
 
     def _expand_group_cards(self, project_id: str, run_id: str, data: dict[str, Any], nodes: list[dict[str, Any]], predecessors: dict[str, list[str]]) -> None:
         pending = [node for node in nodes if not node.get("production_card_expanded")]
@@ -1630,7 +1685,7 @@ class ProductionManager:
             "digest": script_digest(node.get("script")),
             "locked": locked,
             "attempts": int((node.get("episode_audit") or {}).get("attempts") or 0),
-            "reviews": [reviews[name] for name in ("mechanical", "causal", "dialogue", "cold", "quality") if name in reviews],
+            "reviews": [reviews[name] for name in ("mechanical", "causal", "dialogue", "cold", "facts", "quality") if name in reviews],
         }
 
     def _ensure_layer(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]], kind: str) -> None:
@@ -1894,6 +1949,9 @@ class ProductionManager:
     @staticmethod
     def _is_locked(node: dict[str, Any]) -> bool:
         digest = script_digest(node.get("script"))
+        if node.get("lightweight_status") == "已锁稿" and node.get("final_lock_digest") == digest:
+            return True
+        # 兼容升级前的可靠检查点：仅当旧质量凭证与当前正文完全同摘要时承认锁稿。
         audit = node.get("episode_audit") if isinstance(node.get("episode_audit"), dict) else {}
         quality = next((item for item in audit.get("reviews") or [] if isinstance(item, dict) and item.get("name") == "quality"), {})
         return node.get("lightweight_status") == "已复检" and quality.get("pass") is True and quality.get("digest") == digest
@@ -1940,21 +1998,32 @@ class ProductionManager:
             pipeline["scripts"] = {"pct": round(index / max(total, 1) * 100), "label": f"第 {index}/{total} 集已完成", "state": "active" if index < total else "pass"}
             self._update_pipeline(project_id, run_id, pipeline, phase="scripts", result_data=data)
 
-        forge["phase"] = "dialogue-polish"
-        pipeline["overall"] = {"label": "正在校验人话台词", "state": "active"}
-        pipeline["audit"] = {"pct": 0, "label": "准备逐集润色人话台词", "state": "active"}
+        forge["phase"] = "facts-then-dialogue"
+        pipeline["overall"] = {"label": "正在锁定事实并做人话复写", "state": "active"}
+        pipeline["audit"] = {"pct": 0, "label": "准备逐集事实检查", "state": "active"}
         self._update_pipeline(project_id, run_id, pipeline, phase="audit", result_data=data)
         for index, node in enumerate(order, 1):
             self._check_stop(project_id, run_id)
             if self._is_locked(node):
                 continue
-            if node.get("lightweight_status") not in ("已口语化", "已复检") or node.get("dialogue_polished_digest") != script_digest(node.get("script")):
-                self._polish_episode_dialogue(project_id, run_id, data, node)
-                node["lightweight_status"] = "已口语化"
+            # 正确顺序：先锁事实/因果/关系/入口；局部问题只验原登记项。
             self._ensure_episode_quality(project_id, run_id, data, node, predecessors, topology)
-            node["lightweight_status"] = "已复检"
-            self._log(project_id, run_id, f"  ✓ {node.get('id')} 已锁稿：正文 {visible_count(node.get('script'))} 可见字；人话复写与独立复检凭证已绑定当前正文摘要")
+            facts_digest = script_digest(node.get("script"))
+            if node.get("facts_lock_digest") != facts_digest:
+                raise RuntimeError(f"{node.get('id')} 事实锁摘要与当前正文不一致")
+            # 最后一次人话复写只改编号台词；程序保证动作、叙述和说话人不变。此后不再模型复检。
+            if node.get("dialogue_polished_digest") != facts_digest:
+                self._polish_episode_dialogue(project_id, run_id, data, node)
+            final_digest = script_digest(node.get("script"))
+            node["dialogue_polished_digest"] = final_digest
+            node["final_lock_digest"] = final_digest
+            node["lightweight_status"] = "已锁稿"
+            audit = node.setdefault("episode_audit", {})
+            audit["locked"] = True
+            audit["facts_lock_digest"] = facts_digest
+            audit["final_lock_digest"] = final_digest
             self.runs.update(project_id, run_id, result_data=data)
+            self._log(project_id, run_id, f"  ✓ {node.get('id')} 已锁稿：事实层已锁；最后人话复写仅替换台词；正文 {visible_count(node.get('script'))} 可见字")
             forge["reviewed"] = index
             forge["locked"] = sum(1 for item in order if self._is_locked(item))
             pipeline["audit"] = {
