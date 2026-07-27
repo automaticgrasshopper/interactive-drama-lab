@@ -368,12 +368,7 @@ class ProductionManager:
         self._lock = threading.Lock()
 
     def stop(self, project_id: str, run_id: str) -> dict[str, Any] | None:
-        """Soft stop: persist cancellation; worker exits at its next cooperative checkpoint."""
-        self.runs.request_stop(project_id, run_id)
-        return self.runs.read(project_id, run_id)
-
-    def force_stop(self, project_id: str, run_id: str) -> dict[str, Any] | None:
-        """Force stop the current model connection while preserving the latest persisted checkpoint."""
+        """Persist cancellation and actively tear down the current HTTP response."""
         self.runs.request_stop(project_id, run_id)
         key = (project_id, run_id)
         with self._lock:
@@ -390,15 +385,6 @@ class ProductionManager:
                 response.close()
             except OSError:
                 pass
-        record = self.runs.read(project_id, run_id)
-        if record and record.get("status") not in {"completed", "failed", "stopped"}:
-            self.runs.update(
-                project_id,
-                run_id,
-                status="stopped",
-                phase="force-stopped",
-                checkpoint_note="用户强制退出；最近持久化检查点已保留，可继续任务",
-            )
         return self.runs.read(project_id, run_id)
 
     def start(self, project_id: str, run_id: str, title: str, payload: dict[str, Any]) -> dict[str, Any]:
