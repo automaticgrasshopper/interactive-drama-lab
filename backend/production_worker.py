@@ -134,28 +134,65 @@ def numbered_dialogue_lines(value: Any) -> list[dict[str, Any]]:
     return found
 
 
-def apply_dialogue_replacements(value: Any, replacements: Any, *, allow_empty: bool = False) -> str:
+def apply_dialogue_replacements(
+    value: Any,
+    replacements: Any,
+    *,
+    allow_empty: bool = False,
+    skip_invalid: bool = False,
+    warnings: list[str] | None = None,
+) -> str:
     """Apply content-only dialogue edits while deterministically preserving every non-dialogue byte."""
-    if not isinstance(replacements, list) or (not replacements and not allow_empty):
+    notes = warnings if warnings is not None else []
+    if not isinstance(replacements, list):
+        if allow_empty and skip_invalid:
+            notes.append("整批替换不是列表，已保留原台词")
+            return str(value or "")
         raise ValueError("对白返修没有返回有效替换项")
-    if not replacements and allow_empty:
-        return str(value or "")
+    if not replacements:
+        if allow_empty:
+            return str(value or "")
+        raise ValueError("对白返修没有返回有效替换项")
     coordinates = numbered_dialogue_lines(value)
     by_number = {int(item["number"]): item for item in coordinates}
     parsed: dict[int, str] = {}
     for item in replacements:
         if not isinstance(item, dict):
+            if skip_invalid:
+                notes.append("跳过非对象替换项")
+                continue
             raise ValueError("对白替换项格式错误")
         try:
             number = int(item.get("number"))
         except (TypeError, ValueError) as exc:
+            if skip_invalid:
+                notes.append("跳过缺少有效编号的替换项")
+                continue
             raise ValueError("对白替换项缺少有效编号") from exc
         text = str(item.get("text") or "").strip()
         if number not in by_number or not text or "\n" in text or "\r" in text:
+            if skip_invalid:
+                notes.append(f"跳过第 {number} 项无效替换")
+                continue
             raise ValueError(f"对白第 {number} 项替换无效")
-        # 内容字段不得偷带新说话人；说话人和冒号由平台保留。
-        if re.match(r"^[^：:\n]{1,20}[：:]", text):
-            raise ValueError(f"对白第 {number} 项不得改说话人")
+        # 常见格式偏差：模型把原说话人也写进 text。原说话人前缀可安全剥离；真正换人则丢弃或拒绝。
+        speaker_match = re.match(r"^([^：:\n]{1,20})[：:](.*)$", text)
+        if speaker_match:
+            proposed_speaker = speaker_match.group(1).strip()
+            original_speaker = str(by_number[number]["speaker"]).strip()
+            if proposed_speaker == original_speaker:
+                text = speaker_match.group(2).strip()
+                if not text:
+                    if skip_invalid:
+                        notes.append(f"跳过第 {number} 项空台词")
+                        continue
+                    raise ValueError(f"对白第 {number} 项替换无效")
+                notes.append(f"第 {number} 项自动剥离重复说话人前缀")
+            elif skip_invalid:
+                notes.append(f"第 {number} 项试图把{original_speaker}改成{proposed_speaker}，已跳过")
+                continue
+            else:
+                raise ValueError(f"对白第 {number} 项不得改说话人")
         parsed[number] = text
     lines = str(value or "").splitlines()
     for number, text in parsed.items():
@@ -1177,30 +1214,36 @@ class ProductionManager:
         }
         request_text = json.dumps(payload, ensure_ascii=False) + '\n返回：{"replacements":[{"number":对白编号,"text":"只写冒号后的新台词"}]}'
         result: dict[str, Any] = {}
-        revised = ""
-        last_error = ""
-        for format_attempt in range(2):
-            suffix = "" if not last_error else f"\n上一版越权或格式无效：{last_error}。只重做 replacements，不要返回完整剧本。"
+        warnings: list[str] = []
+        try:
             result = self._json_chat(
                 project_id,
                 run_id,
-                [{"role": "system", "content": system}, {"role": "user", "content": request_text + suffix}],
+                [{"role": "system", "content": system}, {"role": "user", "content": request_text}],
                 max_tokens=5000,
                 temperature=0.35,
                 reference_phase="dialogue-polish",
                 reference_profiles=self._reference_profiles(data, node),
             )
-            try:
-                revised = apply_dialogue_replacements(before, result.get("replacements"), allow_empty=True)
-                break
-            except ValueError as exc:
-                last_error = str(exc)
-                self._log(project_id, run_id, f"  ↳ {node.get('id')} 人话复写第 {format_attempt + 1} 次越权，已丢弃并重做：{last_error}")
-        if revised == "":
-            raise RuntimeError("整场人话复写连续两次格式无效：" + last_error)
+            revised = apply_dialogue_replacements(
+                before,
+                result.get("replacements"),
+                allow_empty=True,
+                skip_invalid=True,
+                warnings=warnings,
+            )
+        except ProductionStopped:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            # 事实层已锁后，语言优化属于可降级步骤；服务限流/格式问题不得毁掉已合格正文。
+            revised = before
+            warnings.append("人话复写服务失败，保留事实层正文：" + public_error_message(exc))
         node["script"] = revised
         node["dialogue_polished_digest"] = script_digest(revised)
-        self._log(project_id, run_id, f"  ✓ {node.get('id')} 人话复写完成：平台原位替换 {len(result.get('replacements') or [])} 行台词；动作与叙述逐字保留")
+        if warnings:
+            self._log(project_id, run_id, f"  ↳ {node.get('id')} 人话复写容错：" + "；".join(warnings))
+        changed = sum(1 for item in (result.get("replacements") or []) if isinstance(item, dict)) - sum(1 for note in warnings if "已跳过" in note or note.startswith("跳过"))
+        self._log(project_id, run_id, f"  ✓ {node.get('id')} 人话复写完成：平台接受 {max(0, changed)} 行台词替换；无效项跳过，动作与叙述逐字保留")
 
     def _episode_quality_review(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]], receipt_feedback: list[str] | None = None, *, facts_only: bool = False) -> dict[str, Any]:
         """Run one independent, digest-bound second pass over the current episode."""

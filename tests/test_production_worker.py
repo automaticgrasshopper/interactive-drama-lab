@@ -189,6 +189,31 @@ class ProductionWorkerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "不得改说话人"):
             apply_dialogue_replacements(before, [{"number": 1, "text": "乙：让我走。"}])
 
+    def test_dialogue_replacement_strips_same_speaker_prefix(self):
+        before = "△ 甲挡住门。\n甲：你不能走。"
+        warnings = []
+        revised = apply_dialogue_replacements(
+            before, [{"number": 1, "text": "甲：先别走。"}], warnings=warnings
+        )
+        self.assertEqual(revised, "△ 甲挡住门。\n甲：先别走。")
+        self.assertTrue(any("自动剥离" in item for item in warnings))
+
+    def test_dialogue_replacement_skips_wrong_speaker_but_keeps_valid_items(self):
+        before = "甲：你不能走。\n乙：为什么？"
+        warnings = []
+        revised = apply_dialogue_replacements(
+            before,
+            [
+                {"number": 1, "text": "乙：让我走。"},
+                {"number": 2, "text": "先告诉我原因。"},
+            ],
+            allow_empty=True,
+            skip_invalid=True,
+            warnings=warnings,
+        )
+        self.assertEqual(revised, "甲：你不能走。\n乙：先告诉我原因。")
+        self.assertTrue(any("已跳过" in item for item in warnings))
+
     def test_causal_patch_changes_only_target_line_and_adjacent_insert(self):
         before = "【场一 · 调度厅 · 夜 · 内】\n林峥：把警情转给辖区。\n周宁点头。\n屏幕上的警情仍在闪。"
         self.assertEqual(numbered_script_lines(before)[2], {"line": 3, "text": "周宁点头。"})
