@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from backend.production_worker import ProductionManager, action_skeleton, apply_dialogue_replacements, apply_script_patches, execution_schema_version, dialogue_review_packet, normalize_scene_heading, numbered_dialogue_lines, numbered_script_lines, public_error_message, script_digest, written_text_coordinate_issues
+from backend.production_worker import ProductionManager, action_skeleton, apply_dialogue_replacements, apply_script_patches, execution_schema_version, dialogue_review_packet, normalize_scene_heading, numbered_dialogue_lines, numbered_script_lines, public_error_message, script_digest, stiff_dialogue_candidates, written_text_coordinate_issues
 
 
 def valid_script(dialogue: str = "这件事我现在就去办。") -> str:
@@ -213,6 +213,15 @@ class ProductionWorkerTests(unittest.TestCase):
         )
         self.assertEqual(revised, "甲：你不能走。\n乙：先告诉我原因。")
         self.assertTrue(any("已跳过" in item for item in warnings))
+
+    def test_stiff_dialogue_candidates_flags_proclamation_style(self):
+        script = (
+            "高骁：她的证词，由她自己说；你的责任，你自己担。从现在起，退出行动。\n"
+            "林峥：我知道了。"
+        )
+        candidates = stiff_dialogue_candidates(script)
+        self.assertEqual([item["number"] for item in candidates], [1])
+        self.assertTrue(any("公文" in reason or "对仗" in reason for reason in candidates[0]["reasons"]))
 
     def test_causal_patch_changes_only_target_line_and_adjacent_insert(self):
         before = "【场一 · 调度厅 · 夜 · 内】\n林峥：把警情转给辖区。\n周宁点头。\n屏幕上的警情仍在闪。"

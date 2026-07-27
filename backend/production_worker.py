@@ -208,6 +208,29 @@ def apply_dialogue_replacements(
     return revised
 
 
+def stiff_dialogue_candidates(value: Any) -> list[dict[str, Any]]:
+    """Deterministically flag likely proclamation/manual-style dialogue for one optional second polish."""
+    candidates: list[dict[str, Any]] = []
+    bureaucratic = re.compile(
+        r"从现在起|退出行动|由.{0,10}自己|责任.{0,8}(自己|承担)|不替你做主|"
+        r"按规定|立即执行|予以|不得再|现决定|手续.{0,8}(上报|办理)"
+    )
+    for item in numbered_dialogue_lines(value):
+        text = str(item.get("text") or "")
+        reasons = []
+        if "；" in text:
+            reasons.append("分号式条款/对仗")
+        if len(re.findall(r"[，,；;]", text)) >= 3 and len(text) >= 28:
+            reasons.append("单句承载过多交流任务")
+        if bureaucratic.search(text):
+            reasons.append("公文或宣判腔")
+        if re.search(r"(.{2,8})，\s*\1", text):
+            reasons.append("刻意重复")
+        if reasons:
+            candidates.append({**item, "reasons": reasons})
+    return candidates
+
+
 def numbered_script_lines(value: Any) -> list[dict[str, Any]]:
     """Expose immutable line coordinates for causal/ending micro-patches."""
     return [
@@ -1199,6 +1222,8 @@ class ProductionManager:
         system = (
             "你是整场人话润色编剧。通读全部编号对白后，只返回确实需要改变的台词。"
             "目标是让人物真正接话，允许打断、省略、反问、口语垫词和必要冗余；去掉说明书对白、过分整齐的短句、书面结论和同声同气。"
+            "禁止把人写成宣读处分或汇报材料：少用分号对仗、'由你自己/你自己担'式排比、'从现在起/立即执行'式公文命令，以及一口气发布三项结论。"
+            "有权力关系也要像现场的人说话，可以停顿、改口、先回应情绪再下命令。"
             "不得返回完整剧本，不得改变说话人、动作、场景、事实、选择、结局或资产名；不需要修改的台词不要列。只返回JSON。"
         )
         payload = {
@@ -1238,12 +1263,44 @@ class ProductionManager:
             # 事实层已锁后，语言优化属于可降级步骤；服务限流/格式问题不得毁掉已合格正文。
             revised = before
             warnings.append("人话复写服务失败，保留事实层正文：" + public_error_message(exc))
+        # 程序只筛明显的公文腔/分号对仗/多任务长句，做一次可降级的定点二次口语化；不重新审整集。
+        stiff = stiff_dialogue_candidates(revised)
+        if stiff:
+            allowed = {int(item["number"]) for item in stiff}
+            try:
+                second = self._json_chat(
+                    project_id,
+                    run_id,
+                    [{"role": "system", "content": (
+                        "你是最后一句人话校正员。只改给定编号中的公文腔、对仗宣判和多任务长句。"
+                        "保持原事实、态度、关系强弱和说话人；改成现实现场会说出口的普通话，可拆短、停顿、反问或先回应再表态。"
+                        "不得处理未列出的编号。只返回JSON。"
+                    )}, {"role": "user", "content": json.dumps({
+                        "read_only_context": revised,
+                        "candidates": stiff,
+                    }, ensure_ascii=False) + '\n返回：{"replacements":[{"number":候选编号,"text":"冒号后的自然台词"}]}' }],
+                    max_tokens=2200,
+                    temperature=0.3,
+                    reference_phase="dialogue-polish",
+                    reference_profiles=self._reference_profiles(data, node),
+                )
+                filtered = [item for item in (second.get("replacements") or []) if isinstance(item, dict) and str(item.get("number") or "").isdigit() and int(item.get("number")) in allowed]
+                second_warnings: list[str] = []
+                revised = apply_dialogue_replacements(revised, filtered, allow_empty=True, skip_invalid=True, warnings=second_warnings)
+                warnings.extend(second_warnings)
+                self._log(project_id, run_id, f"  ↳ {node.get('id')} 人话二次定点：程序筛中 {len(stiff)} 行，接受 {len(filtered)} 个候选替换")
+            except ProductionStopped:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                warnings.append("二次人话定点失败，保留第一遍结果：" + public_error_message(exc))
         node["script"] = revised
         node["dialogue_polished_digest"] = script_digest(revised)
+        node["dialogue_style_flags"] = stiff_dialogue_candidates(revised)
         if warnings:
             self._log(project_id, run_id, f"  ↳ {node.get('id')} 人话复写容错：" + "；".join(warnings))
         changed = sum(1 for item in (result.get("replacements") or []) if isinstance(item, dict)) - sum(1 for note in warnings if "已跳过" in note or note.startswith("跳过"))
-        self._log(project_id, run_id, f"  ✓ {node.get('id')} 人话复写完成：平台接受 {max(0, changed)} 行台词替换；无效项跳过，动作与叙述逐字保留")
+        remaining = len(node.get("dialogue_style_flags") or [])
+        self._log(project_id, run_id, f"  ✓ {node.get('id')} 人话复写完成：平台接受 {max(0, changed)} 行首轮替换；剩余风格提示 {remaining} 行；动作与叙述逐字保留")
 
     def _episode_quality_review(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]], receipt_feedback: list[str] | None = None, *, facts_only: bool = False) -> dict[str, Any]:
         """Run one independent, digest-bound second pass over the current episode."""

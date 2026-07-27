@@ -1745,7 +1745,7 @@ flowchart TD
       chk('v0.1.47 分集生产链完成',ef.status==='completed',detail);
       var noScript=ns.filter(function(n){return !String(n.script||'').trim();});
       chk('全部分集均有完整剧本',noScript.length===0,noScript.map(function(n){return n.id;}).join('、'));
-      var unlocked=ns.filter(function(n){return n.lightweight_status!=='已口语化'||!String(n.dialogue_polished_digest||'').trim();});
+      var unlocked=ns.filter(function(n){var sha=String(n.final_lock_digest||n.dialogue_polished_digest||'').trim();return !((n.lightweight_status==='已锁稿'||n.lightweight_status==='已口语化'||n.lightweight_status==='已复检')&&sha);});
       chk('全部分集人话台词已锁稿',unlocked.length===0,unlocked.map(function(n){return n.id;}).join('、'));
       var required=['分集编号','分集标题','分集剧本','剧本分析','关联角色','关联场景','关联道具','是否结局','互动节点'];
       var episodes=Array.isArray(d.episodes)?d.episodes:[], badContract=episodes.filter(function(ep){return required.some(function(k){return !Object.prototype.hasOwnProperty.call(ep,k);});});
@@ -2718,14 +2718,14 @@ flowchart TD
     if(!ns.length){ wrap.innerHTML='<div class="empty">（暂无数据：先「一键生成」）</div>'; return; }
     var kindTag={ normal:'剧情', choice:'抉择', interaction:'抉择', major:'主结局', minor:'死路' };
     var kindColor={ normal:'#3b82f6', choice:'#f59e0b', interaction:'#f59e0b', major:'#f97316', minor:'#ef4444' };
-    var generated=ns.filter(function(n){return String(n.script||'').trim();}).length,locked=ns.filter(function(n){return n.lightweight_status==='已口语化'&&String(n.dialogue_polished_digest||'').trim();}).length;
+    var generated=ns.filter(function(n){return String(n.script||'').trim();}).length,locked=ns.filter(function(n){var sha=String(n.final_lock_digest||n.dialogue_polished_digest||'').trim();return (n.lightweight_status==='已锁稿'||n.lightweight_status==='已口语化'||n.lightweight_status==='已复检')&&sha;}).length;
     var ready=generated===ns.length&&locked===ns.length;
     var h='<div style="padding:6px 18px 20px;max-width:860px;">'
       +'<div style="display:flex;align-items:center;gap:12px;margin:4px 0 14px;padding:13px 15px;border:1px solid '+(ready?'#bde6d5':'#e4e8f0')+';border-radius:13px;background:'+(ready?'#f7fdf9':'#fafbfc')+';">'
       +'<div><div style="font-size:13px;font-weight:800;color:#283044;">'+(ready?'全部分集已锁稿':'分集生产未完成')+'</div><div style="margin-top:3px;font-size:11.5px;color:#8790a3;">完整剧本 '+generated+'/'+ns.length+' · 人话台词锁稿 '+locked+'/'+ns.length+'</div></div>'
       +'<span class="auditpill '+(ready?'pass':'fail')+'" style="margin-left:auto;">'+(ready?'✓ 可交付':'! 未交付')+'</span></div>';
     ns.forEach(function(n){
-      var dialogueLocked=n.lightweight_status==='已口语化'&&String(n.dialogue_polished_digest||'').trim();
+      var dialogueLocked=(n.lightweight_status==='已锁稿'||n.lightweight_status==='已口语化'||n.lightweight_status==='已复检')&&String(n.final_lock_digest||n.dialogue_polished_digest||'').trim();
       h+='<div style="margin-bottom:18px;">'
         +'<div style="display:flex;align-items:center;gap:8px;padding:8px 0 6px;border-bottom:2px solid #eef0f4;">'
         +'<b style="font-size:14px;">场 '+esc(n.id||'')+'</b>'
@@ -2733,7 +2733,7 @@ flowchart TD
         +'<span style="font-size:12px;color:#8a92a6;">'+esc(n.time||'')+'</span>'
         +'<span style="margin-left:auto;font-size:11px;font-weight:700;color:#fff;background:'+(kindColor[n.kind]||'#3b82f6')+';border-radius:6px;padding:2px 8px;">'+(kindTag[n.kind]||'剧情')+'</span></div>'
         +(n.cast?'<div style="font-size:12px;color:#6b7488;padding:6px 0 0;"><b>在场：</b>'+esc(n.cast)+'</div>':'')
-        +(n.script?'<div class="auditline"><span class="auditpill '+(dialogueLocked?'pass':'wait')+'">'+(dialogueLocked?'🔒 人话台词已锁稿':'· 等待人话台词校验')+'</span>'+(dialogueLocked?'<span style="font-size:10.5px;color:#98a1b2;">SHA '+esc(String(n.dialogue_polished_digest).slice(0,10))+'</span>':'')+'</div>':'')
+        +(n.script?'<div class="auditline"><span class="auditpill '+(dialogueLocked?'pass':'wait')+'">'+(dialogueLocked?'🔒 人话台词已锁稿':'· 等待人话台词校验')+'</span>'+(dialogueLocked?'<span style="font-size:10.5px;color:#98a1b2;">SHA '+esc(String(n.final_lock_digest||n.dialogue_polished_digest).slice(0,10))+'</span>':'')+'</div>':'')
         +(n.script?'<div style="font-size:13px;line-height:2;padding:6px 0;white-space:pre-wrap;">'+esc(n.script)+'</div>':'<div style="margin:9px 0;padding:12px;border:1px dashed #d6dbe5;border-radius:10px;background:#fafbfc;color:#8a92a6;font-size:12px;line-height:1.7;"><b style="color:#596174;">尚未生成完整剧本</b><br>当前只有分集梗概，不会冒充剧本正文。</div>');
       if((n.next||[]).length && (n.kind==='choice'||n.kind==='interaction')){
         h+='<div style="background:#fff9ec;border:1px solid #f5e2b8;border-radius:10px;padding:8px 12px;font-size:12.5px;line-height:1.9;"><b style="color:#b45309;">抉择：</b>'+n.next.map(function(e){return '「'+esc(e.label||'继续')+'」→ 场 '+esc(e.to);}).join('　/　')+'</div>';
