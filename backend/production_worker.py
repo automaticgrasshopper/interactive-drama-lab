@@ -115,6 +115,60 @@ def action_skeleton(value: Any) -> str:
     return "\n".join(lines)
 
 
+def numbered_dialogue_lines(value: Any) -> list[dict[str, Any]]:
+    """Return editable dialogue coordinates without exposing action lines to a dialogue-only repair."""
+    found: list[dict[str, Any]] = []
+    for source_line, line in enumerate(str(value or "").splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "单集梗概：", "【", "出场：", "△", "互动选项：", "选项")):
+            continue
+        match = re.match(r"^([^：:\n]{1,20})([：:])(.*)$", stripped)
+        if not match:
+            continue
+        found.append({
+            "number": len(found) + 1,
+            "source_line": source_line,
+            "speaker": match.group(1),
+            "text": match.group(3),
+        })
+    return found
+
+
+def apply_dialogue_replacements(value: Any, replacements: Any) -> str:
+    """Apply content-only dialogue edits while deterministically preserving every non-dialogue byte."""
+    if not isinstance(replacements, list) or not replacements:
+        raise ValueError("对白返修没有返回有效替换项")
+    coordinates = numbered_dialogue_lines(value)
+    by_number = {int(item["number"]): item for item in coordinates}
+    parsed: dict[int, str] = {}
+    for item in replacements:
+        if not isinstance(item, dict):
+            raise ValueError("对白替换项格式错误")
+        try:
+            number = int(item.get("number"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("对白替换项缺少有效编号") from exc
+        text = str(item.get("text") or "").strip()
+        if number not in by_number or not text or "\n" in text or "\r" in text:
+            raise ValueError(f"对白第 {number} 项替换无效")
+        # 内容字段不得偷带新说话人；说话人和冒号由平台保留。
+        if re.match(r"^[^：:\n]{1,20}[：:]", text):
+            raise ValueError(f"对白第 {number} 项不得改说话人")
+        parsed[number] = text
+    lines = str(value or "").splitlines()
+    for number, text in parsed.items():
+        coord = by_number[number]
+        index = int(coord["source_line"]) - 1
+        original = lines[index]
+        indent = original[: len(original) - len(original.lstrip())]
+        colon = "：" if "：" in original.strip().split(str(coord["speaker"]), 1)[-1][:1] else ":"
+        lines[index] = f"{indent}{coord['speaker']}{colon}{text}"
+    revised = "\n".join(lines)
+    if action_skeleton(revised) != action_skeleton(value):
+        raise ValueError("对白替换触碰了非台词骨架")
+    return revised
+
+
 def written_text_coordinate_issues(value: Any) -> list[str]:
     """Reject narration that uses unreadable on-screen words as action coordinates."""
     issues = []
@@ -124,7 +178,7 @@ def written_text_coordinate_issues(value: Any) -> list[str]:
             continue
         if WRITTEN_TEXT_ACTION_COORDINATE.search(stripped):
             issues.append(
-                f"dialogue｜第{number}行｜画内文字被当作动作坐标；"
+                f"causal｜第{number}行｜画内文字被当作动作坐标；"
                 "先用台词说清所指事实，再以行序或刚念完的位置承接动作"
             )
     return issues
@@ -1179,10 +1233,48 @@ class ProductionManager:
         before = str(node.get("script") or "")
         issues = [str(item) for item in review.get("issues") or []]
         dialogue_only = bool(issues) and all(item.startswith("dialogue｜") for item in issues)
+        if dialogue_only:
+            dialogue_lines = numbered_dialogue_lines(before)
+            system = (
+                "你是逐集对白定点返修编剧。只处理登记的对白问题。"
+                "平台只允许你返回需要改变的对白内容；不得返回完整剧本，不得改变说话人、动作、场景、事实、选择、结局或资产名。"
+                "未列入 replacements 的对白保持原样。只返回JSON。"
+            )
+            payload = {
+                "issues": issues,
+                "dialogue_lines": dialogue_lines,
+            }
+            request_text = json.dumps(payload, ensure_ascii=False) + '\n返回：{"replacements":[{"number":对白编号,"text":"只写冒号后的新台词"}]}'
+            result: dict[str, Any] = {}
+            revised = ""
+            last_error = ""
+            for format_attempt in range(2):
+                suffix = "" if not last_error else f"\n上一版越权或格式无效：{last_error}。只重做 replacements，不要返回完整剧本。"
+                result = self._json_chat(
+                    project_id,
+                    run_id,
+                    [{"role": "system", "content": system}, {"role": "user", "content": request_text + suffix}],
+                    max_tokens=3200,
+                    temperature=0.25,
+                    reference_phase="episode-writing",
+                    reference_profiles=self._reference_profiles(data, node),
+                )
+                try:
+                    revised = apply_dialogue_replacements(before, result.get("replacements"))
+                    break
+                except ValueError as exc:
+                    last_error = str(exc)
+                    self._log(project_id, run_id, f"  ↳ {node.get('id')} 对白返修第 {format_attempt + 1} 次越权，已丢弃并要求按指定行重做：{last_error}")
+            if not revised:
+                raise RuntimeError("对白定点返修连续两次格式无效：" + last_error)
+            node["script"] = revised
+            self._log(project_id, run_id, f"  ↳ {node.get('id')} 对白定点返修：平台原位替换 {len(result.get('replacements') or [])} 行，非台词骨架由程序锁定")
+            return
+
         system = (
             "你是逐集定点返修编剧。"
             "只修独立复检登记的问题，保留冻结拓扑、选项、状态效果、结局属性、正式资产名和无关场次。"
-            "对白问题只改现有说话人的台词；因果或结尾问题用最小动作改动补足，不新增世界规则或未来事实。"
+            "因果或结尾问题用最小动作改动补足，不新增世界规则或未来事实。"
             "不得用主题总结替代可见后果。只返回JSON。"
         )
         payload = {
@@ -1202,8 +1294,6 @@ class ProductionManager:
         revised = str(result.get("script") or "").strip()
         if not revised:
             raise RuntimeError("逐集复检返修没有返回完整剧本")
-        if dialogue_only and re.sub(r"\s+", "", action_skeleton(revised)) != re.sub(r"\s+", "", action_skeleton(before)):
-            raise RuntimeError("对白层复检返修改动了非台词骨架")
         node["script"] = revised
         for key in ("entry_state", "exit_state", "working_summary"):
             if result.get(key):

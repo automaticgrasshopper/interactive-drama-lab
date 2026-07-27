@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from backend.production_worker import ProductionManager, action_skeleton, execution_schema_version, dialogue_review_packet, normalize_scene_heading, public_error_message, script_digest, written_text_coordinate_issues
+from backend.production_worker import ProductionManager, action_skeleton, apply_dialogue_replacements, execution_schema_version, dialogue_review_packet, normalize_scene_heading, numbered_dialogue_lines, public_error_message, script_digest, written_text_coordinate_issues
 
 
 def valid_script(dialogue: str = "这件事我现在就去办。") -> str:
@@ -170,8 +170,24 @@ class ProductionWorkerTests(unittest.TestCase):
             "沈砚：火油两桶，进中间那辆车。\n"
             "他在下一行旁又压一道指痕。"
         )
-        self.assertTrue(written_text_coordinate_issues(bad))
+        issues = written_text_coordinate_issues(bad)
+        self.assertTrue(issues)
+        self.assertTrue(all(item.startswith("causal｜") for item in issues))
         self.assertEqual(written_text_coordinate_issues(fixed), [])
+
+    def test_dialogue_replacement_preserves_non_dialogue_skeleton(self):
+        before = "【场一 · 门厅 · 夜 · 内】\n出场：甲、乙\n△ 甲挡在门前。\n甲：你不能走。\n乙：让我过去。\n△ 门外警笛逼近。"
+        coordinates = numbered_dialogue_lines(before)
+        self.assertEqual([(item["number"], item["speaker"]) for item in coordinates], [(1, "甲"), (2, "乙")])
+        revised = apply_dialogue_replacements(before, [{"number": 1, "text": "先别走，外面有人。"}])
+        self.assertIn("甲：先别走，外面有人。", revised)
+        self.assertIn("乙：让我过去。", revised)
+        self.assertEqual(action_skeleton(before), action_skeleton(revised))
+
+    def test_dialogue_replacement_rejects_speaker_injection(self):
+        before = "△ 甲挡住门。\n甲：你不能走。"
+        with self.assertRaisesRegex(ValueError, "不得改说话人"):
+            apply_dialogue_replacements(before, [{"number": 1, "text": "乙：让我走。"}])
 
     def test_backend_reference_loader_issues_private_receipt(self):
         manager = object.__new__(ProductionManager)
