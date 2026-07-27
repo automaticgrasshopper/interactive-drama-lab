@@ -375,7 +375,7 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         if path == "/api/health":
-            self._json(200, {"ok": True, "service": "interactive-drama-backend", "api_version": 8, "execution_schema_version": execution_schema_version(), "system": platform.system(), "platform": platform.platform(), "capabilities": ["all_tasks", "git_archive_tasks", "task_delete", "git_task_delete", "project_delete", "production_resume", "execution_group_pipeline", "reference_bundle_gate", "precise_restart", "safe_git_sync"], "root": str(ROOT)})
+            self._json(200, {"ok": True, "service": "interactive-drama-backend", "api_version": 8, "execution_schema_version": execution_schema_version(), "system": platform.system(), "platform": platform.platform(), "capabilities": ["all_tasks", "git_archive_tasks", "task_delete", "git_task_delete", "project_delete", "production_resume", "execution_group_pipeline", "reference_bundle_gate", "precise_restart", "force_task_stop", "safe_git_sync"], "root": str(ROOT)})
             return
         if path == "/api/settings":
             self._json(200, {"ok": True, "settings": public_settings()})
@@ -584,6 +584,10 @@ class Handler(SimpleHTTPRequestHandler):
                 _, _, _, project_id, run_id, _ = path.split("/")
                 task = PRODUCTION.stop(urllib.parse.unquote(project_id), urllib.parse.unquote(run_id))
                 self._json(200, {"ok": True, "status": "stopping", "task": task})
+            elif re.fullmatch(r"/api/tasks/[^/]+/[^/]+/force-stop", path):
+                _, _, _, project_id, run_id, _ = path.split("/")
+                task = PRODUCTION.force_stop(urllib.parse.unquote(project_id), urllib.parse.unquote(run_id))
+                self._json(200, {"ok": True, "status": "stopped", "task": task})
             elif re.fullmatch(r"/api/tasks/[^/]+/[^/]+/resume", path):
                 _, _, _, project_id, run_id, _ = path.split("/")
                 task = PRODUCTION.resume(urllib.parse.unquote(project_id), urllib.parse.unquote(run_id))
