@@ -74,7 +74,7 @@ const $=id=>document.getElementById(id);
 async function api(path,opt){const r=await fetch(path,opt);const type=r.headers.get('content-type')||'';if(!type.includes('application/json')){throw new Error('当前 8000 端口不是工作台后端，请关闭旧服务后用“启动.command”重新启动')}const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||'请求失败');return j}
 function msg(id,text,type){const el=$(id);el.textContent=text||'';el.className='msg '+(type||'')}
 function setModelValue(value){$('model').value=value||''}
-let taskCache=[];let detectedSystem='';let selectedLogTask=null;let logPollTimer=0;let lastLogText='';
+let taskCache=[];let detectedSystem='';let selectedLogTask=null;let logPollTimer=0;let lastLogText='';let lastLogTask=null;let logFetchFailures=0;
 function systemLabel(value){return({Darwin:'macOS',Windows:'Windows',Linux:'Linux'})[value]||value||(/Mac/i.test(navigator.platform)?'macOS':(/Win/i.test(navigator.platform)?'Windows':'当前系统'))}
 function currentProject(){try{const current=JSON.parse(sessionStorage.getItem('idl_current_project')||'null');if(current)return current;const active=JSON.parse(localStorage.getItem('idl_active_backend_task_v1')||'null');return active&&active.project_id?{id:active.project_id}:null}catch(e){return null}}
 async function load(){try{const h=await api('/api/health');detectedSystem=h.system||'';$('restart').textContent='重启后台 · '+systemLabel(detectedSystem);if((h.api_version||0)<6)throw new Error('后台服务仍是旧版本，请点击红色“重启后台”');const [s,t]=await Promise.all([api('/api/settings'),api('/api/tasks')]);$('health').textContent=s.settings.config_locked?'后端已锁定':'后端已连接';const v=s.settings;$('provider').value=v.provider;$('base').value=v.base_url;setModelValue(v.model);$('validator').value=v.validator_model;$('imageModel').value=v.image_model||'google/gemini-2.5-flash-image';$('autoCommit').checked=v.auto_commit;$('key').placeholder=v.api_key_configured?'已配置；输入新值可替换':'请输入 OpenRouter API Key';['provider','base','model','validator','imageModel','key','autoCommit'].forEach(id=>$(id).disabled=!!v.config_locked);$('save').disabled=!!v.config_locked;$('lockConfig').style.display=v.config_locked?'none':'inline-block';$('unlockConfig').style.display=v.config_locked?'inline-block':'none';$('clearKey').disabled=!!v.config_locked;taskCache=t.tasks||[];renderTasks('currentTasks',currentTaskItems());renderTasks('tasks',taskCache);autoSelectProductionLog()}catch(e){$('restart').textContent='重启后台 · '+systemLabel(detectedSystem);$('health').textContent='后端需重启';$('health').style.background='#fff0e0';$('health').style.color='#b96812';msg('gitMsg',e.message,'err')}}
@@ -94,14 +94,23 @@ async function refreshProductionLog(){
     const list=await api('/api/tasks');taskCache=list.tasks||taskCache;
     const active=activeTask();if(active)selectedLogTask={projectId:active.project_id,runId:active.run_id};
     if(!selectedLogTask){renderProductionLog(null);return}
-    const j=await api('/api/tasks/'+encodeURIComponent(selectedLogTask.projectId)+'/'+encodeURIComponent(selectedLogTask.runId));renderProductionLog(j.task||{});
-  }catch(e){renderProductionLog({title:'日志读取失败',error:e.message,status:'failed'})}
+    const j=await api('/api/tasks/'+encodeURIComponent(selectedLogTask.projectId)+'/'+encodeURIComponent(selectedLogTask.runId));logFetchFailures=0;renderProductionLog(j.task||{});
+  }catch(e){
+    // 网络/重启瞬断不是生产失败：保留上一帧任务和日志，轮询会自动重连。
+    logFetchFailures++;
+    const live=$('productionLogLive'),meta=$('productionLogMeta');
+    live.textContent='正在重连';
+    meta.textContent=(lastLogTask?(lastLogTask.title||lastLogTask.run_id||'当前任务')+' · '+(lastLogTask.phase||'生产中')+' · '+(lastLogTask.progress||0)+'% · ':'')+'连接暂时中断，已重试 '+logFetchFailures+' 次；日志与任务状态均已保留。';
+    $('health').textContent='后台重连中';$('health').style.background='#fff2df';$('health').style.color='#b96812';
+  }
 }
 function renderProductionLog(t){
   const textEl=$('productionLogText'),live=$('productionLogLive'),meta=$('productionLogMeta');
   if(!t){live.textContent='等待任务';meta.textContent='开始新任务后自动实时打印；无运行任务时可点「详情」查看历史日志。';textEl.textContent='当前没有运行中的项目，也尚未选择历史任务。';lastLogText='';return}
+  lastLogTask=t;
   const log=String(t.production_log||'');lastLogText=log;
   live.textContent=(t.status==='running'||t.status==='stopping')?'实时刷新':statusText(t.status);
+  $('health').textContent='后端已连接';$('health').style.background='';$('health').style.color='';
   meta.textContent=(t.title||t.run_id||'未命名任务')+' · '+(t.phase||'未进入阶段')+' · '+(t.progress||0)+'% · '+(t.updated_at||'');
   textEl.textContent=log||('（暂无生成日志。旧任务不会补录；新任务开始后会在这里持续打印。）'+(t.error?'\n\n错误：'+t.error:''));
   const box=textEl.parentElement;if(t.status==='running'||t.status==='stopping')box.scrollTop=box.scrollHeight;
