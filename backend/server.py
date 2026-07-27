@@ -592,6 +592,8 @@ class Handler(SimpleHTTPRequestHandler):
                 self.start_production()
             elif path == "/api/system/restart":
                 self.restart_backend()
+            elif path == "/api/system/force-exit":
+                self.force_exit_backend()
             elif path == "/api/git/commit":
                 self.git_commit("projects")
             elif path == "/api/git/push":
@@ -623,6 +625,27 @@ class Handler(SimpleHTTPRequestHandler):
         system = platform.system()
         self._json(202, {"ok": True, "status": "restarting", "system": system, "port": port})
         threading.Thread(target=restart_server_process, args=(self.server, port), name="backend-restart", daemon=False).start()
+
+    def force_exit_backend(self) -> None:
+        # 先把活跃任务标成可续跑状态，避免进程强退后任务永远显示运行中。
+        stopped = []
+        for task in RUNS.list_all_tasks():
+            if task.get("status") not in {"running", "stopping"}:
+                continue
+            project_id, run_id = str(task.get("project_id") or ""), str(task.get("run_id") or "")
+            if not project_id or not run_id:
+                continue
+            RUNS.request_stop(project_id, run_id)
+            RUNS.update(
+                project_id,
+                run_id,
+                status="stopped",
+                phase="backend-force-exit",
+                checkpoint_note="后台被用户强制退出；最近持久化检查点已保留，重新启动后可继续",
+            )
+            stopped.append({"project_id": project_id, "run_id": run_id})
+        self._json(202, {"ok": True, "status": "exiting", "system": platform.system(), "stopped_tasks": stopped})
+        threading.Thread(target=force_exit_server_process, args=(self.server,), name="backend-force-exit", daemon=False).start()
 
     def save_datapack(self) -> None:
         payload = self._payload()
@@ -935,6 +958,16 @@ def restart_server_process(server: ThreadingHTTPServer, port: int) -> None:
     else:
         options["start_new_session"] = True
     subprocess.Popen(command, **options)
+
+
+def force_exit_server_process(server: ThreadingHTTPServer) -> None:
+    """Stop exactly this backend process without spawning a replacement, even if request threads are stuck."""
+    time.sleep(0.35)  # allow the HTTP 202 response and checkpoint files to flush
+    try:
+        server.shutdown()
+        server.server_close()
+    finally:
+        os._exit(0)
 
 
 def run(port: int = 8000) -> None:
