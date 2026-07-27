@@ -134,10 +134,12 @@ def numbered_dialogue_lines(value: Any) -> list[dict[str, Any]]:
     return found
 
 
-def apply_dialogue_replacements(value: Any, replacements: Any) -> str:
+def apply_dialogue_replacements(value: Any, replacements: Any, *, allow_empty: bool = False) -> str:
     """Apply content-only dialogue edits while deterministically preserving every non-dialogue byte."""
-    if not isinstance(replacements, list) or not replacements:
+    if not isinstance(replacements, list) or (not replacements and not allow_empty):
         raise ValueError("对白返修没有返回有效替换项")
+    if not replacements and allow_empty:
+        return str(value or "")
     coordinates = numbered_dialogue_lines(value)
     by_number = {int(item["number"]): item for item in coordinates}
     parsed: dict[int, str] = {}
@@ -1155,35 +1157,43 @@ class ProductionManager:
         self._log(project_id, run_id, f"  ↳ {node.get('id')} 初稿完成：{visible_count(node.get('script'))} 可见字 · {action_count(node.get('script'))} 个动作段")
 
     def _polish_episode_dialogue(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any]) -> None:
-        """Run one whole-episode spoken-Chinese pass without adding an audit layer."""
+        """Polish dialogue by numbered replacements; the model never owns the full script."""
         before = str(node.get("script") or "")
         system = (
-            "你是整场人话润色编剧。"
-            "通读完整剧本后直接润色对白，不逐句评分、不输出问题清单。让人物真正接话，允许打断、省略、反问、口语垫词和必要冗余；"
-            "去掉说明书对白、过分整齐的短句、书面结论和所有角色同一种声音。"
-            "必须保留原说话人、场次、动作骨架、事实、选择、结局和正式资产名。只返回JSON。"
+            "你是整场人话润色编剧。通读全部编号对白后，只返回确实需要改变的台词。"
+            "目标是让人物真正接话，允许打断、省略、反问、口语垫词和必要冗余；去掉说明书对白、过分整齐的短句、书面结论和同声同气。"
+            "不得返回完整剧本，不得改变说话人、动作、场景、事实、选择、结局或资产名；不需要修改的台词不要列。只返回JSON。"
         )
         payload = {
             "characters": [{key: item.get(key) for key in ("name", "role", "desc", "voice")} for item in data.get("characters") or []],
-            "script": before,
+            "dialogue_lines": numbered_dialogue_lines(before),
         }
-        result = self._json_chat(
-            project_id,
-            run_id,
-            [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(payload, ensure_ascii=False) + '\n返回：{"script":"润色后的完整剧本"}'}],
-            max_tokens=9000,
-            temperature=0.45,
-            reference_phase="dialogue-polish",
-            reference_profiles=self._reference_profiles(data, node),
-        )
-        revised = str(result.get("script") or "").strip()
-        if not revised:
-            raise RuntimeError("整场人话润色没有返回完整剧本")
-        if re.sub(r"\s+", "", action_skeleton(revised)) != re.sub(r"\s+", "", action_skeleton(before)):
-            raise RuntimeError("整场人话润色改变了非台词骨架")
+        request_text = json.dumps(payload, ensure_ascii=False) + '\n返回：{"replacements":[{"number":对白编号,"text":"只写冒号后的新台词"}]}'
+        result: dict[str, Any] = {}
+        revised = ""
+        last_error = ""
+        for format_attempt in range(2):
+            suffix = "" if not last_error else f"\n上一版越权或格式无效：{last_error}。只重做 replacements，不要返回完整剧本。"
+            result = self._json_chat(
+                project_id,
+                run_id,
+                [{"role": "system", "content": system}, {"role": "user", "content": request_text + suffix}],
+                max_tokens=5000,
+                temperature=0.35,
+                reference_phase="dialogue-polish",
+                reference_profiles=self._reference_profiles(data, node),
+            )
+            try:
+                revised = apply_dialogue_replacements(before, result.get("replacements"), allow_empty=True)
+                break
+            except ValueError as exc:
+                last_error = str(exc)
+                self._log(project_id, run_id, f"  ↳ {node.get('id')} 人话复写第 {format_attempt + 1} 次越权，已丢弃并重做：{last_error}")
+        if revised == "":
+            raise RuntimeError("整场人话复写连续两次格式无效：" + last_error)
         node["script"] = revised
         node["dialogue_polished_digest"] = script_digest(revised)
-        self._log(project_id, run_id, f"  ✓ {node.get('id')} 人话复写完成：对白已按人物关系、现场目的、接话逻辑和朴素中文重整；动作骨架校验一致")
+        self._log(project_id, run_id, f"  ✓ {node.get('id')} 人话复写完成：平台原位替换 {len(result.get('replacements') or [])} 行台词；动作与叙述逐字保留")
 
     def _episode_quality_review(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]], receipt_feedback: list[str] | None = None) -> dict[str, Any]:
         """Run one independent, digest-bound second pass over the current episode."""
@@ -1904,12 +1914,18 @@ class ProductionManager:
             "locked": sum(1 for node in order if self._is_locked(node)),
         })
         data["__episodeForge"] = forge
+        locked_at_start = [node for node in order if self._is_locked(node)]
+        first_pending = next((node for node in order if not self._is_locked(node)), None)
+        if locked_at_start and first_pending:
+            self._log(project_id, run_id, f"▸ 恢复点：已锁稿 {len(locked_at_start)}/{total} 集，直接从 {first_pending.get('id')} 继续；已锁稿集不重复打印、不重复调用")
 
         pipeline["topology"] = {"pct": 100, "label": f"分集梗概与流程已完成 · {total} 集", "state": "pass"}
         pipeline["overall"] = {"label": "逐集写作", "state": "active"}
         forge["phase"] = "episode-writing"
         for index, node in enumerate(order, 1):
             self._check_stop(project_id, run_id)
+            if self._is_locked(node):
+                continue
             node_id = str(node.get("id"))
             forge["current_episode"] = node_id
             self._log_episode_brief(project_id, run_id, node, index, total, predecessors)
@@ -1918,7 +1934,7 @@ class ProductionManager:
                 self._write_episode(project_id, run_id, data, node, predecessors, topology)
                 node["lightweight_status"] = "已写作"
                 self.runs.update(project_id, run_id, result_data=data)
-            elif node.get("lightweight_status") not in ("已写作", "已口语化"):
+            elif node.get("lightweight_status") not in ("已写作", "已口语化", "已复检"):
                 node["lightweight_status"] = "已写作"
             forge["generated"] = sum(1 for item in order if str(item.get("script") or "").strip())
             pipeline["scripts"] = {"pct": round(index / max(total, 1) * 100), "label": f"第 {index}/{total} 集已完成", "state": "active" if index < total else "pass"}
@@ -1930,12 +1946,13 @@ class ProductionManager:
         self._update_pipeline(project_id, run_id, pipeline, phase="audit", result_data=data)
         for index, node in enumerate(order, 1):
             self._check_stop(project_id, run_id)
-            if not self._is_locked(node):
-                if node.get("lightweight_status") not in ("已口语化", "已复检") or node.get("dialogue_polished_digest") != script_digest(node.get("script")):
-                    self._polish_episode_dialogue(project_id, run_id, data, node)
-                    node["lightweight_status"] = "已口语化"
-                self._ensure_episode_quality(project_id, run_id, data, node, predecessors, topology)
-                node["lightweight_status"] = "已复检"
+            if self._is_locked(node):
+                continue
+            if node.get("lightweight_status") not in ("已口语化", "已复检") or node.get("dialogue_polished_digest") != script_digest(node.get("script")):
+                self._polish_episode_dialogue(project_id, run_id, data, node)
+                node["lightweight_status"] = "已口语化"
+            self._ensure_episode_quality(project_id, run_id, data, node, predecessors, topology)
+            node["lightweight_status"] = "已复检"
             self._log(project_id, run_id, f"  ✓ {node.get('id')} 已锁稿：正文 {visible_count(node.get('script'))} 可见字；人话复写与独立复检凭证已绑定当前正文摘要")
             self.runs.update(project_id, run_id, result_data=data)
             forge["reviewed"] = index
