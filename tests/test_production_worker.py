@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from backend.production_worker import ProductionManager, action_skeleton, apply_dialogue_replacements, execution_schema_version, dialogue_review_packet, normalize_scene_heading, numbered_dialogue_lines, public_error_message, script_digest, written_text_coordinate_issues
+from backend.production_worker import ProductionManager, action_skeleton, apply_dialogue_replacements, apply_script_patches, execution_schema_version, dialogue_review_packet, normalize_scene_heading, numbered_dialogue_lines, numbered_script_lines, public_error_message, script_digest, written_text_coordinate_issues
 
 
 def valid_script(dialogue: str = "这件事我现在就去办。") -> str:
@@ -188,6 +188,26 @@ class ProductionWorkerTests(unittest.TestCase):
         before = "△ 甲挡住门。\n甲：你不能走。"
         with self.assertRaisesRegex(ValueError, "不得改说话人"):
             apply_dialogue_replacements(before, [{"number": 1, "text": "乙：让我走。"}])
+
+    def test_causal_patch_changes_only_target_line_and_adjacent_insert(self):
+        before = "【场一 · 调度厅 · 夜 · 内】\n林峥：把警情转给辖区。\n周宁点头。\n屏幕上的警情仍在闪。"
+        self.assertEqual(numbered_script_lines(before)[2], {"line": 3, "text": "周宁点头。"})
+        revised = apply_script_patches(before, [
+            {"op": "replace", "line": 3, "text": "周宁按下转办键。"},
+            {"op": "insert_after", "line": 3, "text": "屏幕弹出“辖区已接收”。"},
+        ])
+        self.assertEqual(revised.splitlines()[0], before.splitlines()[0])
+        self.assertEqual(revised.splitlines()[1], before.splitlines()[1])
+        self.assertEqual(revised.splitlines()[2], "周宁按下转办键。")
+        self.assertEqual(revised.splitlines()[3], "屏幕弹出“辖区已接收”。")
+        self.assertEqual(revised.splitlines()[4], before.splitlines()[3])
+
+    def test_causal_patch_rejects_out_of_range_and_multiline(self):
+        before = "第一行\n第二行"
+        with self.assertRaisesRegex(ValueError, "第 3 行"):
+            apply_script_patches(before, [{"op": "replace", "line": 3, "text": "越界"}])
+        with self.assertRaisesRegex(ValueError, "第 2 行"):
+            apply_script_patches(before, [{"op": "replace", "line": 2, "text": "两行\n越权"}])
 
     def test_backend_reference_loader_issues_private_receipt(self):
         manager = object.__new__(ProductionManager)

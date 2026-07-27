@@ -169,6 +169,51 @@ def apply_dialogue_replacements(value: Any, replacements: Any) -> str:
     return revised
 
 
+def numbered_script_lines(value: Any) -> list[dict[str, Any]]:
+    """Expose immutable line coordinates for causal/ending micro-patches."""
+    return [
+        {"line": index, "text": line}
+        for index, line in enumerate(str(value or "").splitlines(), 1)
+    ]
+
+
+def apply_script_patches(value: Any, patches: Any) -> str:
+    """Apply a small line patch while preserving every non-target source line byte-for-byte."""
+    if not isinstance(patches, list) or not patches:
+        raise ValueError("因果返修没有返回有效补丁")
+    if len(patches) > 6:
+        raise ValueError("单轮因果返修最多允许6个局部补丁")
+    source = str(value or "").splitlines()
+    by_anchor: dict[int, list[dict[str, str]]] = {}
+    replaced: set[int] = set()
+    for item in patches:
+        if not isinstance(item, dict):
+            raise ValueError("局部补丁格式错误")
+        op = str(item.get("op") or "")
+        if op not in {"replace", "insert_before", "insert_after"}:
+            raise ValueError(f"不允许的局部补丁操作：{op}")
+        try:
+            line_no = int(item.get("line"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("局部补丁缺少有效行号") from exc
+        text = str(item.get("text") or "").strip()
+        if line_no < 1 or line_no > len(source) or not text or "\n" in text or "\r" in text:
+            raise ValueError(f"第 {line_no} 行局部补丁无效")
+        if op == "replace":
+            if line_no in replaced:
+                raise ValueError(f"第 {line_no} 行重复替换")
+            replaced.add(line_no)
+        by_anchor.setdefault(line_no, []).append({"op": op, "text": text})
+    output: list[str] = []
+    for line_no, original in enumerate(source, 1):
+        actions = by_anchor.get(line_no, [])
+        output.extend(item["text"] for item in actions if item["op"] == "insert_before")
+        replacement = next((item["text"] for item in actions if item["op"] == "replace"), original)
+        output.append(replacement)
+        output.extend(item["text"] for item in actions if item["op"] == "insert_after")
+    return "\n".join(output)
+
+
 def written_text_coordinate_issues(value: Any) -> list[str]:
     """Reject narration that uses unreadable on-screen words as action coordinates."""
     issues = []
@@ -1276,32 +1321,42 @@ class ProductionManager:
             return
 
         system = (
-            "你是逐集定点返修编剧。"
-            "只修独立复检登记的问题，保留冻结拓扑、选项、状态效果、结局属性、正式资产名和无关场次。"
-            "因果或结尾问题用最小动作改动补足，不新增世界规则或未来事实。"
-            "不得用主题总结替代可见后果。只返回JSON。"
+            "你是逐集因果与结尾定点返修编剧。主事实、拓扑、人物、场景、选项、结局和状态均已锁定。"
+            "只允许针对登记问题修改指定一行，或在最接近的锚点行前后插入一条可见动作/反馈。"
+            "有明确行号的问题优先只替换该行；没有行号的问题选择最小锚点，在相邻处补一句。"
+            "不得返回完整剧本，不得顺手润色其他行，不新增世界规则或未来事实，不用主题总结替代可见后果。"
+            "每个补丁只写单行；单轮最多6个补丁。只返回JSON。"
         )
         payload = {
-            "context": self._context(data, node, predecessors, topology),
-            "script": before,
+            "locked_context": self._context(data, node, predecessors, topology),
             "issues": issues,
+            "script_lines": numbered_script_lines(before),
         }
-        result = self._json_chat(
-            project_id,
-            run_id,
-            [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(payload, ensure_ascii=False) + '\n返回：{"script":"返修后的完整剧本","entry_state":"当前入口事实","exit_state":"当前出口事实","working_summary":"本集实际发生的事"}'}],
-            max_tokens=9000,
-            temperature=0.35,
-            reference_phase="episode-writing",
-            reference_profiles=self._reference_profiles(data, node),
-        )
-        revised = str(result.get("script") or "").strip()
+        request_text = json.dumps(payload, ensure_ascii=False) + '\n返回：{"patches":[{"op":"replace|insert_before|insert_after","line":原文行号,"text":"单行补丁"}]}'
+        result: dict[str, Any] = {}
+        revised = ""
+        last_error = ""
+        for format_attempt in range(2):
+            suffix = "" if not last_error else f"\n上一版补丁无效：{last_error}。只重做局部 patches，不要返回完整剧本。"
+            result = self._json_chat(
+                project_id,
+                run_id,
+                [{"role": "system", "content": system}, {"role": "user", "content": request_text + suffix}],
+                max_tokens=4200,
+                temperature=0.25,
+                reference_phase="episode-writing",
+                reference_profiles=self._reference_profiles(data, node),
+            )
+            try:
+                revised = apply_script_patches(before, result.get("patches"))
+                break
+            except ValueError as exc:
+                last_error = str(exc)
+                self._log(project_id, run_id, f"  ↳ {node.get('id')} 因果补丁第 {format_attempt + 1} 次格式无效，已丢弃并重做：{last_error}")
         if not revised:
-            raise RuntimeError("逐集复检返修没有返回完整剧本")
+            raise RuntimeError("因果定点返修连续两次补丁无效：" + last_error)
         node["script"] = revised
-        for key in ("entry_state", "exit_state", "working_summary"):
-            if result.get(key):
-                node[key] = result[key]
+        self._log(project_id, run_id, f"  ↳ {node.get('id')} 因果定点返修：平台应用 {len(result.get('patches') or [])} 个行级补丁，其余原文逐字保留")
 
     def _ensure_episode_quality(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]]) -> None:
         """Review, repair script issues only, and never mistake an incomplete receipt for a script defect."""
