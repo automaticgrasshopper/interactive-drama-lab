@@ -1140,7 +1140,7 @@ class ProductionManager:
         node["dialogue_polished_digest"] = script_digest(revised)
         self._log(project_id, run_id, f"  ✓ {node.get('id')} 人话复写完成：对白已按人物关系、现场目的、接话逻辑和朴素中文重整；动作骨架校验一致")
 
-    def _episode_quality_review(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]]) -> dict[str, Any]:
+    def _episode_quality_review(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]], receipt_feedback: list[str] | None = None) -> dict[str, Any]:
         """Run one independent, digest-bound second pass over the current episode."""
         digest = script_digest(node.get("script"))
         required_checks = [
@@ -1170,6 +1170,7 @@ class ProductionManager:
                 "props": [item.get("name") for item in data.get("props") or []],
             },
             "required_checks": required_checks,
+            "receipt_feedback": list(receipt_feedback or []),
         }
         system = (
             "你是逐集独立复检员。"
@@ -1195,31 +1196,34 @@ class ProductionManager:
             reference_profiles=self._reference_profiles(data, node),
         )
         covered = {str(item) for item in result.get("covered_checks") or []}
-        issues = [str(item) for item in result.get("issues") or []] if isinstance(result.get("issues"), list) else ["复检结果缺少问题列表"]
+        script_issues = [str(item) for item in result.get("issues") or []] if isinstance(result.get("issues"), list) else []
+        receipt_issues: list[str] = [] if isinstance(result.get("issues"), list) else ["复检结果缺少问题列表"]
         comprehension = result.get("comprehension") if isinstance(result.get("comprehension"), dict) else {}
         for key, label in EPISODE_COMPREHENSION_FIELDS.items():
             item = comprehension.get(key) if isinstance(comprehension.get(key), dict) else {}
             answer = str(item.get("answer") or "").strip()
             proof = str(item.get("proof") or "").strip()
             if len(answer) < 4 or len(proof) < 6:
-                issues.append(f"理解门证据不完整｜当前集｜{label}")
+                receipt_issues.append(f"理解门证据不完整｜当前集｜{label}")
             elif any(marker in answer or marker in proof for marker in EPISODE_COMPREHENSION_FAILURE_MARKERS):
-                issues.append(f"理解门未通过｜当前集｜{label}")
+                script_issues.append(f"causal｜当前集｜理解门未通过：{label}")
         missing = [item for item in required_checks if item not in covered]
         if missing:
-            issues.append("复检覆盖不完整｜当前集｜" + "、".join(missing))
+            receipt_issues.append("复检覆盖不完整｜当前集｜" + "、".join(missing))
         evidence = result.get("evidence") if isinstance(result.get("evidence"), list) else []
         plain = next((item for item in evidence if isinstance(item, dict) and item.get("check") == "普通话表达与叙述可读"), {})
         for field in ("dialogue_location", "dialogue_proof", "narration_location", "narration_proof"):
             if len(str(plain.get(field) or "").strip()) < (2 if field.endswith("location") else 6):
-                issues.append("普通话复检证据不完整｜当前集｜台词与描述必须分别举证")
+                receipt_issues.append("普通话复检证据不完整｜当前集｜台词与描述必须分别举证")
                 break
-        issues.extend(written_text_coordinate_issues(node.get("script")))
-        issues = list(dict.fromkeys(issues))
+        script_issues.extend(written_text_coordinate_issues(node.get("script")))
+        script_issues = list(dict.fromkeys(script_issues))
+        receipt_issues = list(dict.fromkeys(receipt_issues))
         return {
             "name": "quality",
-            "pass": not issues,
-            "issues": issues,
+            "pass": not script_issues and not receipt_issues,
+            "issues": script_issues,
+            "receipt_issues": receipt_issues,
             "covered_checks": sorted(covered),
             "required_checks": required_checks,
             "comprehension": comprehension,
@@ -1300,21 +1304,46 @@ class ProductionManager:
                 node[key] = result[key]
 
     def _ensure_episode_quality(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]]) -> None:
-        """Review, minimally repair, and re-review until the current digest passes."""
+        """Review, repair script issues only, and never mistake an incomplete receipt for a script defect."""
         for attempt in range(3):
             digest = script_digest(node.get("script"))
             previous = self._audit_map(node).get("quality") or {}
             if previous.get("pass") and previous.get("digest") == digest:
                 return
-            review = self._episode_quality_review(project_id, run_id, data, node, predecessors, topology)
-            self._set_review(node, review)
-            if review.get("pass"):
+            review: dict[str, Any] = {}
+            receipt_feedback: list[str] = []
+            for receipt_attempt in range(3):
+                review = self._episode_quality_review(
+                    project_id, run_id, data, node, predecessors, topology, receipt_feedback
+                )
+                receipt_feedback = [str(item) for item in review.get("receipt_issues") or []]
+                self._set_review(node, review)
+                self.runs.update(project_id, run_id, result_data=data)
+                if not receipt_feedback:
+                    break
+                self._log(
+                    project_id,
+                    run_id,
+                    f"  ↳ {node.get('id')} 复检回执第 {receipt_attempt + 1} 次不完整，只重做回执、不改剧本："
+                    + "；".join(receipt_feedback),
+                )
+            if receipt_feedback:
+                raise RuntimeError(f"{node.get('id')} 复检员连续三次未提交完整回执：" + "；".join(receipt_feedback))
+            script_issues = [str(item) for item in review.get("issues") or []]
+            if not script_issues:
+                review["pass"] = True
+                self._set_review(node, review)
+                self.runs.update(project_id, run_id, result_data=data)
                 covered = "、".join(str(item) for item in review.get("covered_checks") or [])
-                self._log(project_id, run_id, f"  ✓ {node.get('id')} 独立复检通过（第 {attempt + 1} 轮）：{covered or '全部必检项'}")
+                self._log(project_id, run_id, f"  ✓ {node.get('id')} 独立复检通过（正文第 {attempt + 1} 轮）：{covered or '全部必检项'}")
                 return
+            self._log(
+                project_id,
+                run_id,
+                f"  ↳ {node.get('id')} 独立复检正文问题（第 {attempt + 1} 轮）：" + "；".join(script_issues),
+            )
             if attempt == 2:
-                raise RuntimeError(f"{node.get('id')} 逐集独立复检连续三次未通过")
-            self._log(project_id, run_id, f"  ↳ {node.get('id')} 独立复检发现问题，仅定点返修后重新复检")
+                raise RuntimeError(f"{node.get('id')} 逐集独立复检连续三次未通过：" + "；".join(script_issues))
             self._repair_episode_quality(project_id, run_id, data, node, predecessors, topology, review)
 
     def _expand_group_cards(self, project_id: str, run_id: str, data: dict[str, Any], nodes: list[dict[str, Any]], predecessors: dict[str, list[str]]) -> None:

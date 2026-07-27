@@ -410,7 +410,8 @@ class ProductionWorkerTests(unittest.TestCase):
         data = {"nodes": [node], "characters": [], "scenes": [], "props": []}
         review = ProductionManager._episode_quality_review(manager, "p", "r", data, node, {"episode-001": []}, [])
         self.assertFalse(review["pass"])
-        self.assertTrue(any("复检覆盖不完整" in issue for issue in review["issues"]))
+        self.assertEqual(review["issues"], [])
+        self.assertTrue(any("复检覆盖不完整" in issue for issue in review["receipt_issues"]))
 
     def test_independent_quality_review_rejects_missing_comprehension(self):
         manager = QualityReviewCaptureManager()
@@ -426,7 +427,8 @@ class ProductionWorkerTests(unittest.TestCase):
         data = {"nodes": [node], "characters": [], "scenes": [], "props": []}
         review = ProductionManager._episode_quality_review(manager, "p", "r", data, node, {"episode-001": []}, [])
         self.assertFalse(review["pass"])
-        self.assertTrue(any("理解门证据不完整" in issue for issue in review["issues"]))
+        self.assertEqual(review["issues"], [])
+        self.assertTrue(any("理解门证据不完整" in issue for issue in review["receipt_issues"]))
 
 
 if __name__ == "__main__":
