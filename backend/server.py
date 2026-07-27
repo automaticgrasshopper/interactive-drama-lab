@@ -285,7 +285,7 @@ def git_archived_tasks(include_data: bool = False) -> list[dict[str, Any]]:
         elif path.endswith(".script.json"):
             kind = "script"
         else:
-            kind = "task" if match and match.group(1) == "tasks" else "run"
+            kind = "run"
         upsert(path, ref, state, payload, kind=kind)
 
     result = list(archives.values())
@@ -398,14 +398,18 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(200, {"ok": True, "runs": runs})
             return
         if path == "/api/tasks":
-            query = urllib.parse.parse_qs(parsed.query)
-            project_id = safe_name((query.get("project_id") or [""])[0], "")
-            tasks = RUNS.list_tasks(project_id) if project_id else all_tasks()
-            if project_id:
-                for task in tasks:
-                    task["project_id"] = project_id
-                tasks = [enrich_task(task) for task in tasks]
-            self._json(200, {"ok": True, "tasks": tasks})
+            try:
+                query = urllib.parse.parse_qs(parsed.query)
+                project_id = safe_name((query.get("project_id") or [""])[0], "")
+                tasks = RUNS.list_tasks(project_id) if project_id else all_tasks()
+                if project_id:
+                    for task in tasks:
+                        task["project_id"] = project_id
+                    tasks = [enrich_task(task) for task in tasks]
+                self._json(200, {"ok": True, "tasks": tasks})
+            except Exception as exc:  # noqa: BLE001
+                # Never drop the HTTP connection on a task-list error; the UI can display/retry a JSON error.
+                self._json(500, {"ok": False, "error": "任务列表读取失败：" + str(exc)})
             return
         task_match = re.fullmatch(r"/api/tasks/([^/]+)/([^/]+)", path)
         if task_match:
