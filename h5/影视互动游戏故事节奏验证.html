@@ -1823,6 +1823,31 @@ flowchart TD
       tasks.forEach(function(t){var title=t.title||'';if(!title)return;var state=t.git_state||'未提交';if(!histGitStatus[title]||(rank[state]||0)>(rank[histGitStatus[title]]||0))histGitStatus[title]=state;});
     }).catch(function(){histGitStatus={};});
   }
+  function syncCompletedBackendHistory(){
+    if(location.protocol==='file:') return Promise.resolve(0);
+    return fetch('/api/tasks').then(function(res){return res.json().then(function(j){if(!res.ok||!j.ok)throw new Error(j.error||'任务读取失败');return (j.tasks||[]).filter(function(t){return !t.read_only&&t.kind==='production'&&t.status==='completed';});});}).then(function(tasks){
+      var added=0;
+      return tasks.reduce(function(chain,t){return chain.then(function(){
+        var a=histAll(),backendKey=String(t.project_id||'')+'|'+String(t.run_id||'');
+        if(a.some(function(r){return r.backendTaskKey===backendKey||r.runId===t.run_id;}))return;
+        return fetch('/api/tasks/'+encodeURIComponent(t.project_id)+'/'+encodeURIComponent(t.run_id)).then(function(res){return res.json().then(function(j){if(!res.ok||!j.ok)throw new Error(j.error||'任务详情读取失败');return j.task||{};});}).then(function(task){
+          var d=task.result_data;if(!d||!Array.isArray(d.nodes))return;
+          var title=storyTitle(d),existing=histAll();
+          // 兼容旧记录无后台ID：同一成品标题只补绑定，不重复新增。
+          var legacy=existing.find(function(r){return !r.backendTaskKey&&r.title===title;});
+          if(legacy){legacy.backendTaskKey=backendKey;legacy.backendProjectId=t.project_id;legacy.runId=t.run_id;try{localStorage.setItem(HKEY,JSON.stringify(existing));}catch(e){}return;}
+          var req=task.request||{},rec={
+            time:String(task.updated_at||new Date().toLocaleString('zh-CN',{hour12:false})).replace('T',' '),title:title,logline:d.logline||'',synopsis:d.synopsis||'',
+            runId:t.run_id,backendTaskKey:backendKey,backendProjectId:t.project_id,
+            params:'时长'+(req.duration||'?')+'分/结局'+(req.endings||'?')+'/'+(req.model||'后台模型')+'/后台分集工坊',
+            pass:true,attempts:1,log:task.production_log||'',analysisText:'后台生产完成并全部锁稿',json:JSON.stringify(d),
+            input:{brief:task.title||'',tags:[],dur:String(req.duration||''),ends:String(req.endings||''),forgeMode:'skill',intent:'后台任务补录'}
+          };
+          existing.unshift(rec);while(existing.length>100)existing.pop();try{localStorage.setItem(HKEY,JSON.stringify(existing));added++;}catch(e){}
+        });
+      }).catch(function(){});},Promise.resolve()).then(function(){if(added&&window.__idlSaveScriptRecord)window.__idlSaveScriptRecord();return added;});
+    }).catch(function(){return 0;});
+  }
   function projectSlug(title){ return String(title||'project').trim().replace(/\s+/g,'-').replace(/[^\w\-\u4e00-\u9fff]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,80)||'project'; }
   function deleteRunFromBackend(rec){
     if(location.protocol==='file:') return Promise.resolve();
@@ -2049,7 +2074,7 @@ flowchart TD
     var calOn=(typeof extOn==='function'&&extOn('emotion_calib'));document.getElementById('histexport').style.display=calOn?'':'none';document.getElementById('histversions').style.display=calOn?'':'none';
     // 先与后台对账（后台已删的记录从本地清掉），再拉 Git 状态、渲染。
     var recon=(typeof window.__idlReconcileHist==='function')?window.__idlReconcileHist():Promise.resolve();
-    Promise.resolve(recon).then(function(){return refreshHistGitStatus();}).then(function(){histRender();document.getElementById('histmask').style.display='flex';});
+    Promise.resolve(recon).then(function(){return syncCompletedBackendHistory();}).then(function(){return refreshHistGitStatus();}).then(function(){histRender();document.getElementById('histmask').style.display='flex';});
   });
   document.getElementById('histclose').addEventListener('click', function(){ document.getElementById('histmask').style.display='none'; });
   document.getElementById('histmask').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
@@ -2441,7 +2466,7 @@ flowchart TD
       box.innerHTML=analysisHtml(va,1)+box.innerHTML;applyTaskPipeline(task);pipelineOverall('已交付','pass');
       logReset();logEl.textContent=String(task.response_text||'');logHead=logEl.textContent+(logEl.textContent?'\n':'');logLine('▸ 已取回后台完整生产结果并渲染。');
       var analysisText=va.hard.map(function(x){return (x.ok?'✓ ':'✗ ')+x.name+(x.detail?('　'+x.detail):'');}).join('\n');
-      histSave({time:new Date().toLocaleString('zh-CN',{hour12:false}),title:storyTitle(d),logline:d.logline||'',synopsis:d.synopsis||'',runId:d.__runId,params:'时长'+lastT+'分/结局'+lastE+'/'+(tags.length?tags.join('＋'):'无标签')+'/'+model+'/后台分集工坊',pass:true,attempts:1,log:logEl.textContent,analysisText:analysisText,json:c,input:{brief:briefTxt,tags:tagsNow.slice(),dur:genDurSel,ends:genEndsSel,forgeMode:'skill',docs:(DOCS.length?DOCS.map(function(dd){return {name:dd.name,text:dd.text};}):null),images:(IMAGES.length?IMAGES.map(function(im){return {name:im.name,type:im.type,dataUrl:im.dataUrl};}):null),intent:inputPolicy().label}});
+      histSave({time:new Date().toLocaleString('zh-CN',{hour12:false}),title:storyTitle(d),logline:d.logline||'',synopsis:d.synopsis||'',runId:task.run_id,backendTaskKey:String(task.project_id||'')+'|'+String(task.run_id||''),backendProjectId:task.project_id,params:'时长'+lastT+'分/结局'+lastE+'/'+(tags.length?tags.join('＋'):'无标签')+'/'+model+'/后台分集工坊',pass:true,attempts:1,log:logEl.textContent,analysisText:analysisText,json:c,input:{brief:briefTxt,tags:tagsNow.slice(),dur:genDurSel,ends:genEndsSel,forgeMode:'skill',docs:(DOCS.length?DOCS.map(function(dd){return {name:dd.name,text:dd.text};}):null),images:(IMAGES.length?IMAGES.map(function(im){return {name:im.name,type:im.type,dataUrl:im.dataUrl};}):null),intent:inputPolicy().label}});
       rememberBackendTask(null);done();
     }
     function pollBackgroundProduction(){
