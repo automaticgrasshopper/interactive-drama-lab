@@ -1826,6 +1826,10 @@ flowchart TD
   function syncCompletedBackendHistory(){
     if(location.protocol==='file:') return Promise.resolve(0);
     return fetch('/api/tasks').then(function(res){return res.json().then(function(j){if(!res.ok||!j.ok)throw new Error(j.error||'任务读取失败');return (j.tasks||[]).filter(function(t){return !t.read_only&&t.kind==='production'&&t.status==='completed';});});}).then(function(tasks){
+      var alive={};tasks.forEach(function(t){alive[String(t.project_id||'')+'|'+String(t.run_id||'')]=1;});
+      // 后台是任务权威源：带后台绑定但任务已不存在的浏览器幽灵记录直接清掉。
+      var before=histAll(),ghosts=before.filter(function(r){return r.backendTaskKey&&!alive[r.backendTaskKey];}),keep=before.filter(function(r){return !r.backendTaskKey||alive[r.backendTaskKey];});
+      if(ghosts.length){try{localStorage.setItem(HKEY,JSON.stringify(keep));}catch(e){}ghosts.forEach(function(r){fetch('/api/datapacks/'+encodeURIComponent(histDatapackName(r)),{method:'DELETE'}).catch(function(){});});}
       var added=0;
       return tasks.reduce(function(chain,t){return chain.then(function(){
         var a=histAll(),backendKey=String(t.project_id||'')+'|'+String(t.run_id||'');
