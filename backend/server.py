@@ -164,6 +164,13 @@ def git_file_state(path: Path) -> str:
 def enrich_task(record: dict[str, Any]) -> dict[str, Any]:
     item = dict(record)
     item.pop("diagnostic_error", None)
+    input_title = str(item.get("title") or "")
+    result_data = item.get("result_data") if isinstance(item.get("result_data"), dict) else {}
+    result_title = str(item.get("result_title") or result_data.get("title") or result_data.get("logline") or "")
+    item["input_title"] = input_title
+    if result_title:
+        item["result_title"] = result_title
+        item["title"] = result_title
     project_id = safe_name(item.get("project_id"), "")
     project_meta = read_json(DATA_DIR / project_id / "project.json", {})
     project_title = str(project_meta.get("title") or project_id)
@@ -303,11 +310,23 @@ def git_archived_tasks(include_data: bool = False) -> list[dict[str, Any]]:
 def all_tasks() -> list[dict[str, Any]]:
     local = [enrich_task(task) for task in RUNS.list_all_tasks()]
     seen = {(str(task.get("project_id")), str(task.get("run_id"))) for task in local}
-    for task in git_archived_tasks():
+    by_title = {str(task.get("title") or ""): task for task in local if task.get("title")}
+    for raw in git_archived_tasks():
+        task = enrich_task(raw)
         key = (str(task.get("project_id")), str(task.get("run_id")))
+        title = str(task.get("title") or "")
+        existing = by_title.get(title)
+        if existing:
+            existing["has_cg"] = bool(existing.get("has_cg")) or bool(task.get("has_cg"))
+            if task.get("git_state") in {"已在 Git", "已本地提交"}:
+                existing["git_state"] = task.get("git_state")
+            existing["archive_source_paths"] = task.get("source_paths") or []
+            continue
         if key not in seen:
-            local.append(enrich_task(task))
+            local.append(task)
             seen.add(key)
+            if title:
+                by_title[title] = task
     local.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
     return local
 

@@ -149,6 +149,8 @@ class RunStore:
                     self._atomic_json(path, record)
             summary = {key: record.get(key) for key in ("run_id", "title", "status", "phase", "progress", "created_at", "updated_at", "error", "kind")}
             checkpoint = record.get("result_data")
+            if isinstance(checkpoint, dict):
+                summary["result_title"] = str(checkpoint.get("title") or checkpoint.get("logline") or "")
             summary["resumable"] = bool(
                 record.get("kind") == "production"
                 and record.get("status") in {"failed", "stopped", "disconnected"}
