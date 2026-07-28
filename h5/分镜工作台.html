@@ -157,8 +157,6 @@
         </div>
         <div style="height:10px;background:#eef1f6;border-radius:999px;overflow:hidden;"><div id="progbar"></div></div>
       </div>
-      <div class="hint">一键生成 = 分镜表/分镜提示词 → 人物三视图 → 场景图 → CG分镜（锤点驱动）→ 故事版。文本模型、图像模型和 Key 由生产后台统一配置。</div>
-
       <div style="margin-top:20px;border-top:1px solid #eef0f4;padding-top:16px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:10px;">生成服务</div>
         <div id="orview" style="position:relative;border:1px solid #eef0f4;border-radius:12px;padding:13px;background:#fafbfc;">
@@ -555,7 +553,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     if(!ob.grammar && board.grammar) ob.grammar=board.grammar;
     if(!ob.camera && board.camera) ob.camera=board.camera;
     if(!ob.palette && board.palette) ob.palette=board.palette;
-    if(board.assets){ ob.assets=ob.assets||{}; ['characters','scenes'].forEach(function(kk){ var old=Array.isArray(ob.assets[kk])?ob.assets[kk]:[]; var seen={}; old.forEach(function(x){ seen[x.id||x.name]=1; }); (board.assets[kk]||[]).forEach(function(x){ if(!seen[x.id||x.name]) old.push(x); }); ob.assets[kk]=old; }); if(!ob.assets.sounds&&board.assets.sounds) ob.assets.sounds=board.assets.sounds; }
+    if(board.assets){ ob.assets=ob.assets||{}; ['characters','scenes','props'].forEach(function(kk){ var old=Array.isArray(ob.assets[kk])?ob.assets[kk]:[]; var seen={}; old.forEach(function(x){ seen[x.id||x.name]=1; }); (board.assets[kk]||[]).forEach(function(x){ if(!seen[x.id||x.name]) old.push(x); }); ob.assets[kk]=old; }); if(!ob.assets.sounds&&board.assets.sounds) ob.assets.sounds=board.assets.sounds; }
     rec.board=ob;
     // 合并 nodes（新同 id 覆盖旧，保留顺序：先旧后新）
     var mergedNodes=oldNodes.filter(function(n){ return !newIds[n.id]; }).concat(pickedNodes||[]);
@@ -941,6 +939,14 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     if(!isLocked()){ alert('请先到左下角「生产后台」配置并锁定文本与图像模型'); return; }
     var scene=buildSceneText(boardOnly);   // 重新生成优先用已有节点，不再要求重新粘贴/选场次
     if(!scene){ alert(srcMode==='text'?'先写一场戏':'先粘贴 JSON 并选场次（或粘贴含 nodes 的 JSON）'); return; }
+    var replaceExisting=null;
+    if(!boardOnly && (allPicked()||!Object.keys(pickedScenes).some(function(k){return pickedScenes[k];}))){
+      replaceExisting=sbHistAll().filter(function(r){return boundStory&&r.boundStory===boundStory&&r.board;})[0]||null;
+      if(replaceExisting){
+        var oldShots=(replaceExisting.board.beats||[]).reduce(function(n,b){return n+(b.shots||[]).length;},0),oldImgs=recImgCount(replaceExisting);
+        if(!confirm('这套剧本已经生成过分镜（'+oldShots+' 镜，已有 '+oldImgs+' 张 CG）。\n\n继续将重新生成全部分镜表、提示词和 CG，并替换旧分镜记录。人物、场景、道具母图会保留。\n\n新分镜文本生成成功前不会删除旧成果。是否继续？'))return;
+      }
+    }
     var camNote=document.getElementById('camstyle').value==='free'?'允许必要动镜（但仍以固定为主，动镜须轻/短/有落点）':'固定镜头为主，运镜栏默认写“固定”';
     busy=true; gStopped=false; var btn=document.getElementById('gen'), old=btn.textContent; btn.textContent='生成中…'; btn.disabled=true;
     document.getElementById('stopgen').style.display='block'; document.getElementById('progbar').style.background='linear-gradient(90deg,#0891b2,#7c3aed)';
@@ -1005,6 +1011,12 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       var srcSnap;
       if(srcMode==='text'){ srcSnap={ mode:'text', text:(document.getElementById('textin').value||''), mood:(document.getElementById('moodin').value||'') }; }
       else { srcSnap={ mode:'json', json:(document.getElementById('jsonin').value||''), picked:Object.keys(pickedScenes).filter(function(k){return pickedScenes[k];}) }; }
+      // 全片重新生成：新JSON成功后才原子移除旧分镜/CG；人物、场景、道具母图在独立hammer库中保留。
+      if(replaceExisting){
+        var oldList=sbHistAll(),oldIdx=oldList.indexOf(replaceExisting);if(oldIdx<0)oldIdx=oldList.findIndex(function(r){return r.id===replaceExisting.id;});
+        if(oldIdx>=0){var dropped=oldList.splice(oldIdx,1)[0];idbDropRec(dropped);try{localStorage.setItem(HSKEY,JSON.stringify(oldList));}catch(e){}}
+        logLine('\n⚙ 新分镜文本已成功，旧分镜记录与旧CG已替换；视觉母图保留。');
+      }
       // ★ 同一剧本多批生成 → 合并到同一条记录（不再每批各存一条，否则无法整部导入游戏）
       var mergeInfo=mergeStoryboardRecord(parsed.data, pickedNodes, srcSnap);
       window.__promptRecIdx=mergeInfo.idx;   // 当前 prompts 面板对应合并后的记录
