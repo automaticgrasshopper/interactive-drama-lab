@@ -2001,6 +2001,7 @@ flowchart TD
       var payload={ from:r.title||'', time:r.time, genres:d.genres||null, tags:d.tags||null,
         characters: Array.isArray(d.characters)?d.characters:[],
         scenes: Array.isArray(d.scenes)?d.scenes:[],
+        props: Array.isArray(d.props)?d.props:[],
         referenceImages: (r.input&&Array.isArray(r.input.images))?r.input.images:[],
         nodes: ns.filter(function(n){ return n.kind!=='minor' || (n.script||n.text); }).map(function(n){
           return { id:n.id, node_title:n.node_title||'', loc:n.loc||'', time:n.time||'', cast:n.cast||'', kind:n.kind||'normal', script:(n.script||n.text||''),

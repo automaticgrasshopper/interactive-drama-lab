@@ -184,6 +184,7 @@
         <div class="rtabs">
           <button class="rtab" data-rt="char">人物三视图</button>
           <button class="rtab" data-rt="scene">场景图</button>
+          <button class="rtab" data-rt="prop">道具基准图</button>
           <button class="rtab on" data-rt="board">分镜表</button>
           <button class="rtab" data-rt="prompt">分镜提示词</button>
           <button class="rtab" data-rt="storyboard">故事版</button>
@@ -193,6 +194,7 @@
       <div class="body">
         <div id="pane-char" style="display:none;"><div class="empty">（人物三视图：来自上游剧本的角色，套三视图设定表骨架真出图，作全片视觉锤点）</div></div>
         <div id="pane-scene" style="display:none;"><div class="empty">（场景图：来自上游剧本的场景，套稳定场景骨架真出图，作全片视觉锤点）</div></div>
+        <div id="pane-prop" style="display:none;"><div class="empty">（道具基准图：终端、机器、武器、信物等固定外观资产；后续每镜引用同一母图与指纹，防止漂移）</div></div>
         <div id="pane-storyboard" style="display:none;"><div class="empty">（故事版：一图配一条分镜脚本，先验镜头衔接合理性（接续/空间站位/轴线），再用于下游执行）</div></div>
         <div id="pane-script" style="display:none;"><div class="empty">（文学故事版：上游传入的完整分场剧本逐场展示，与图文故事版互补；导入游戏时与图、分镜脚本一起打包导出）</div></div>
         <div id="pane-board"><div class="empty">（左侧输入 → 生成分镜，这里显示逐镜头分镜表）</div></div>
@@ -275,6 +277,7 @@
   "assets":{
     "characters":[{"id":"@char_丹眉","name":"丹眉","look":"黑色短发、红色发饰、米白立领上衣配黑色长裙","temperament":"冷淡清冷、表情克制","states":["常态"],"voice":"清冷少女音，略低","asset_ready":false}],
     "scenes":[{"id":"@scene_大厅_夜","name":"废弃医院一楼大厅","layout":"正门在画面左、侧窗在右后、翻倒轮椅居中——供机位与站位参照","light":"应急灯绿光，暗部多","asset_ready":false}],
+    "props":[{"id":"@prop_配给终端","name":"配给终端","look":"半人高锈蚀金属柜，冷白屏幕，侧面指纹槽和红色警报灯，固定结构与比例","function":"发放药品并索取坐标","asset_ready":false}],
     "sounds":{"rule":"只生成环境音效与动作音效，不配背景音乐","key":["雨声","远处滴水","低频心跳"],"voices":[{"id":"@voice_丹眉","desc":"清冷少女音"}],"asset_ready":false}
   },
   "palette":{
@@ -294,7 +297,7 @@
   "camera":{"body":"机身型号＋理由","lenses":"24/35/85mm"},
   "beats":[
     {"name":"拍子1在干什么","seg":"该拍属于哪个影调段落","shots":[
-      {"no":"1","dur":"2秒","comp":"构图","desc":"画面描述","size":"远景","lens":"24mm","pos":"街口低位","move":"固定","refScene":"@scene_大厅_夜","refChar":"本镜出场人物的 @char_id，顿号分隔","space":"机位轴线侧＋主体在画框位置，如：轴线左侧机位，阿岩画框右前景、林雨左中景","link":"与上一镜空间关系，如：同轴延续/反打/切近/首镜","dial":"本镜台词原句（谁：台词；取自剧本不改写；无词写‘（无词，环境音）’）","emo":"情绪","act":"动作","micro":"微表情","emoshift":"情绪变化","rhythm":"节奏","cut":"剪辑点","sound":"声音"}
+      {"no":"1","dur":"2秒","comp":"构图","desc":"画面描述","size":"远景","lens":"24mm","pos":"街口低位","move":"固定","refScene":"@scene_大厅_夜","refChar":"本镜出场人物的 @char_id，顿号分隔；机器/终端不得写入人物","refProp":"本镜可见关键道具的 @prop_id，顿号分隔","space":"机位轴线侧＋主体在画框位置，如：轴线左侧机位，阿岩画框右前景、林雨左中景","link":"与上一镜空间关系，如：同轴延续/反打/切近/首镜","dial":"本镜台词原句（谁：台词；取自剧本不改写；无词写‘（无词，环境音）’）","emo":"情绪","act":"动作","micro":"微表情","emoshift":"情绪变化","rhythm":"节奏","cut":"剪辑点","sound":"声音"}
     ]}
   ],
   "note":"一句话导演笔记",
@@ -302,7 +305,7 @@
     {"no":"1","img":"<静态帧出图提示词：画风锁点（质感＋主色板色值＋段落微调）＋场景@id复述＋人物@id复述及此刻状态＋景别+焦段+机位+构图＋光线色调落到色值，16:9, no text, no subtitles, no captions, no watermark>","video":"不要出现BGM，不要出现字幕，保留音效。\n风格与氛围：<同 img 质感＋色值>\n画面：<在 img 基础上补动态：主体动作、环境动态、固定机位无运镜、保留音效>"}
   ]
 }
-只返回 ===JSON=== 之后的 JSON，不要多余文字。assets 素材库先列、palette 再定、最后出分镜；每镜的 refScene/refChar 必须@引用 assets 里真实存在的 id，空间站位参照该场景的 layout；prompts 与 beats 里所有 shots 一一对应；每条 prompt 的 img 与 video 的风格句都必须带主色板色值。
+只返回 ===JSON=== 之后的 JSON，不要多余文字。assets 素材库先列、palette 再定、最后出分镜；每镜的 refScene/refChar/refProp 必须@引用 assets 里真实存在的 id；人物、场景、道具严格分栏，机器/终端/服务器/控制台一律是 props，不得标为人物或NPC，空间站位参照该场景的 layout；prompts 与 beats 里所有 shots 一一对应；每条 prompt 的 img 与 video 的风格句都必须带主色板色值。
 </script>
 
 <script type="text/plain" id="charcard">【人物三视图设定表骨架】与 skill《角色三视图设定表生成能力》同源。核心：版式骨架固定不变，只把人物特征换进占位符——全片每个角色设定表版式一致、画风一致、同一角色多状态还是同一个人。
@@ -336,7 +339,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   var CHARCARD=(document.getElementById('charcard').textContent||'').trim();
   var SCENECARD=(document.getElementById('scenecard').textContent||'').trim();
   // 上游传来的场景、人物总表与用户参考图；无上游时为空数组
-  var upstreamChars=[], upstreamScenes=[], upstreamRefs=[];
+  var upstreamChars=[], upstreamScenes=[], upstreamProps=[], upstreamRefs=[];
   // 画风卡是 Preset；同一套“互动影游视觉导演”流程读取当前 Preset，不把每张卡误当成一个独立 Skill。
   var STYLE_KEY='sb_style_id', STYLE_PREF_VERSION_KEY='sb_style_pref_version', STYLE_PREF_VERSION='2', DEFAULT_STYLE_ID='smart_recommendation_v1', FALLBACK_STYLE_ID='filmic_realism_v1';
   function styleList(){ return Array.isArray(window.SB_STYLE_PRESETS)?window.SB_STYLE_PRESETS:[]; }
@@ -526,7 +529,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       var rec={ time:nowStr, title:(boundStory||board.grammar||'分镜'), boundStory:boundStory||'', mergeKey:key,
         shots:shotCount, sceneCount:(pickedNodes||[]).length, board:board, nodes:pickedNodes||[], src:srcSnap,
         styleId:chosenStyle&&chosenStyle.id, stylePreset:styleSnapshot(chosenStyle),
-        upstreamChars:(upstreamChars&&upstreamChars.length?upstreamChars:undefined), upstreamScenes:(upstreamScenes&&upstreamScenes.length?upstreamScenes:undefined), upstreamRefs:(upstreamRefs&&upstreamRefs.length?upstreamRefs:undefined) };
+        upstreamChars:(upstreamChars&&upstreamChars.length?upstreamChars:undefined), upstreamScenes:(upstreamScenes&&upstreamScenes.length?upstreamScenes:undefined), upstreamProps:(upstreamProps&&upstreamProps.length?upstreamProps:undefined), upstreamRefs:(upstreamRefs&&upstreamRefs.length?upstreamRefs:undefined) };
       sbHistSave(rec);   // unshift 到开头
       return { rec:rec, idx:0, merged:false };
     }
@@ -568,6 +571,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     // 上游总表补充
     if(upstreamChars&&upstreamChars.length) rec.upstreamChars=upstreamChars;
     if(upstreamScenes&&upstreamScenes.length) rec.upstreamScenes=upstreamScenes;
+    if(upstreamProps&&upstreamProps.length) rec.upstreamProps=upstreamProps;
     if(upstreamRefs&&upstreamRefs.length) rec.upstreamRefs=upstreamRefs;
     // 把合并后的记录提到最前（保持“最近”在顶）
     a.splice(idx,1); a.unshift(rec);
@@ -623,7 +627,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     var b=e.target.closest('button'); if(!b) return;
     var i=+b.getAttribute('data-i'), a=sbHistAll(), r=a[i]; if(!r) return;
     var act=b.getAttribute('data-sbact');
-    if(act==='load'){ window.__lastBoard=r.board; window.__lastNodes=r.nodes||[]; boundStory=r.boundStory||''; window.__promptRecIdx=i; if(r.upstreamChars)upstreamChars=r.upstreamChars; if(r.upstreamScenes)upstreamScenes=r.upstreamScenes; if(r.upstreamRefs)upstreamRefs=r.upstreamRefs; if(r.styleId&&styleById(r.styleId))setSelectedStyle(r.styleId);
+    if(act==='load'){ if(r.upstreamChars)upstreamChars=r.upstreamChars;if(r.upstreamScenes)upstreamScenes=r.upstreamScenes;if(r.upstreamProps)upstreamProps=r.upstreamProps;if(r.upstreamRefs)upstreamRefs=r.upstreamRefs;r.board=normalizeBoardAssets(r.board);try{localStorage.setItem(HSKEY,JSON.stringify(a));}catch(e){} window.__lastBoard=r.board; window.__lastNodes=r.nodes||[]; boundStory=r.boundStory||''; window.__promptRecIdx=i; if(r.styleId&&styleById(r.styleId))setSelectedStyle(r.styleId);
       // 回填左侧输入区（免再从上游重点）：优先用记录里存的 src 快照，老记录降级用 nodes 反推 JSON
       try{
         if(r.src && r.src.mode==='text'){ setSrc('text'); document.getElementById('textin').value=r.src.text||''; document.getElementById('moodin').value=r.src.mood||''; }
@@ -709,19 +713,19 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     return ps.map(function(p){ return { no:String(p.no), prompt:compileStillPrompt((p.img||p.video||p.text||'')+assetFingerprint(r.board,String(p.no)),r) }; });
   }
   // ===== 锤点驱动：按本镜 refChar/refScene 取已生成的三视图/场景图当参考图（图生图锁一致性）=====
-  // @id 归一：去掉 @char_/@scene_ 前缀、空白，与锤点图的 name 键对齐
-  function idToName(s){ return String(s||'').replace(/^@?(char|scene)_/,'').replace(/^@/,'').trim(); }
+  // @id 归一：去掉 @char_/@scene_/@prop_ 前缀、空白，与锤点图的 name 键对齐
+  function idToName(s){ return String(s||'').replace(/^@?(char|scene|prop)_/,'').replace(/^@/,'').trim(); }
   // 把 board 里某镜号对应的 shot 找出来
   function shotByNo(board,no){ var out=null; (board&&board.beats||[]).forEach(function(bt){ (bt.shots||[]).forEach(function(s){ if(String(s.no)===String(no)) out=s; }); }); return out; }
-  // 根据镜号汇总参考图 data URL（最多 3 张：优先场景 1 + 人物 2）
+  // 根据镜号汇总参考图 data URL（最多 4 张：场景1 + 关键道具1 + 人物2）
   function refsForShot(board,no){
     var s=shotByNo(board,no); if(!s) return [];
-    var out=[]; var seen={};
-    // 场景（一个）
-    var sc=idToName(s.refScene); if(sc){ var su=hamGet('scene',sc)||hamGet('scene',matchHamName('scene',sc)); if(su){ out.push(su); seen['scene|'+sc]=1; } }
-    // 人物（最多 2 个）
+    var out=[];
+    var sc=idToName(s.refScene); if(sc){ var su=hamGet('scene',sc)||hamGet('scene',matchHamName('scene',sc)); if(su) out.push(su); }
+    var props=String(s.refProp||'').split(/[\u3001,\s]+/).map(idToName).filter(Boolean);
+    for(var p=0;p<props.length&&out.length<2;p++){var pu=hamGet('prop',props[p])||hamGet('prop',matchHamName('prop',props[p]));if(pu)out.push(pu);}
     var chars=String(s.refChar||'').split(/[\u3001,\s]+/).map(idToName).filter(Boolean);
-    for(var i=0;i<chars.length && out.length<3;i++){ var cu=hamGet('char',chars[i])||hamGet('char',matchHamName('char',chars[i])); if(cu){ out.push(cu); } }
+    for(var i=0;i<chars.length && out.length<4;i++){ var cu=hamGet('char',chars[i])||hamGet('char',matchHamName('char',chars[i])); if(cu) out.push(cu); }
     return out;
   }
   // 容错：refChar 写的名字与锤点图键不严格相等时，做一次包含匹配
@@ -862,13 +866,14 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
   }
   initBackend();
   // ---- 结果页签 ----
-  var RTABS=['char','scene','board','prompt','storyboard','script'];
+  var RTABS=['char','scene','prop','board','prompt','storyboard','script'];
   document.querySelectorAll('.rtab').forEach(function(b){ b.addEventListener('click',function(){
     document.querySelectorAll('.rtab').forEach(function(x){x.classList.remove('on');}); this.classList.add('on');
     var rt=this.getAttribute('data-rt');
     RTABS.forEach(function(k){ var el=document.getElementById('pane-'+k); if(el) el.style.display=(k===rt)?'':'none'; });
     if(rt==='char') renderCharSheets();
     else if(rt==='scene') renderSceneImages();
+    else if(rt==='prop') renderPropImages();
     else if(rt==='storyboard') renderStoryboard();
     else if(rt==='script') renderLitScript();
   }); });
@@ -947,7 +952,10 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     logLine('▸ 全片画风：'+(requestedStyle&&requestedStyle.isRecommendation?('智能推荐 → '+chosenStyle.name+' / '+chosenStyle.en):(chosenStyle?(chosenStyle.name+' / '+chosenStyle.en):'未配置')));
     logLine('▸ 调用 '+getModel()+'，按导演分镜执行卡出分镜…\n──────────────────────────────');
     var stylePlanning=chosenStyle?('\n\n【已选全片画风 Preset】'+chosenStyle.name+' / '+chosenStyle.en+'\n风格概要：'+chosenStyle.summary+'\n画风只影响渲染、线条、材质、色彩关系与光照处理；不得改人物、服装、场景、道具、动作、剧情或镜头设计。') : '';
-    var user=scene+'\n\n【镜头风格约束】'+camNote+stylePlanning+'\n\n请按导演分镜执行卡出分镜：先诊断戏剧问题(内部)、挑导演语法、锚定全场相机、逐镜填表、再逐镜出分镜提示词。只返回 ===JSON=== 之后的 JSON。';
+    var sourceProps=(upstreamProps||[]).slice();var sourceChars=(upstreamChars||[]).filter(function(x){return !isMachineAsset(x);});
+    (upstreamChars||[]).filter(isMachineAsset).forEach(function(x){if(!sourceProps.some(function(p){return p.name===x.name;}))sourceProps.push({name:x.name,look:x.look||x.desc||'',function:x.func||x.role||'剧情机器道具'});});
+    var assetPlanning='\n\n【上游正式资产分栏（不得互换类型）】\n人物：'+JSON.stringify(sourceChars)+'\n场景：'+JSON.stringify(upstreamScenes||[])+'\n道具：'+JSON.stringify(sourceProps)+'\n机器、终端、服务器、控制台必须放assets.props并由镜头refProp引用，绝不得放characters或标NPC。';
+    var user=scene+'\n\n【镜头风格约束】'+camNote+stylePlanning+assetPlanning+'\n\n请按导演分镜执行卡出分镜：先诊断戏剧问题(内部)、挑导演语法、锚定全场相机、逐镜填表、再逐镜出分镜提示词。只返回 ===JSON=== 之后的 JSON。';
     logHead=logEl.textContent;
     var acc='', JSON_EXP=6000; var HI=boardOnly?100:30;
     progScaled(33,0,HI,'模型输出中…');
@@ -982,6 +990,9 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         done(); return;
       }
       if(parsed.repaired) logLine('\n⚙ 已自动修复 JSON 格式（'+parsed.repaired+'）');
+      parsed.data=normalizeBoardAssets(parsed.data);
+      var continuityFix=autoRepairContinuity(parsed.data);
+      if(continuityFix.repaired.length)logLine('\n⚙ 衔接自检自动修补：已将镜 '+continuityFix.repaired.join('、')+' 改为中性过渡镜；后续只按修补后的镜头出图。');
       window.__lastBoard=parsed.data;                         // 存下本次分镜，供“导入游戏”用
       var pickedNodes=parsedNodes.filter(function(n){ return pickedScenes[n.id]; });
       // 重新生成（boardOnly）时左侧可能已清空，沿用上一次节点，避免丢失台词/场次
@@ -1013,21 +1024,24 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     }
     // ===== 一键生成图像流水线（人物三视图→场景图→CG分镜→故事版）=====
     function runImagePipeline(){
-      var chars=currentChars(), scenes=currentScenes();
-      logLine('\n▸ 开始出图：人物三视图 '+chars.length+' 个、场景图 '+scenes.length+' 个、CG 分镜。图生图锤点驱动。');
+      var chars=currentChars(), scenes=currentScenes(), props=currentProps();
+      logLine('\n▸ 开始出图：人物三视图 '+chars.length+' 个、场景图 '+scenes.length+' 个、道具基准图 '+props.length+' 个、CG 分镜。图生图锤点驱动。');
       hamPreload().then(function(){
-        // 阶段 1：人物三视图 30–45%
-        genHammerSeq('char',chars,function(c){return c.name||c.id||'';},charPrompt,30,45,'人物三视图',function(){
+        // 阶段 1：人物三视图
+        genHammerSeq('char',chars,function(c){return c.name||c.id||'';},charPrompt,30,42,'人物三视图',function(){
           if(gStopped) return pipelineDone(true);
-          // 阶段 2：场景图 45–58%
-          genHammerSeq('scene',scenes,sceneHamName,scenePrompt,45,58,'场景图',function(){
+          // 阶段 2：场景图
+          genHammerSeq('scene',scenes,sceneHamName,scenePrompt,42,53,'场景图',function(){
             if(gStopped) return pipelineDone(true);
-            // 阶段 3：CG 分镜 58–95%（锤点驱动）
-            genCgSeq(58,95,function(){
+            // 阶段 3：道具基准图（机器/终端/信物等独立母图）
+            genHammerSeq('prop',props,function(p){return p.name||idToName(p.id)||'';},propPrompt,53,62,'道具基准图',function(){
               if(gStopped) return pipelineDone(true);
-              // 阶段 4：故事版
-              progScaled(50,95,100,'拼故事版…'); renderStoryboard(); sbHistRender&&sbHistRender();
-              pipelineDone(false);
+              // 阶段 4：CG 分镜（人物+场景+道具锤点驱动）
+              genCgSeq(62,95,function(){
+                if(gStopped) return pipelineDone(true);
+                progScaled(50,95,100,'拼故事版…'); renderStoryboard(); sbHistRender&&sbHistRender();
+                pipelineDone(false);
+              });
             });
           });
         });
@@ -1082,8 +1096,9 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     function done(){ busy=false; gAbort=null; generationStylePreset=null; document.getElementById('stopgen').style.display='none'; btn.textContent=old; btn.disabled=false; try{ updateGenBtnLabel(); }catch(e){} }
   }
 
-  var COLS=[['no','镜号'],['dur','时长'],['size','景别'],['lens','焦段'],['pos','机位'],['move','运镜'],['space','空间站位'],['link','接续'],['dial','台词'],['refScene','场景'],['refChar','人物'],['comp','构图'],['desc','画面描述'],['act','动作'],['micro','微表情'],['emo','情绪'],['emoshift','情绪变化'],['rhythm','节奏'],['cut','剪辑点'],['sound','声音']];
+  var COLS=[['no','镜号'],['dur','时长'],['size','景别'],['lens','焦段'],['pos','机位'],['move','运镜'],['space','空间站位'],['link','接续'],['dial','台词'],['refScene','场景'],['refChar','人物'],['refProp','道具'],['comp','构图'],['desc','画面描述'],['act','动作'],['micro','微表情'],['emo','情绪'],['emoshift','情绪变化'],['rhythm','节奏'],['cut','剪辑点'],['sound','声音']];
   function renderBoard(d){
+    d=normalizeBoardAssets(d);
     var h='';
     if(d.assets){
       var A=d.assets;
@@ -1142,6 +1157,9 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     if(sc){ (board.assets.scenes||[]).forEach(function(x){ if(idToName(x.id)===sc||x.name===sc){ var f=[x.name,x.time,x.layout||x.look,x.light].filter(Boolean).join('，'); if(f) out.push('【场景固化】'+f); } }); }
     String(s.refChar||'').split(/[\u3001,\s]+/).map(idToName).filter(Boolean).slice(0,2).forEach(function(cn){
       (board.assets.characters||[]).forEach(function(x){ if(idToName(x.id)===cn||x.name===cn){ var f=[x.name,x.look].filter(Boolean).join('，'); if(f) out.push('【人物固化】'+f); } });
+    });
+    String(s.refProp||'').split(/[\u3001,\s]+/).map(idToName).filter(Boolean).forEach(function(pn){
+      (board.assets.props||[]).forEach(function(x){ if(idToName(x.id)===pn||x.name===pn){ var f=[x.name,x.look,x.function||x.func].filter(Boolean).join('，'); if(f) out.push('【道具固化】'+f); } });
     });
     return out.length?('\n'+out.join('\n')+'\n以上固化特征与参考图为准，不得更改。'):'';
   }
@@ -1266,20 +1284,23 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     var negNames=names.length?(' Absolutely no people, no person, no human figure, no character, no '+names.join(', no ')+' in the image.'):' Absolutely no people, no person, no human figure in the image.';
     return out.replace(/in the image\.\s*$/, 'in the image.'+negNames);
   }
-  // 通用锤点卡片渲染：kind=char|scene
+  // 通用锤点卡片渲染：kind=char|scene|prop
   function renderHammer(paneId,kind,items,promptFn,labelFn){
     var pane=document.getElementById(paneId); if(!pane) return;
-    if(!items||!items.length){ pane.innerHTML='<div class="empty">（本次没有来自上游的'+(kind==='char'?'人物':'场景')+'总表。从第一个 H5 用“生成分镜”整片送来时会带上，开了剧本实例化就有）</div>'; return; }
+    var kindLabel=kind==='char'?'人物':(kind==='scene'?'场景':'道具');
+    var imageLabel=kind==='char'?'三视图':(kind==='scene'?'场景图':'道具基准图');
+    if(!items||!items.length){ pane.innerHTML='<div class="empty">（本次没有来自上游的'+kindLabel+'总表。）</div>'; return; }
     hamPreload().then(function(){
       var doneN=items.filter(function(it){ return hamGet(kind,labelFn(it)); }).length;
       var h='<div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
-        +'<button class="hbtn" id="ham_all_'+kind+'" style="background:#0e7490;color:#fff;border-color:#0e7490;">✨ 生成全部'+(kind==='char'?'三视图':'场景图')+'</button>'
+        +'<button class="hbtn" id="ham_all_'+kind+'" style="background:#0e7490;color:#fff;border-color:#0e7490;">✨ 生成全部'+imageLabel+'</button>'
+        +(kind==='prop'&&doneN?'<button class="hbtn" id="redrawPropShots" style="background:#7c3aed;color:#fff;border-color:#7c3aed;">↻ 按道具母图重抽相关CG</button>':'')
         +'<span style="font-size:11px;color:#8a92a6;">共 '+items.length+' 个，已生成 '+doneN+'。作全片视觉锤点，分镜出图时可拿它做参考图锁一致性。</span></div>';
       h+='<div style="display:flex;flex-direction:column;gap:10px;">'+items.map(function(it,idx){
         var name=labelFn(it), has=hamGet(kind,name), pr=promptFn(it);
         return '<div class="shotrow">'
           +'<div class="pinfo"><b>'+esc(kind==='char'?(it.name||name):(it.name||name))+'</b>'
-            +(kind==='char'?'<span style="font-size:11px;color:#8a92a6;">　'+esc(it.role||'')+'</span>':'<span style="font-size:11px;color:#8a92a6;">　'+esc((it.time||'')+(it.inout?(' · '+it.inout):''))+'</span>')
+            +(kind==='char'?'<span style="font-size:11px;color:#8a92a6;">　'+esc(it.role||'')+'</span>':(kind==='scene'?'<span style="font-size:11px;color:#8a92a6;">　'+esc((it.time||'')+(it.inout?(' · '+it.inout):''))+'</span>':'<span style="font-size:11px;color:#8a92a6;">　'+esc(it.level||'道具')+'</span>'))
             +'<pre>'+esc(pr)+'</pre>'
             +'<div style="margin-top:8px;"><button class="hbtn'+(has?' done':'')+'" data-hamone="'+kind+'" data-name="'+sbEsc(name)+'"'+(has?' disabled':'')+' style="font-size:12px;'+(has?'':'background:#0e7490;color:#fff;border-color:#0e7490;')+'">'+(has?'✓ 已生成':'🎨 生成')+'</button></div>'
           +'</div>'
@@ -1290,6 +1311,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       }).join('')+'</div>';
       pane.innerHTML=h;
       var allBtn=document.getElementById('ham_all_'+kind); if(allBtn) allBtn.addEventListener('click',function(){ hamGenAll(kind,items,promptFn,labelFn,paneId); });
+      var redrawBtn=document.getElementById('redrawPropShots');if(redrawBtn)redrawBtn.addEventListener('click',function(){if(confirm('只重抽引用已生成道具母图的CG？旧漂移图会被替换，分镜文本和其他镜头不变。')){redrawBtn.disabled=true;redrawBtn.textContent='重抽中…';redrawShotsWithPropAnchors();}});
       [].forEach.call(pane.querySelectorAll('[data-hamone]'),function(btn){ btn.addEventListener('click',function(){ hamGenOne(kind,btn.getAttribute('data-name'),items,promptFn,labelFn,paneId); }); });
     });
   }
@@ -1316,7 +1338,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     if(anchor){
       sourceRefs=[anchor].concat(sourceRefs).slice(0,4);
       prompt+=(prior
-        ? ' Use the first reference image as the identity baseline of this exact '+(kind==='char'?'character':'location')+': keep the same '+(kind==='char'?'face, hairstyle, body and outfit':'room, architecture, furniture layout and set dressing')+', only adjust per the description above.'
+        ? ' Use the first reference image as the identity baseline of this exact '+(kind==='char'?'character':(kind==='scene'?'location':'prop/machine'))+': keep the same '+(kind==='char'?'face, hairstyle, body and outfit':(kind==='scene'?'room, architecture, furniture layout and set dressing':'shape, dimensions, materials, controls, ports, wear and signature details'))+', only adjust per the description above.'
         : ' The first reference image is the SAME location at a different time of day: keep the same room, architecture, furniture layout and set dressing, change only the lighting and atmosphere.');
     }
     sbGenImage(prompt,function(err,url){
@@ -1330,27 +1352,81 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     var q=items.map(labelFn); var btn=document.getElementById('ham_all_'+kind); if(btn){ btn.disabled=true; btn.textContent='生成中…'; }
     (function next(){ if(!q.length){ if(paneId)renderHammerRefresh(paneId); return; } var name=q.shift(); hamGenOne(kind,name,items,promptFn,labelFn,paneId,function(){ next(); }); })();
   }
-  function renderHammerRefresh(paneId){ if(paneId==='pane-char') renderCharSheets(); else if(paneId==='pane-scene') renderSceneImages(); }
-  function currentChars(){ var b=window.__lastBoard; var fromBoard=(b&&b.assets&&Array.isArray(b.assets.characters))?b.assets.characters:[]; return (upstreamChars&&upstreamChars.length)?upstreamChars:fromBoard; }
+  function renderHammerRefresh(paneId){ if(paneId==='pane-char') renderCharSheets(); else if(paneId==='pane-scene') renderSceneImages(); else if(paneId==='pane-prop') renderPropImages(); }
+  function isMachineAsset(x){ var t=[x&&x.name,x&&x.role,x&&x.desc,x&&x.look].filter(Boolean).join(''); return /(终端|服务器|控制台|主机|设备|机器|机柜|信标|无人机|机器人|接口|系统残存)/.test(t) && !/(仿生人|机器人角色|智能人形)/.test(t); }
+  function currentChars(){ var b=window.__lastBoard; var fromBoard=(b&&b.assets&&Array.isArray(b.assets.characters))?b.assets.characters:[]; var src=(upstreamChars&&upstreamChars.length)?upstreamChars:fromBoard; return src.filter(function(x){return !isMachineAsset(x);}); }
   function currentScenes(){ var b=window.__lastBoard; var fromBoard=(b&&b.assets&&Array.isArray(b.assets.scenes))?b.assets.scenes:[]; return (upstreamScenes&&upstreamScenes.length)?upstreamScenes:fromBoard; }
+  function currentProps(){
+    var b=window.__lastBoard, fromBoard=(b&&b.assets&&Array.isArray(b.assets.props))?b.assets.props:[];
+    var all=(upstreamProps&&upstreamProps.length?upstreamProps:fromBoard).slice(), seen={};
+    all.forEach(function(x){seen[String(x.name||idToName(x.id))]=1;});
+    var charSrc=(upstreamChars||[]).concat((b&&b.assets&&b.assets.characters)||[]);
+    charSrc.forEach(function(x){var name=String(x&&x.name||idToName(x&&x.id));if(name&&isMachineAsset(x)&&!seen[name]){all.push({id:'@prop_'+name,name:name,look:x.look||x.desc||'',function:x.func||x.role||'剧情机器道具'});seen[name]=1;}});
+    return all;
+  }
+  function normalizeBoardAssets(board){
+    if(!board)return board;board.assets=board.assets||{};
+    var chars=Array.isArray(board.assets.characters)?board.assets.characters:[], props=Array.isArray(board.assets.props)?board.assets.props:[];
+    var propByName={};
+    (upstreamProps||[]).concat(props).forEach(function(p){var n=String(p&&p.name||idToName(p&&p.id));if(n&&!propByName[n])propByName[n]={id:p.id||('@prop_'+n),name:n,look:p.look||p.desc||'',function:p.function||p.func||''};});
+    var realChars=[];
+    (upstreamChars||[]).concat(chars).forEach(function(c){var n=String(c&&c.name||idToName(c&&c.id));if(!n)return;if(isMachineAsset(c)){if(!propByName[n])propByName[n]={id:'@prop_'+n,name:n,look:c.look||c.desc||'',function:c.func||c.role||'剧情机器道具'};}else if(!realChars.some(function(x){return String(x.name||idToName(x.id))===n;}))realChars.push(c);});
+    board.assets.characters=realChars;board.assets.props=Object.keys(propByName).map(function(k){return propByName[k];});
+    var propNames=Object.keys(propByName);
+    (board.beats||[]).forEach(function(bt){(bt.shots||[]).forEach(function(s){
+      var charTokens=String(s.refChar||'').split(/[\u3001,\s]+/).filter(Boolean), kept=[], moved=[];
+      charTokens.forEach(function(raw){var n=idToName(raw);if(propByName[n])moved.push(n);else kept.push(raw);});
+      var hay=[s.desc,s.act,s.comp,s.dial].filter(Boolean).join('');propNames.forEach(function(n){if(hay.indexOf(n)>=0&&moved.indexOf(n)<0)moved.push(n);});
+      s.refChar=kept.join('、');var existing=String(s.refProp||'').split(/[\u3001,\s]+/).map(idToName).filter(Boolean);moved.forEach(function(n){if(existing.indexOf(n)<0)existing.push(n);});if(existing.length)s.refProp=existing.map(function(n){return '@prop_'+n;}).join('、');
+    });});
+    return board;
+  }
   function renderCharSheets(){ renderHammer('pane-char','char',currentChars(),charPrompt,function(c){return c.name||c.id||'';}); }
   // 场景图键：用 id 归一形（带时段，如 大厅_夜），与 shot.refScene 同源，保证同场景日/夜各存一张不互盖
   function sceneHamName(s){ return idToName(s.id)||s.name||''; }
   function renderSceneImages(){ renderHammer('pane-scene','scene',currentScenes(),scenePrompt,sceneHamName); }
+  function propPrompt(p){
+    var name=p.name||idToName(p.id)||'关键道具', look=p.look||p.desc||'', fn=p.function||p.func||'';
+    return 'Photorealistic live-action production prop reference sheet for one single object: '+name+'. Fixed canonical design: '+look+'. Story function: '+fn+'. '+artStyle()+'. Show the exact same object in front three-quarter view, side view, rear view, plus close-up detail panels of controls, ports, materials, wear, dimensions and signature features. This is an inanimate prop/machine, absolutely no human body, no face, no limbs, no clothing, no character turnaround. Neutral studio background, consistent proportions and structure across all views, wide 16:9. No text, no labels, no captions, no logo, no watermark.';
+  }
+  function renderPropImages(){ renderHammer('pane-prop','prop',currentProps(),propPrompt,function(p){return p.name||idToName(p.id)||'';}); }
 
   // ================= 镜头衔接自检（故事版用：先验证衔接合理性再给下游） =================
   // 靠 beats.shots 的 link/space 字段扫出可能的衔接问题：未写站位、跨镜断裂、明说越轴无过渡。
   function shotContinuityIssues(b){
     var issues=[]; var beats=(b&&Array.isArray(b.beats))?b.beats:[];
     var flat=[]; beats.forEach(function(bt){ (bt.shots||[]).forEach(function(s){ flat.push(s); }); });
-    if(!flat.length) return issues; // 无 beats 结构化信息时不强判
+    if(!flat.length) return issues;
     flat.forEach(function(s,idx){
       var no=s.no||(idx+1);
-      if(!s.space) issues.push({no:no,lv:'warn',msg:'未写空间站位（机位轴线侧/主体在画框位置），下游易站位漂动'});
-      if(idx>0 && !s.link) issues.push({no:no,lv:'warn',msg:'未写与上一镜的接续关系（同轴延续/反打/切近）'});
-      if(/越轴/.test(s.link||'') && !/过渡|中性|理由/.test(s.link||'')) issues.push({no:no,lv:'err',msg:'标了越轴但未给中性过渡镜/理由，容易翻轴跳乱'});
+      if(!s.space) issues.push({no:no,lv:'warn',code:'missing-space',msg:'未写空间站位（机位轴线侧/主体在画框位置），下游易站位漂动'});
+      if(idx>0 && !s.link) issues.push({no:no,lv:'warn',code:'missing-link',msg:'未写与上一镜的接续关系（同轴延续/反打/切近）'});
+      if(/越轴/.test(s.link||'') && !/过渡|中性|理由/.test(s.link||'')) issues.push({no:no,lv:'err',code:'unsafe-axis-cross',msg:'标了越轴但未给中性过渡镜/理由，容易翻轴跳乱'});
     });
     return issues;
+  }
+  function autoRepairContinuity(board){
+    var issues=shotContinuityIssues(board), repaired=[];
+    issues.forEach(function(issue){var s=shotByNo(board,issue.no);if(!s)return;
+      if(issue.code==='missing-space')s.space='沿用上一镜轴线侧；主体画框位置按上一镜动作连续承接';
+      else if(issue.code==='missing-link')s.link='同轴延续，动作连续';
+      else if(issue.code==='unsafe-axis-cross'){
+        s.link='中性过渡镜：正对轴线观看，重新建立左右关系后再进入下一镜';
+        s.space='轴线正中中性机位，主体居中，左右关系在本镜重新建立';
+        s.pos='轴线正中中性机位';s.move='固定';if(!s.size||/近景|特写/.test(s.size))s.size='中景';
+        s.desc='中性过渡：'+String(s.desc||s.act||'以环境与主体正面关系重新建立空间轴线');
+        repaired.push(String(issue.no));
+      }
+    });
+    if(repaired.length){(board.prompts||[]).forEach(function(p){if(repaired.indexOf(String(p.no))>=0){p.img='NEUTRAL AXIS RESET SHOT, centered frontal camera, re-establish left-right geography before the next shot. '+String(p.img||p.text||'');p.video='Fixed camera, neutral axis reset, no crossing motion. '+String(p.video||'');}});}
+    return {issues:issues,repaired:repaired};
+  }
+  function repairContinuityAndRedraw(){
+    var pr=promptRec();if(!pr.rec)return;var result=autoRepairContinuity(pr.rec.board);if(!result.repaired.length){renderStoryboard();return;}
+    var q=result.repaired.slice(),images=getRecImages(pr.rec);
+    q.forEach(function(no){delete images[no];if(pr.rec.imgNos)pr.rec.imgNos=pr.rec.imgNos.filter(function(x){return String(x)!==String(no);});idbDel(recId(pr.rec)+'|'+no);});
+    try{localStorage.setItem(HSKEY,JSON.stringify(pr.a));}catch(e){}
+    (function next(){if(!q.length){renderPrompts(pr.rec.board);renderStoryboard();sbHistRender&&sbHistRender();return;}genOneShot(q.shift(),function(){next();});})();
   }
 
   // ================= 故事版（把已生成分镜预览图拼成宫格） =================
@@ -1407,7 +1483,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       // 衔接自检面板
       if(issues.length){
         h+='<div style="border:1px solid '+(errN?'#f3c9c9':'#f5e2b8')+';background:'+(errN?'#fff5f5':'#fffbeb')+';border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">'
-          +'<b style="color:'+(errN?'#dc2626':'#c2860b')+';">⚠ 衔接自检：'+errN+' 个严重、'+warnN+' 个提醒</b>（衔接不合理传给下游会一错到底，建议先回“生成分镜”重抽或手动修）<br>'
+          +'<b style="color:'+(errN?'#dc2626':'#c2860b')+';">⚠ 衔接自检：'+errN+' 个严重、'+warnN+' 个提醒</b>（严重问题可自动改为中性过渡并只重抽受影响镜头）'+(errN?'<button class="hbtn" id="repairContinuity" style="margin-left:10px;background:#dc2626;color:#fff;border-color:#dc2626;">自动修补并重抽严重镜头</button>':'')+'<br>'
           +issues.slice(0,12).map(function(x){ return '· 镜'+esc(x.no)+'：'+(x.lv==='err'?'<b style="color:#dc2626;">[严重]</b> ':'')+esc(x.msg); }).join('<br>')
           +(issues.length>12?('<br>…共 '+issues.length+' 条'):'')+'</div>';
       } else {
@@ -1438,6 +1514,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
           +'</div>';
       }).join('')+'</div>';
       pane.innerHTML=h;
+      var repairBtn=document.getElementById('repairContinuity');if(repairBtn)repairBtn.addEventListener('click',function(){repairBtn.disabled=true;repairBtn.textContent='修补重抽中…';repairContinuityAndRedraw();});
     }
     if(rec){ loadRecImages(rec).then(function(imgs){ draw(imgs||{}); }); }
     else { draw({}); }
@@ -1463,6 +1540,14 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         setRecImage(pr.a,pr.rec,no,url).then(function(){ setTimeout(function(){ renderPrompts(pr.rec.board); sbHistRender&&sbHistRender(); if(cb)cb(null); },250); });
       }, refs);
     });
+  }
+  function redrawShotsWithPropAnchors(){
+    var pr=promptRec();if(!pr.rec)return;pr.rec.board=normalizeBoardAssets(pr.rec.board);
+    var shots=[];(pr.rec.board.beats||[]).forEach(function(bt){(bt.shots||[]).forEach(function(s){var names=String(s.refProp||'').split(/[\u3001,\s]+/).map(idToName).filter(Boolean);if(names.some(function(n){return !!(hamGet('prop',n)||hamGet('prop',matchHamName('prop',n)));}))shots.push(String(s.no));});});
+    shots=shots.filter(function(v,i,a){return a.indexOf(v)===i;});var images=getRecImages(pr.rec);
+    shots.forEach(function(no){delete images[no];if(pr.rec.imgNos)pr.rec.imgNos=pr.rec.imgNos.filter(function(x){return String(x)!==no;});idbDel(recId(pr.rec)+'|'+no);});
+    try{localStorage.setItem(HSKEY,JSON.stringify(pr.a));}catch(e){}
+    (function next(){if(!shots.length){renderPrompts(pr.rec.board);renderPropImages();renderStoryboard();sbHistRender&&sbHistRender();return;}genOneShot(shots.shift(),function(){next();});})();
   }
   // 生成分镜（逐镜）：只生成还没图的镜头，已有图的跳过不重生
   function genAllShots(){
@@ -1720,7 +1805,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
           var key=p.recKey||p.boundStory||p.title;
           if(existed[key]) return;   // 已有同条→跳过（只增不覆）
           var rec={ id:newRecId(), title:p.title||key, boundStory:p.boundStory||'', time:p.time||'', srcId:p.recKey||'', styleId:p.styleId||'', stylePreset:p.stylePreset||null,
-            board:p.board||null, nodes:p.nodes||[], upstreamChars:p.upstreamChars||[], upstreamScenes:p.upstreamScenes||[], upstreamRefs:p.upstreamRefs||[],
+            board:p.board||null, nodes:p.nodes||[], upstreamChars:p.upstreamChars||[], upstreamScenes:p.upstreamScenes||[], upstreamProps:p.upstreamProps||[], upstreamRefs:p.upstreamRefs||[],
             shots:(p.board&&p.board.beats)?p.board.beats.reduce(function(a,b){return a+((b.shots||[]).length);},0):0,
             sceneCount:(p.nodes||[]).length, imgNos:p.imgNos||Object.keys(p.images||{}) };
           var a=sbHistAll(); a.push(rec); try{ localStorage.setItem(HSKEY,JSON.stringify(a)); }catch(e){}
@@ -1746,7 +1831,8 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       if(pay && Array.isArray(pay.nodes) && pay.nodes.length){
         boundStory=pay.from||'';   // 绑定的故事剧本标题（空=用户单传）
         upstreamChars=Array.isArray(pay.characters)?pay.characters:[];   // 人物总表（供三视图卡）
-        upstreamScenes=Array.isArray(pay.scenes)?pay.scenes:[];          // 场景总表（供场景图卡）
+        upstreamScenes=Array.isArray(pay.scenes)?pay.scenes:[];
+        upstreamProps=Array.isArray(pay.props)?pay.props:[];       // 道具总表（机器/终端等独立母图）          // 场景总表（供场景图卡）
         upstreamRefs=Array.isArray(pay.referenceImages)?pay.referenceImages:[]; // 用户上传的视觉参考（供图生图锁身份/画风）
         setSrc('json');
         document.getElementById('jsonin').value=JSON.stringify({nodes:pay.nodes}, null, 0);
@@ -1799,7 +1885,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         kind:'storyboard', version:1, exportedAt:new Date().toISOString(),
         recKey:dpRecKey(r),
         title:r.title||'', boundStory:r.boundStory||'', time:r.time||'',
-        board:r.board||null, nodes:r.nodes||[], upstreamChars:r.upstreamChars||[], upstreamScenes:r.upstreamScenes||[], upstreamRefs:r.upstreamRefs||[], styleId:r.styleId||'', stylePreset:r.stylePreset||null,
+        board:r.board||null, nodes:r.nodes||[], upstreamChars:r.upstreamChars||[], upstreamScenes:r.upstreamScenes||[], upstreamProps:r.upstreamProps||[], upstreamRefs:r.upstreamRefs||[], styleId:r.styleId||'', stylePreset:r.stylePreset||null,
         imgNos:r.imgNos||Object.keys(images), images:images
       };
     });
