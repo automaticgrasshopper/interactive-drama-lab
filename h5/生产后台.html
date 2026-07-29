@@ -108,7 +108,8 @@ function renderProductionLog(t){
   const textEl=$('productionLogText'),live=$('productionLogLive'),meta=$('productionLogMeta');
   if(!t){live.textContent='等待任务';meta.textContent='开始新任务后自动实时打印；无运行任务时可点「详情」查看历史日志。';textEl.textContent='当前没有运行中的项目，也尚未选择历史任务。';lastLogText='';return}
   lastLogTask=t;
-  const log=String(t.production_log||'');lastLogText=log;
+  // 完整后台生产写 production_log；完整剧本忠实导入/旧直连任务写 response_text。两类都必须可见。
+  const log=String(t.production_log||t.response_text||'');lastLogText=log;
   live.textContent=(t.status==='running'||t.status==='stopping')?'实时刷新':statusText(t.status);
   $('health').textContent='后端已连接';$('health').style.background='';$('health').style.color='';
   meta.textContent=(t.title||t.run_id||'未命名任务')+' · '+(t.phase||'未进入阶段')+' · '+(t.progress||0)+'% · '+(t.updated_at||'');

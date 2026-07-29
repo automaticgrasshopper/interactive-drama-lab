@@ -909,7 +909,9 @@ class Handler(SimpleHTTPRequestHandler):
         phase = str(task_meta.get("phase") or "generation")
         title = str(task_meta.get("title") or project_id or "生成任务")
         if project_id and run_id:
-            RUNS.create(project_id, run_id, title, phase, {"model": payload.get("model", ""), "message_count": len(payload.get("messages", [])), "attempt": task_meta.get("attempt", 1)})
+            RUNS.create(project_id, run_id, title, phase, {"model": payload.get("model", ""), "message_count": len(payload.get("messages", [])), "attempt": task_meta.get("attempt", 1), "input_kind": task_meta.get("kind", ""), "source_name": task_meta.get("source_name", ""), "source_text": task_meta.get("source_text", "")})
+            if task_meta.get("kind"):
+                RUNS.update(project_id, run_id, kind=str(task_meta.get("kind")))
         req = self._openrouter_request(payload, stream=True)
         try:
             response = urllib.request.urlopen(req, timeout=300)
@@ -926,6 +928,7 @@ class Handler(SimpleHTTPRequestHandler):
         received = 0
         response_text = ""
         usage: Any = None
+        client_connected = True
         try:
             while True:
                 if project_id and run_id and RUNS.should_stop(project_id, run_id):
@@ -934,8 +937,15 @@ class Handler(SimpleHTTPRequestHandler):
                 line = response.readline()
                 if not line:
                     break
-                self.wfile.write(line)
-                self.wfile.flush()
+                if client_connected:
+                    try:
+                        self.wfile.write(line)
+                        self.wfile.flush()
+                    except (BrokenPipeError, ConnectionResetError, OSError):
+                        # 浏览器刷新/关闭不终止后台模型请求；继续收完并持久化，页面回来后可恢复。
+                        client_connected = False
+                        if project_id and run_id:
+                            RUNS.update(project_id, run_id, status="running", phase=phase, response_text=response_text, usage=usage)
                 decoded = line.decode("utf-8", errors="replace").strip()
                 if decoded.startswith("data:"):
                     raw = decoded[5:].strip()
@@ -951,9 +961,6 @@ class Handler(SimpleHTTPRequestHandler):
                                 RUNS.update(project_id, run_id, response_text=response_text, usage=usage, progress=min(95, max(1, received // 120)))
                         except (json.JSONDecodeError, IndexError, TypeError):
                             pass
-        except (BrokenPipeError, ConnectionResetError):
-            if project_id and run_id:
-                RUNS.update(project_id, run_id, status="disconnected", response_text=response_text, usage=usage)
         finally:
             response.close()
         if project_id and run_id and not RUNS.should_stop(project_id, run_id):

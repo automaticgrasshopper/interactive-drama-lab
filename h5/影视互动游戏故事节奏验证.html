@@ -1260,6 +1260,23 @@ flowchart TD
     Promise.allSettled(jobs).then(function(results){ var errors=results.filter(function(x){return x.status==='rejected';}).map(function(x){return x.reason&&x.reason.message||String(x.reason);}); renderDocs(); self.value=''; if(errors.length) alert(errors.join('\n')); });
   });
   function looksCompleteScript(t){ if(!t||t.length<2500)return false; var score=0; if(/(?:^|\n)\s*(?:第?\d+场|场次|SCENE\s+\d+|INT\.|EXT\.)/im.test(t))score++; if(/(?:日|夜)\s*(?:内|外)|(?:内|外)\s*(?:日|夜)/.test(t))score++; if(/(?:^|\n)\s*[\u4e00-\u9fffA-Za-z·]{1,12}\s*[:：]\s*[^\n]{2,}/m.test(t))score++; if(/分场|剧本|第\s*\d+\s*集|【场次/.test(t))score++; return score>=2; }
+  function splitOriginalScriptScenes(text){
+    var lines=String(text||'').replace(/\r\n?/g,'\n').split('\n'), starts=[];
+    var heading=/^\s*(?:【?\s*(?:第?[一二三四五六七八九十百零〇0-9]+\s*[场集]|场次\s*[一二三四五六七八九十百零〇0-9]+)|(?:INT\.|EXT\.|INT\/EXT\.)|(?:内景|外景)\b)/i;
+    lines.forEach(function(line,i){if(heading.test(line))starts.push(i);});
+    if(!starts.length)return String(text||'').trim()?[String(text||'').trim()]:[];
+    var out=[];for(var j=0;j<starts.length;j++){var from=starts[j],to=(j+1<starts.length?starts[j+1]:lines.length);var chunk=lines.slice(from,to).join('\n').trim();if(chunk)out.push(chunk);}
+    if(starts[0]>0&&out.length){var prefix=lines.slice(0,starts[0]).join('\n').trim();if(prefix)out[0]=prefix+'\n\n'+out[0];}
+    return out;
+  }
+  function attachOriginalScripts(d,source){
+    if(!d||!Array.isArray(d.nodes))throw new Error('结构化结果缺少nodes');
+    var scenes=splitOriginalScriptScenes(source);
+    if(!scenes.length)throw new Error('上传原稿没有可保留的剧本文字');
+    if(scenes.length!==d.nodes.length)throw new Error('忠实导入场次数不一致：原稿识别 '+scenes.length+' 场，结构化结果 '+d.nodes.length+' 个节点。系统已停止，避免错位挂接或改写原稿。');
+    d.nodes.forEach(function(n,i){n.script=scenes[i];n.lightweight_status='原稿锁定';n.original_script=true;});
+    d.__faithfulImport=true;return d;
+  }
   function inputPolicy(){
     var brief=(document.getElementById('brief').value||'').trim(), text=docText(), strict=looksCompleteScript([text,brief].filter(Boolean).join('\n\n'));
     if(strict) return {level:4,label:'完整剧本还原',strict:true,directive:'输入是完整分场剧本。只做结构化、素材抽取和必要的下游对接，不发明新互动，不改写原台词、分场、情节和结局。'};
@@ -1289,7 +1306,7 @@ flowchart TD
   function mkReq(){
     var T=lastT, E=lastE;
     var inst=extOn('script_inst'); // 剧本实例化规则：off＝只出结构骨架，JSON 不要 characters/scenes/props、节点不要 cast/script
-    var forge=skillForgeOn();
+    var forge=skillForgeOn()&&!inputPolicy().strict;
     var advChk=false; // 固定使用精简 selfcheck JSON 字段
     var nodeFloor=Math.max(8,E+3), nodeCap=Math.max(22,E*3+2); // 节点总数上限随结局数放大（E=10 时可到 ~32）
     var tags=pickedList();
@@ -1364,7 +1381,7 @@ flowchart TD
     s=s.replace('本集 audience_summary 不得预写，它只能在正文三审通过后生成。拓扑冻结后由工作台逐集生成 850–1300 可见字剧本。','拓扑冻结后由工作台逐集写完整现场，只检查事实、首次出场交代和人话对白。')
       .replace('script 为 850–1300 可见字、默认 16–24 个以 △ 开头的动作段落；人物说话像自然中文，重台词不超过三分之一，不得连续三句解释设定。','script 直接写完整现场；动作顺写，不使用△和出场栏，不设字数、动作段数或台词比例。');
     if(tags.indexOf('抽象')>=0){ s+='\n\n【抽象说明】题材含"抽象"：请以 B站 / 抖音 当下最热门的抽象梗为素材来构建（梗迭代极快，一律取当前流行的，不要套用过时老梗）。'; }
-    if(inputPolicy().strict){ s+='\n\n【完整剧本自动还原·最高优先级】系统已识别输入为完整分场剧本：结构、台词、动作、情节、抉择和结局均照原稿；线性剧本就输出线性节点链。结局数、抉择数、2–4出口、反俗套、力度谱、payoffs 和空合流等生成规则全部降为分析提示，不得据此增删或改写原稿。beats 按真实走势打点；consistency 只登记原稿自身矛盾。'; }
+    if(inputPolicy().strict){ s+='\n\n【完整剧本自动还原·最高优先级】系统已识别输入为完整分场剧本：结构、台词、动作、情节、抉择和结局均照原稿；线性剧本就输出线性节点链。结局数、抉择数、2–4出口、反俗套、力度谱、payoffs 和空合流等生成规则全部降为分析提示，不得据此增删或改写原稿。beats 按真实走势打点；consistency 只登记原稿自身矛盾。为避免模型重复转抄导致改字或截断，JSON nodes[].script 统一留空，但 nodes 数量与顺序必须严格等于原稿分场；平台会在解析后按场次顺序把上传原文确定性回挂到 script。'; }
     document.getElementById('req').value=s;
   }
   // ===== 题材与标签 + 相符度评分（题材相符度评测拓展）=====
@@ -1531,6 +1548,8 @@ flowchart TD
     return t.replace(/〔ADV〕[\s\S]*?〔\/ADV〕/g,'').replace(/〔\/?ADV_OFF〕/g,'');
   }
   function buildSys(){
+    // 完整剧本忠实还原优先于分集工坊：不得被FORGE_SYS的“只做拓扑/script留空”覆盖。
+    if(inputPolicy().strict) return applyAdv(applyInst(SYS+'\n\n'+EXEC+EPISODE_WRITING_POLICY))+extInject();
     if(skillForgeOn()) return FORGE_SYS;
     return applyAdv(applyInst(SYS+'\n\n'+EXEC+EPISODE_WRITING_POLICY))+extInject();
   }
@@ -1612,10 +1631,19 @@ flowchart TD
     }
     var acc=String(task.response_text||''), mark='===JSON===', idx=acc.indexOf(mark), raw=idx>=0?acc.slice(idx+mark.length):acc;
     var a=raw.indexOf('{'), b=raw.lastIndexOf('}'); if(a<0||b<=a) throw new Error('已完成任务中没有可恢复的 JSON');
-    raw=raw.slice(a,b+1); var d=JSON.parse(raw); document.getElementById('resp').value=raw; lastData=d;
-    var va=validateData(d); renderOut(); document.getElementById('outbox').innerHTML=analysisHtml(va,task.request&&task.request.attempt||1)+document.getElementById('outbox').innerHTML;
+    raw=raw.slice(a,b+1); var d=JSON.parse(raw);
+    var isFaithful=task.kind==='faithful-import'||(task.request&&task.request.input_kind==='faithful-import');
+    if(isFaithful){attachOriginalScripts(d,(task.request&&task.request.source_text)||'');raw=JSON.stringify(d);}
+    document.getElementById('resp').value=raw; lastData=d;
+    var emptyScripts=Array.isArray(d.nodes)&&d.nodes.length&&d.nodes.every(function(n){return !String(n.script||'').trim();});
+    if(!isFaithful&&emptyScripts){throw new Error('这条旧上传任务被错误地按大纲拓扑处理，只生成了结构稿，没有保留原剧本文字。请用修复后的页面重新上传原文件生成；旧结果不会冒充完整剧本。');}
+    var va=validateData(d,isFaithful); renderOut(); document.getElementById('outbox').innerHTML=analysisHtml(va,task.request&&task.request.attempt||1)+document.getElementById('outbox').innerHTML;
     progShow(); progSet(100,va.pass?'后端任务已恢复 ✓':'后端任务已恢复，但校验未通过');
-    logLine('▸ 已从后端恢复任务 '+task.run_id+'，无需重新调用模型。'); rememberBackendTask(null);
+    logLine('▸ 已从后端恢复任务 '+task.run_id+'，无需重新调用模型。');
+    if(!histAll().some(function(r){return r.runId===task.run_id;})){
+      histSave({time:String(task.updated_at||new Date().toLocaleString('zh-CN',{hour12:false})).replace('T',' '),title:storyTitle(d),logline:d.logline||'',synopsis:d.synopsis||'',runId:task.run_id,backendTaskKey:String(task.project_id||'')+'|'+String(task.run_id||''),backendProjectId:task.project_id,params:'完整原稿忠实导入/'+((task.request&&task.request.model)||'后台模型'),pass:va.pass,attempts:(task.request&&task.request.attempt)||1,log:String(task.response_text||''),analysisText:'后台直连导入恢复',json:raw,input:{brief:task.input_title||task.title||'',tags:[],forgeMode:'skill',intent:'完整原稿忠实导入'}});
+    }
+    rememberBackendTask(null);
   }
   function recoverBackendTask(){
     var saved=rememberedBackendTask(); if(!saved||!saved.project_id||!saved.run_id) return;
@@ -1626,9 +1654,9 @@ flowchart TD
       fetch('/api/tasks/'+encodeURIComponent(saved.project_id)+'/'+encodeURIComponent(saved.run_id)).then(function(r){ return r.json().then(function(j){ if(!r.ok||!j.ok) throw new Error(j.error||'任务读取失败'); return j.task; }); }).then(function(task){
         tries++; if(task.status==='completed'){ parseRecoveredTask(task); return; }
         if(['failed','stopped'].indexOf(task.status)>=0){ progShow();applyTaskPipeline(task);box.innerHTML='<div class="hint" style="color:#d97706">后端任务 '+esc(task.status)+'：'+esc(task.error||'没有可恢复结果')+'</div>';genBusy=false;activeBackendTask=null;document.getElementById('stopgen').style.display='none';document.getElementById('gen').disabled=false;document.getElementById('gen').textContent='✦ 一键生成'; rememberBackendTask(null); return; }
-        box.innerHTML='<div class="hint" style="color:#2563eb">后台仍在生产：'+esc(task.phase||'生成中')+' · '+(task.progress||0)+'%（刷新页面不会中断）</div>'; progShow(); if(task.kind==='production'){applyTaskPipeline(task);logReset();logEl.textContent=taskPublicLog(task);logHead=logEl.textContent+(logEl.textContent?'\n':'');}else progSet(task.progress||5,'后端任务继续运行…');
+        box.innerHTML='<div class="hint" style="color:#2563eb">后台仍在生产：'+esc(task.phase||'生成中')+' · '+(task.progress||0)+'%（刷新页面不会中断）</div>'; progShow(); if(task.kind==='production'){applyTaskPipeline(task);logReset();logEl.textContent=taskPublicLog(task);logHead=logEl.textContent+(logEl.textContent?'\n':'');}else{progSet(task.progress||5,'后台正在整理上传原稿…');logEl.style.display='block';logEl.textContent=String(task.response_text||'正在等待模型返回…');logHead=logEl.textContent+(logEl.textContent?'\n':'');}
         if(tries<900) setTimeout(poll,2000);
-      }).catch(function(e){ box.innerHTML='<div class="hint" style="color:#d97706">任务恢复暂时失败：'+esc(e.message)+'</div>'; });
+      }).catch(function(e){ box.innerHTML='<div class="hint" style="color:#d97706">任务恢复暂时失败，正在重试：'+esc(e.message)+'</div>';if(tries<900)setTimeout(poll,2000); });
     }
     poll();
   }
@@ -1640,10 +1668,14 @@ flowchart TD
     var currentProject='';
     try{var current=JSON.parse(sessionStorage.getItem('idl_current_project')||'null');currentProject=current&&current.id||'';}catch(e){}
     fetch('/api/tasks').then(function(r){return r.json().then(function(j){if(!r.ok||!j.ok)throw new Error(j.error||'任务列表读取失败');return j.tasks||[];});}).then(function(tasks){
-      var running=tasks.filter(function(task){return task.kind==='production'&&(task.status==='running'||task.status==='stopping')&&(!currentProject||task.project_id===currentProject);});
-      running.sort(function(a,b){return String(b.updated_at||'').localeCompare(String(a.updated_at||''));});
-      if(!running.length)return;
-      var task=running[0];rememberBackendTask({project_id:task.project_id,run_id:task.run_id});recoverBackendTask();
+      var candidates=tasks.filter(function(task){
+        if(currentProject&&task.project_id!==currentProject)return false;
+        if(task.status==='running'||task.status==='stopping')return true;
+        return task.status==='completed'&&task.kind==='faithful-import'&&!histAll().some(function(r){return r.runId===task.run_id;});
+      });
+      candidates.sort(function(a,b){return String(b.updated_at||'').localeCompare(String(a.updated_at||''));});
+      if(!candidates.length)return;
+      var task=candidates[0];rememberBackendTask({project_id:task.project_id,run_id:task.run_id});recoverBackendTask();
     }).catch(function(){}).then(function(){backendDiscoveryBusy=false;});
   }
   function getModel(){ return backendSettings&&backendSettings.model||''; }
@@ -1706,11 +1738,11 @@ flowchart TD
   function logStream(chainText){ logEl.textContent=logHead+chainText; logEl.scrollTop=logEl.scrollHeight; }
 
   // ===== v0.1.47 终检：只验证可交付结构，不再重审内容或计算情绪数值 =====
-  function validateData(d){
+  function validateData(d,strictOverride){
     var hard=[], soft=[];
     function chk(name,ok,detail){ hard.push({name:name,ok:!!ok,detail:detail||''}); }
     // 完整剧本导入（strict）时，生成型硬规则降为软提示，不拦不重跑
-    function chkI(name,ok,detail){ if(inputPolicy&&inputPolicy().strict){ if(!ok) soft.push(name+(detail?('：'+detail):'')); } else chk(name,ok,detail); }
+    function chkI(name,ok,detail){ if(strictOverride===true||(inputPolicy&&inputPolicy().strict)){ if(!ok) soft.push(name+(detail?('：'+detail):'')); } else chk(name,ok,detail); }
     var ns=Array.isArray(d.nodes)?d.nodes:[], byId={};
     ns.forEach(function(n){ if(n&&n.id)byId[n.id]=n; });
     chk('存在分集节点',ns.length>0,'实际 '+ns.length+' 集');
@@ -2327,8 +2359,9 @@ flowchart TD
     var genDurSel=document.getElementById('dur').value, genEndsSel=document.getElementById('ends').value;
     if(!backendReady && !isLocked()){ box.innerHTML='<div class="hint" style="color:#d97706">请先到左下角「生产后台」配置模型，或在下方使用浏览器直连方式。</div>'; document.getElementById('orbox').scrollIntoView({behavior:'smooth',block:'center'}); return; }
     var model=getModel();
-    var backendProjectTitle=briefTxt||tagsNow.join('＋')||'未命名项目';
-    var backendProjectId=projectSlug(briefTxt||tagsNow.join('-')||'未命名项目'), backendRunBase=taskStamp();
+    var uploadTitle=(DOCS&&DOCS.length?String(DOCS[0].name||'').replace(/\.[^.]+$/,''):'');
+    var backendProjectTitle=briefTxt||tagsNow.join('＋')||uploadTitle||'上传原稿';
+    var backendProjectId=projectSlug(backendProjectTitle), backendRunBase=taskStamp();
     try{ sessionStorage.setItem('idl_current_project',JSON.stringify({id:backendProjectId,title:backendProjectTitle,opened_at:new Date().toISOString()})); }catch(e){}
     genBusy=true;
     var btn=document.getElementById('gen'), old=btn.textContent; btn.textContent='生成中…'; btn.disabled=true;
@@ -2382,6 +2415,8 @@ flowchart TD
           if(!inputPolicy().strict){progSet(15,'JSON 无法解析，自动重做…');logLine('▸ 结构化返回无法解析，系统已自动返工，不会当成完成。');runOnce(baseUser+'\n\n【上一轮 JSON 语法错误】请完整重做，确保字符串内引号与换行正确转义，输出可直接 JSON.parse 的 JSON。');return;}
           fail('导入 JSON 解析失败：'+e.message); return;
         }
+        if(inputPolicy().strict){try{attachOriginalScripts(d,docText());}catch(e){fail(e.message);return;}}
+        c=JSON.stringify(d);
         document.getElementById('resp').value=c;
         lastData=d;
         progSet(92,'校验中…');
@@ -2431,7 +2466,7 @@ flowchart TD
           logLine('▸ 已存入「📜 记录」（右上角），最多保留 100 条。');
           done();
         }
-        if(skillForgeOn()){
+        if(skillForgeOn()&&!inputPolicy().strict){
           pipelineSet('topology',100,'分集梗概与流程图已完成','pass');
           forgeProject(d).then(finalizeProject).catch(function(e){
             if(genStopped||(e&&e.name==='AbortError')||e.message==='stopped'){rememberBackendTask(null);pipelineOverall('已停止','fail');logLine('⏹ 已停止；未完成的分集不会标为锁稿。');done();return;}
@@ -2442,7 +2477,7 @@ flowchart TD
       function fail(msg){ pipelineOverall('生产中断','fail'); logLine('✗ '+msg); box.innerHTML='<div class="hint" style="color:#d97706">'+esc(msg)+'</div>'; done(); }
       genAbort=new AbortController();
       var requestBody={ model:model, temperature:0.8, max_tokens:20000, stream:true, usage:{include:true}, messages:[ {role:'system',content:sys}, {role:'user',content:userMessageContent(user)} ] };
-      if(backendReady){ activeBackendTask={project_id:backendProjectId,run_id:backendRunBase+'-a'+attempt}; requestBody._task={project_id:activeBackendTask.project_id,run_id:activeBackendTask.run_id,title:briefTxt||tagsNow.join('＋')||'未命名项目',phase:'outline-generation',attempt:attempt}; rememberBackendTask(activeBackendTask); }
+      if(backendReady){ activeBackendTask={project_id:backendProjectId,run_id:backendRunBase+'-a'+attempt}; requestBody._task={project_id:activeBackendTask.project_id,run_id:activeBackendTask.run_id,title:backendProjectTitle,phase:(inputPolicy().strict?'faithful-import':'outline-generation'),attempt:attempt,kind:(inputPolicy().strict?'faithful-import':'outline-generation'),source_name:uploadTitle,source_text:(inputPolicy().strict?docText():'')}; rememberBackendTask(activeBackendTask); }
       fetch('/api/llm/chat/stream',{
         method:'POST',
         signal:genAbort.signal,
