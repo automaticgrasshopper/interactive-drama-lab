@@ -653,7 +653,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         }
       }
       var gameWindow=openGameImportWindow();if(!gameWindow)return;
-      loadRecImages(r).then(function(imgs){ importToGame(Object.keys(imgs).length?imgs:null,gameWindow); }).catch(function(e){closeImportWindow(gameWindow);alert('读取分镜图片失败：'+(e&&e.message||e));}); return;
+      loadRecImages(r).then(function(imgs){ importToGame(Object.keys(imgs).length?imgs:null,gameWindow,r); }).catch(function(e){closeImportWindow(gameWindow);alert('读取分镜图片失败：'+(e&&e.message||e));}); return;
     }
     if(act==='cg'){ var panel=document.querySelector('.cgpanel[data-cg="'+i+'"]'); if(panel.style.display==='none'){ panel.style.display='block'; renderCgPanel(i); } else { panel.style.display='none'; } return; }
   });
@@ -786,7 +786,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       if(!imgs.length){
         cgProg(100,'完成：成功 '+ok+'，失败 '+fail+'，正在导入游戏…','完成');
         renderCgPanel(i); sbHistRender();
-        setTimeout(function(){ cgProgHide(); window.__lastBoard=r.board; window.__lastNodes=r.nodes||[]; boundStory=r.boundStory||''; loadRecImages(r).then(function(m){ importToGame(Object.keys(m).length?m:null,gameWindow); }).catch(function(e){closeImportWindow(gameWindow);alert('读取分镜图片失败：'+(e&&e.message||e));}); },600);
+        setTimeout(function(){ cgProgHide(); window.__lastBoard=r.board; window.__lastNodes=r.nodes||[]; boundStory=r.boundStory||''; loadRecImages(r).then(function(m){ importToGame(Object.keys(m).length?m:null,gameWindow,r); }).catch(function(e){closeImportWindow(gameWindow);alert('读取分镜图片失败：'+(e&&e.message||e));}); },600);
         return;
       }
       var it=imgs.shift();
@@ -1623,8 +1623,9 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
     return w;
   }
   function closeImportWindow(w){try{if(w&&!w.closed)w.close();}catch(e){}}
-  function importToGame(preImages,gameWindow){
-    var board=window.__lastBoard, nodes=window.__lastNodes||[];
+  function importToGame(preImages,gameWindow,sourceRec){
+    var rec=sourceRec||(promptRec&&promptRec().rec)||null;
+    var board=(rec&&rec.board)||window.__lastBoard, nodes=(rec&&rec.nodes)||window.__lastNodes||[];
     if(!nodes.length){ alert('没有可导入的剧本节点。请先从左侧选场次并生成分镜。'); return; }
     // ★ 缺 next 兜底：全片没有任何有效跳转 → 会导出成全 @end 死路本。按 id 约定自动推断连线。
     var _withNext=nodes.filter(function(n){ return Array.isArray(n.next)&&n.next.some(function(x){return x&&x.to;}); }).length;
@@ -1797,7 +1798,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
         });
       });
     })();
-    var activeStyle=styleForRecord(rec);
+    var activeStyle=styleForRecord(rec||{});
     var payload={ name:gameName, note:(boundStory?'绑定故事：'+boundStory:'分镜工作台单传')+'（含台词+分镜'+(nImg?'+'+nImg+'张CG':'提示词')+'+文学故事版+分镜脚本）', script:text, litScript:litScript, shotScripts:shotScripts, bgPrompts:bgPrompts, bgImageLabels:(nImg?labels:undefined), palette:(board&&board.palette)||null, styleId:activeStyle&&activeStyle.id, stylePreset:styleSnapshot(activeStyle) };
     function writeAndOpen(){
       try{ localStorage.setItem('vn_incoming_script', JSON.stringify(payload)); }catch(e){ closeImportWindow(gameWindow);alert('写入失败（剧本文本过大）。'); return; }
