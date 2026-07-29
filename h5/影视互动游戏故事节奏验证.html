@@ -1259,7 +1259,18 @@ flowchart TD
     });
     Promise.allSettled(jobs).then(function(results){ var errors=results.filter(function(x){return x.status==='rejected';}).map(function(x){return x.reason&&x.reason.message||String(x.reason);}); renderDocs(); self.value=''; if(errors.length) alert(errors.join('\n')); });
   });
-  function looksCompleteScript(t){ if(!t||t.length<2500)return false; var score=0; if(/(?:^|\n)\s*(?:第?\d+场|场次|SCENE\s+\d+|INT\.|EXT\.)/im.test(t))score++; if(/(?:日|夜)\s*(?:内|外)|(?:内|外)\s*(?:日|夜)/.test(t))score++; if(/(?:^|\n)\s*[\u4e00-\u9fffA-Za-z·]{1,12}\s*[:：]\s*[^\n]{2,}/m.test(t))score++; if(/分场|剧本|第\s*\d+\s*集|【场次/.test(t))score++; return score>=2; }
+  function looksCompleteScript(t){
+    if(!t||t.length<1800)return false;
+    var score=0;
+    var headingMatches=String(t).match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:【?\s*(?:第?\s*[一二三四五六七八九十百零〇0-9]+\s*[场集]|场次\s*[一二三四五六七八九十百零〇0-9]+)|SCENE\s*\d+|INT\.|EXT\.|INT\/EXT\.|内景|外景)/gim)||[];
+    var dialogueMatches=String(t).match(/(?:^|\n)\s*[\u4e00-\u9fffA-Za-z·]{1,12}\s*[:：]\s*[^\n]{2,}/gm)||[];
+    if(headingMatches.length>=2)score+=2;else if(headingMatches.length)score++;
+    if(/(?:日|夜|晨|黄昏)\s*[·\s]*(?:内|外)|(?:内|外)\s*[·\s]*(?:日|夜|晨|黄昏)/.test(t))score++;
+    if(dialogueMatches.length>=8)score+=2;else if(dialogueMatches.length>=3)score++;
+    if(/分场|完整剧本|剧本正文|第\s*[一二三四五六七八九十百零〇0-9]+\s*集|【场次/.test(t))score++;
+    return score>=3;
+  }
+  function uploadedNameSuggestsScript(){return (DOCS||[]).some(function(d){return /(完整.*剧本|剧本.*(?:整理|正文|定稿)|screenplay|script)/i.test(String(d&&d.name||''));});}
   function splitOriginalScriptScenes(text){
     var lines=String(text||'').replace(/\r\n?/g,'\n').split('\n'), starts=[];
     var heading=/^\s*(?:【?\s*(?:第?[一二三四五六七八九十百零〇0-9]+\s*[场集]|场次\s*[一二三四五六七八九十百零〇0-9]+)|(?:INT\.|EXT\.|INT\/EXT\.)|(?:内景|外景)\b)/i;
@@ -1278,7 +1289,9 @@ flowchart TD
     d.__faithfulImport=true;return d;
   }
   function inputPolicy(){
-    var brief=(document.getElementById('brief').value||'').trim(), text=docText(), strict=looksCompleteScript([text,brief].filter(Boolean).join('\n\n'));
+    var brief=(document.getElementById('brief').value||'').trim(), text=docText(), combined=[text,brief].filter(Boolean).join('\n\n');
+    var dialogueCount=(String(combined).match(/(?:^|\n)\s*[\u4e00-\u9fffA-Za-z·]{1,12}\s*[:：]\s*[^\n]{2,}/gm)||[]).length;
+    var strict=looksCompleteScript(combined)||(uploadedNameSuggestsScript()&&combined.length>=1800&&dialogueCount>=5);
     if(strict) return {level:4,label:'完整剧本还原',strict:true,directive:'输入是完整分场剧本。只做结构化、素材抽取和必要的下游对接，不发明新互动，不改写原台词、分场、情节和结局。'};
     if(DOCS.length||IMAGES.length) return {level:3,label:'素材约束创作',strict:false,directive:'保留文稿明确写出的事实、人物、关系、情节与台词；图片中的身份、外形、服装、场景布局和画风是视觉约束。只在素材未定义的空白处补齐互动结构和可拍内容。'};
     if(brief.length>=500) return {level:2,label:'详细需求执行',strict:false,directive:'将详细描述视为强约束，保留所有明确元素和因果，不擅自替换；只补齐未说明的层级。'};

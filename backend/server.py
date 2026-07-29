@@ -634,6 +634,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def start_production(self) -> None:
         payload = self._payload()
+        summary = payload.get("input_summary") if isinstance(payload.get("input_summary"), dict) else {}
+        intent = str(summary.get("intent") or "")
+        doc_names = " ".join(str(item) for item in summary.get("docs") or [])
+        likely_script_upload = bool(re.search(r"(?:完整.*剧本|剧本.*(?:整理|正文|定稿)|screenplay|script)", doc_names, flags=re.I))
+        if "完整剧本" in intent or likely_script_upload:
+            self._json(409, {"ok": False, "error": "检测到完整剧本文件，已阻止进入逐集二次创作。请刷新大纲编剧台后重新提交，系统将走 faithful-import 忠实结构化路径。"})
+            return
         project_id = safe_name(payload.get("project_id"), "")
         run_id = safe_name(payload.get("run_id"), "")
         if not project_id or not run_id:
