@@ -999,6 +999,7 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       }
       if(parsed.repaired) logLine('\n⚙ 已自动修复 JSON 格式（'+parsed.repaired+'）');
       parsed.data=normalizeBoardAssets(parsed.data);
+      renumberBatchShots(parsed.data);   // 本批镜号确定性重排为唯一序号，防止模型多镜共号导致后续多镜共图
       var continuityFix=autoRepairContinuity(parsed.data);
       if(continuityFix.repaired.length)logLine('\n⚙ 衔接自检自动修补：已将镜 '+continuityFix.repaired.join('、')+' 改为中性过渡镜；后续只按修补后的镜头出图。');
       window.__lastBoard=parsed.data;                         // 存下本次分镜，供“导入游戏”用
@@ -1393,6 +1394,26 @@ Photorealistic live-action film still style, wide 16:9 clean environment concept
       var hay=[s.desc,s.act,s.comp,s.dial].filter(Boolean).join('');propNames.forEach(function(n){if(hay.indexOf(n)>=0&&moved.indexOf(n)<0)moved.push(n);});
       s.refChar=kept.join('、');var existing=String(s.refProp||'').split(/[\u3001,\s]+/).map(idToName).filter(Boolean);moved.forEach(function(n){if(existing.indexOf(n)<0)existing.push(n);});if(existing.length)s.refProp=existing.map(function(n){return '@prop_'+n;}).join('、');
     });});
+    return board;
+  }
+  // 批次内确定性重编号：不信任模型返回的 no（可能整集共用一个号/缺失），
+  // 一律按 beats→shots 顺序重排为 1..N 唯一镜号，prompts 按同序对齐。
+  // 只在“新分镜解析落地”时调用，不用于 load（已存记录的图片按旧号存，重排会错位）。
+  function renumberBatchShots(board){
+    if(!board||!Array.isArray(board.beats))return board;
+    var shots=[]; board.beats.forEach(function(bt){ (bt.shots||[]).forEach(function(s){ shots.push(s); }); });
+    if(!shots.length)return board;
+    var prompts=Array.isArray(board.prompts)?board.prompts:[];
+    var oldSeq=shots.map(function(s){ return String(s.no==null?'':s.no); });
+    shots.forEach(function(s,i){ s.no=i+1; });
+    if(prompts.length===shots.length){
+      prompts.forEach(function(p,i){ p.no=i+1; });
+    } else {
+      // 计数不一致时保守处理：仅当旧号唯一可映射时才改，避免把 prompts 对错镜头
+      var uniq={},dup={}; oldSeq.forEach(function(k){ if(uniq[k])dup[k]=1; uniq[k]=1; });
+      var map={}; shots.forEach(function(s,i){ if(!dup[oldSeq[i]]) map[oldSeq[i]]=s.no; });
+      prompts.forEach(function(p){ var k=String(p.no==null?'':p.no); if(map[k]!=null) p.no=map[k]; });
+    }
     return board;
   }
   function renderCharSheets(){ renderHammer('pane-char','char',currentChars(),charPrompt,function(c){return c.name||c.id||'';}); }
