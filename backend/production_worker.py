@@ -894,6 +894,61 @@ class ProductionManager:
         return errors
 
     @staticmethod
+    def _beats_errors(data: dict[str, Any], duration: int, endings: int) -> list[str]:
+        """情绪脊门禁（复刻 skill 阶段二）：beats 必须覆盖全程、含拐点、满足力度谱，
+        payoffs 必须引用真实选择节点。不合格时拓扑返工，不进入逐集写作。"""
+        errors: list[str] = []
+        beats = data.get("beats") if isinstance(data.get("beats"), list) else []
+        if not beats:
+            return ["缺少情绪脊 beats 打点"]
+        if len(beats) < 5:
+            errors.append(f"情绪脊拍数至少 5 拍，实际 {len(beats)}")
+        choice_ids = {
+            str(n.get("id")) for n in data.get("nodes") or []
+            if isinstance(n, dict) and n.get("kind") in ("choice", "interaction")
+        }
+        vals: list[tuple[float, float, int]] = []
+        for index, beat in enumerate(beats, 1):
+            if not isinstance(beat, dict):
+                continue
+            v, d = beat.get("V"), beat.get("D")
+            if not isinstance(v, (int, float)) or not isinstance(d, (int, float)):
+                errors.append(f"情绪脊第 {index} 拍缺少 V/D 坐标")
+                continue
+            if not (-1 <= v <= 1 and -1 <= d <= 1):
+                errors.append(f"情绪脊第 {index} 拍 V/D 超出 [-1,1]：V={v} D={d}")
+            vals.append((float(v), float(d), index))
+        if not vals:
+            return errors
+        if not any(d < 0 <= n_d for (_, d, _), (_, n_d, _) in zip(vals, vals[1:])):
+            errors.append("情绪脊缺少 D 负翻正的翻盘拍")
+        if not any(v > 0 >= n_v for (v, _, _), (n_v, _, _) in zip(vals, vals[1:])):
+            errors.append("情绪脊缺少 V 正翻负的跌落拍")
+        vs = [v for v, _, _ in vals]
+        if min(vs) > -0.35:
+            errors.append("力度谱：开场压制不足，开场 V 应 ≤ -0.35")
+        if max(vs) < 0.8:
+            errors.append("力度谱：高潮力度不足，高潮 V 应 ≥ +0.8")
+        if max(vs) - min(vs) < 1.4:
+            errors.append("力度谱：全程 V 落差应 ≥ 1.4")
+        tail = vs[-1]
+        if not (0.2 <= tail <= 0.5):
+            errors.append(f"力度谱：收尾应回正到 +0.2~+0.5，实际 {tail}")
+        releases = [index for index, (v, _, _) in enumerate(vals) if v > 0.4]
+        for left, right in zip(releases, releases[1:]):
+            if not any(v <= -0.2 for v, _, _ in vals[left + 1:right]):
+                errors.append("力度谱：两个释放拍之间必须有 V ≤ -0.2 的回落")
+        payoffs = data.get("payoffs") if isinstance(data.get("payoffs"), list) else []
+        if not payoffs:
+            errors.append("缺少 payoffs 爽点登记")
+        for item in payoffs:
+            if isinstance(item, dict) and str(item.get("enabledBy") or "") not in choice_ids:
+                errors.append(f"payoffs 的 enabledBy 不是真实选择节点：{item.get('enabledBy')}")
+        if isinstance(data.get("flowEnter"), (int, float)) is False and data.get("flowEnter") is not None:
+            errors.append("flowEnter 必须是数字（玩家第几分钟进入心流）")
+        return errors
+
+    @staticmethod
     def _normalize_episode_nodes(data: dict[str, Any]) -> None:
         """Make the only topology layer the episode layer, preserving every edge."""
         nodes = [item for item in data.get("nodes") or [] if isinstance(item, dict)]
@@ -1205,7 +1260,29 @@ class ProductionManager:
             "不使用△、出场栏、镜号、景别或运镜，不设硬字数、动作段数或台词比例。只返回JSON。"
         )
         context = self._context(data, node, predecessors, topology)
-        prompt = "只读取当前节点、直接前置真实结果、仍有效的状态差异、正式资产和直接后续入口。人物必须围绕眼前事情交流；功能信息通过证据、追问、质疑和反应逐层说清。\n" + json.dumps(context, ensure_ascii=False) + '\n返回：{"script":"完整剧本","entry_state":"本集开始时已经成立的事实","exit_state":"本集结束时实际成立的事实","working_summary":"只写本集实际发生的事"}'
+        # 复刻 skill 阶段三「角色首次出场合同」：正式角色在本集首次出场时，
+        # 必须在 first_introductions 登记身份、关系与当下必要性三条逐字证据。
+        introduced = set()
+        for prior in (data.get("nodes") or []):
+            if prior is node:
+                break
+            for entry in prior.get("first_introductions") or []:
+                if isinstance(entry, dict) and entry.get("name"):
+                    introduced.add(str(entry.get("name")))
+        pending_first = [
+            str(item.get("name")) for item in data.get("characters") or []
+            if isinstance(item, dict) and str(item.get("name") or "").strip()
+            and str(item.get("name")) not in introduced
+            and str(item.get("name")) in str(node.get("cast") or "")
+        ]
+        first_intro_line = ""
+        if pending_first:
+            first_intro_line = (
+                "本集安排以下正式角色首次出场：" + "、".join(pending_first) + "。"
+                "这些角色出场时，必须在 first_introductions 中为该角色登记身份、关系、当下必要性三条逐字证据（正文里可逐字找到依据）；"
+                "本集没有首次出场角色时返回空数组。\n"
+            )
+        prompt = "只读取当前节点、直接前置真实结果、仍有效的状态差异、正式资产和直接后续入口。人物必须围绕眼前事情交流；功能信息通过证据、追问、质疑和反应逐层说清。\n" + first_intro_line + json.dumps(context, ensure_ascii=False) + '\n返回：{"script":"完整剧本","entry_state":"本集开始时已经成立的事实","exit_state":"本集结束时实际成立的事实","working_summary":"只写本集实际发生的事","first_introductions":[{"name":"正式角色名","identity":"身份","relation":"关系","necessity":"当下必要性"}]}'
         result = self._json_chat(
             project_id,
             run_id,
@@ -1214,7 +1291,7 @@ class ProductionManager:
             reference_profiles=self._reference_profiles(data, node),
         )
         node.update(result)
-        self._log(project_id, run_id, f"  ↳ {node.get('id')} 初稿完成：{visible_count(node.get('script'))} 可见字 · {action_count(node.get('script'))} 个动作段")
+        self._log(project_id, run_id, f"  ↳ {node.get('id')} 初稿完成：{visible_count(node.get('script'))} 可见字 · {action_count(node.get('script'))} 个动作段" + (f" · 首次出场登记 {len(node.get('first_introductions') or [])} 名" if node.get("first_introductions") else ""))
 
     def _polish_episode_dialogue(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any]) -> None:
         """Polish dialogue by numbered replacements; the model never owns the full script."""
@@ -1518,17 +1595,18 @@ class ProductionManager:
         node["script"] = revised
         self._log(project_id, run_id, f"  ↳ {node.get('id')} 因果定点返修：平台应用 {len(result.get('patches') or [])} 个行级补丁，其余原文逐字保留")
 
-    def _ensure_episode_quality(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]]) -> None:
-        """Lock facts first: scan once, repair registered defects, then verify only that fixed list."""
+    def _ensure_episode_quality(self, project_id: str, run_id: str, data: dict[str, Any], node: dict[str, Any], predecessors: dict[str, list[str]], topology: list[dict[str, Any]], *, facts_only: bool = False) -> None:
+        """复刻 skill 阶段三：完整七项独立复检（理解门四项 + 事实/首次出现/因果/话茬/口语组织/普通话分证/结尾入口），
+        登记问题后定点返修，返修后重新复检，通过后绑定正文 SHA-256 回执。facts_only=True 时只查事实层五项（后台锁事实用）。"""
         current_digest = script_digest(node.get("script"))
-        previous = self._audit_map(node).get("facts") or {}
-        if previous.get("pass") and previous.get("digest") == current_digest and node.get("facts_lock_digest") == current_digest:
+        previous = self._audit_map(node).get("facts" if facts_only else "quality") or {}
+        if previous.get("pass") and previous.get("digest") == current_digest:
             return
         review: dict[str, Any] = {}
         receipt_feedback: list[str] = []
         for receipt_attempt in range(3):
             review = self._episode_quality_review(
-                project_id, run_id, data, node, predecessors, topology, receipt_feedback, facts_only=True
+                project_id, run_id, data, node, predecessors, topology, receipt_feedback, facts_only=facts_only
             )
             receipt_feedback = [str(item) for item in review.get("receipt_issues") or []]
             self._set_review(node, review)
@@ -1561,10 +1639,13 @@ class ProductionManager:
         final_digest = script_digest(node.get("script"))
         review.update({"pass": True, "issues": [], "receipt_issues": [], "digest": final_digest, "registered_issues": registered})
         node["facts_lock_digest"] = final_digest
-        node["lightweight_status"] = "事实已锁"
+        node["lightweight_status"] = "事实已锁" if facts_only else "已复检"
         self._set_review(node, review)
         self.runs.update(project_id, run_id, result_data=data)
-        self._log(project_id, run_id, f"  ✓ {node.get('id')} 事实层已锁：首次登记 {len(registered)} 项，局部修补后仅验原问题，不再整集新增检查项")
+        if facts_only:
+            self._log(project_id, run_id, f"  ✓ {node.get('id')} 事实层已锁：首次登记 {len(registered)} 项，局部修补后仅验原问题，不再整集新增检查项")
+        else:
+            self._log(project_id, run_id, f"  ✓ {node.get('id')} 完整七项独立复检通过：首次登记 {len(registered)} 项，返修后仅验原登记问题；回执绑定 SHA-256 {final_digest[:12]}…")
 
     def _expand_group_cards(self, project_id: str, run_id: str, data: dict[str, Any], nodes: list[dict[str, Any]], predecessors: dict[str, list[str]]) -> None:
         pending = [node for node in nodes if not node.get("production_card_expanded")]
@@ -2056,6 +2137,46 @@ class ProductionManager:
         quality = next((item for item in audit.get("reviews") or [] if isinstance(item, dict) and item.get("name") == "quality"), {})
         return node.get("lightweight_status") == "已复检" and quality.get("pass") is True and quality.get("digest") == digest
 
+    @staticmethod
+    def _asset_catalog(data: dict[str, Any]) -> dict[str, list[str]]:
+        """复刻 skill 阶段一资产合同：从正式资产目录提取唯一正式名称。"""
+        return {
+            "characters": [str(item.get("name")) for item in data.get("characters") or [] if isinstance(item, dict) and str(item.get("name") or "").strip()],
+            "scenes": [str(item.get("name")) for item in data.get("scenes") or [] if isinstance(item, dict) and str(item.get("name") or "").strip()],
+            "props": [str(item.get("name")) for item in data.get("props") or [] if isinstance(item, dict) and str(item.get("name") or "").strip()],
+        }
+
+    def _assert_character_introductions(self, project_id: str, run_id: str, data: dict[str, Any]) -> None:
+        """复刻 skill 阶段四角色首次出场合同：每个正式角色必须登记首次出场节点与三类逐字证据。
+        主角/主配为硬约束，其余缺失记为警告（平台去掉上游输入门禁后输入可为任意素材，宽容处理）。"""
+        catalog = self._asset_catalog(data)
+        introduced: dict[str, dict[str, Any]] = {}
+        for node in data.get("nodes") or []:
+            for entry in node.get("first_introductions") or []:
+                if isinstance(entry, dict) and str(entry.get("name") or "").strip():
+                    name = str(entry.get("name")).strip()
+                    if name in catalog["characters"] and name not in introduced:
+                        introduced[name] = {"node": str(node.get("id")), "entry": entry}
+        data["__characterIntroductions"] = introduced
+        main_roles = {
+            str(item.get("name")) for item in data.get("characters") or []
+            if isinstance(item, dict) and str(item.get("role") or "").strip() in ("主角", "主配")
+        }
+        missing_hard = sorted(name for name in main_roles if name not in introduced)
+        if missing_hard:
+            raise RuntimeError("主角/主配缺少首次出场登记：" + "、".join(missing_hard))
+        missing_soft = sorted(name for name in catalog["characters"] if name not in introduced and name not in main_roles)
+        if missing_soft:
+            self._log(project_id, run_id, f"  ⚠ {len(missing_soft)} 名非主役正式角色未登记首次出场（已放行）：" + "、".join(missing_soft))
+        self._log(project_id, run_id, f"  ✓ 角色首次出场合同通过：{len(introduced)}/{len(catalog['characters'])} 名正式角色已登记出场证据")
+
+    @staticmethod
+    def _verify_locked_receipts(project_id: str, run_id: str, data: dict[str, Any], order: list[dict[str, Any]]) -> None:
+        """复刻 skill verify 门禁：锁稿回执（final_lock_digest）必须与最终正文 SHA-256 逐字节一致。"""
+        stale = [str(node.get("id")) for node in order if script_digest(node.get("script")) != node.get("final_lock_digest")]
+        if stale:
+            raise RuntimeError("锁稿回执与正文不一致：" + "、".join(stale))
+
     def _finish_from_checkpoint(self, project_id: str, run_id: str, data: dict[str, Any], pipeline: dict[str, Any]) -> None:
         """Run the v0.1.47 write → dialogue polish → independent episode review pipeline."""
         order, predecessors, topology = self._graph(data)
@@ -2098,37 +2219,34 @@ class ProductionManager:
             pipeline["scripts"] = {"pct": round(index / max(total, 1) * 100), "label": f"第 {index}/{total} 集已完成", "state": "active" if index < total else "pass"}
             self._update_pipeline(project_id, run_id, pipeline, phase="scripts", result_data=data)
 
-        forge["phase"] = "facts-then-dialogue"
-        pipeline["overall"] = {"label": "正在锁定事实并做人话复写", "state": "active"}
-        pipeline["audit"] = {"pct": 0, "label": "准备逐集事实检查", "state": "active"}
+        forge["phase"] = "dialogue-polish-then-quality-review"
+        pipeline["overall"] = {"label": "正在做人话复写并完整复检", "state": "active"}
+        pipeline["audit"] = {"pct": 0, "label": "准备逐集人话复写与独立复检", "state": "active"}
         self._update_pipeline(project_id, run_id, pipeline, phase="audit", result_data=data)
         for index, node in enumerate(order, 1):
             self._check_stop(project_id, run_id)
             if self._is_locked(node):
                 continue
-            # 正确顺序：先锁事实/因果/关系/入口；局部问题只验原登记项。
-            self._ensure_episode_quality(project_id, run_id, data, node, predecessors, topology)
-            facts_digest = script_digest(node.get("script"))
-            if node.get("facts_lock_digest") != facts_digest:
-                raise RuntimeError(f"{node.get('id')} 事实锁摘要与当前正文不一致")
-            # 最后一次人话复写只改编号台词；程序保证动作、叙述和说话人不变。此后不再模型复检。
-            if node.get("dialogue_polished_digest") != facts_digest:
+            # 复刻 skill 阶段三顺序：先做轻量台词复写（编号替换，程序锁动作/叙述/说话人），
+            # 再做完整七项独立复检（含口语组织与反过度压缩、普通话分别举证）并定点返修闭环。
+            current_digest = script_digest(node.get("script"))
+            if node.get("dialogue_polished_digest") != current_digest:
                 self._polish_episode_dialogue(project_id, run_id, data, node)
+            self._ensure_episode_quality(project_id, run_id, data, node, predecessors, topology)
             final_digest = script_digest(node.get("script"))
             node["dialogue_polished_digest"] = final_digest
             node["final_lock_digest"] = final_digest
             node["lightweight_status"] = "已锁稿"
             audit = node.setdefault("episode_audit", {})
             audit["locked"] = True
-            audit["facts_lock_digest"] = facts_digest
             audit["final_lock_digest"] = final_digest
             self.runs.update(project_id, run_id, result_data=data)
-            self._log(project_id, run_id, f"  ✓ {node.get('id')} 已锁稿：事实层已锁；最后人话复写仅替换台词；正文 {visible_count(node.get('script'))} 可见字")
+            self._log(project_id, run_id, f"  ✓ {node.get('id')} 已锁稿：台词复写 + 完整七项独立复检通过；正文 {visible_count(node.get('script'))} 可见字")
             forge["reviewed"] = index
             forge["locked"] = sum(1 for item in order if self._is_locked(item))
             pipeline["audit"] = {
                 "pct": round(index / max(total, 1) * 100),
-                "label": f"第 {index}/{total} 集已完成人话复写与独立复检",
+                "label": f"第 {index}/{total} 集已完成人话复写与完整复检",
                 "state": "active" if index < total else "pass",
             }
             self._update_pipeline(project_id, run_id, pipeline, phase="audit", result_data=data)
@@ -2139,12 +2257,24 @@ class ProductionManager:
 
         forge.update({"status": "completed", "phase": "completed"})
         data["__forgeComplete"] = True
+        # 复刻 skill 阶段四：角色首次出场合同核验 + 锁稿回执核验 + 全剧复检
+        self._assert_character_introductions(project_id, run_id, data)
+        self._verify_locked_receipts(project_id, run_id, data, order)
+        whole_causal = self._whole_play_review(project_id, run_id, data, "causal")
+        whole_dialogue = self._whole_play_review(project_id, run_id, data, "dialogue")
+        data["__wholePlayReview"] = {"causal": whole_causal, "dialogue": whole_dialogue}
+        for kind, review in (("因果", whole_causal), ("台词", whole_dialogue)):
+            issues = [str(item) for item in review.get("issues") or []]
+            if issues:
+                self._log(project_id, run_id, f"  ⚠ 全剧{kind}复检发现 {len(issues)} 个问题（已记录，不影响交付）：" + "；".join(issues[:8]))
+            else:
+                self._log(project_id, run_id, f"  ✓ 全剧{kind}复检通过：{review.get('covered_checks')}")
         self._sync_episodes(data, predecessors)
         self._assert_reference_receipts(project_id, run_id)
         pipeline["audit"] = {"pct": 100, "label": "逐集独立复检已全部通过", "state": "pass"}
         pipeline["overall"] = {"label": "已交付", "state": "pass"}
         self._log(project_id, run_id, "========== 最终交付 ==========")
-        self._log(project_id, run_id, f"✓ 全部 {total} 集完成并锁稿：拓扑、逐集正文、人话复写、独立复检、状态回写均已完成。")
+        self._log(project_id, run_id, f"✓ 全部 {total} 集完成并锁稿：拓扑、逐集正文、台词复写、完整七项独立复检、角色首次出场合同、全剧复检均已完成。")
         self._update_pipeline(project_id, run_id, pipeline, phase="completed", status="completed", result_data=data)
 
     def _resume(self, project_id: str, run_id: str, data: dict[str, Any]) -> None:
@@ -2221,6 +2351,7 @@ class ProductionManager:
                 else:
                     json_failures = 0
                     errors = self._outline_errors(data, duration, endings)
+                    errors.extend(self._beats_errors(data, duration, endings))
                 if not errors:
                     self._log(project_id, run_id, f"  ✓ 第 {round_no} 轮拓扑硬校验通过")
                     self._log_topology_decisions(project_id, run_id, data, duration, endings)
