@@ -1,11 +1,11 @@
 {
-  "execution_schema_version": "v1",
+  "execution_schema_version": "v2",
   "provenance": {
     "derived_from": "episode-generator",
     "declared_version": "v0.1.47",
     "source_commit": "b192a74034a9cb450851303224793cea861fdb86",
     "relationship": "historical-origin-only",
-    "note": "首版执行规则迁移自 episode-generator v0.1.47; 迁移后为平台自有资产, 不读取skill/不跟随skill版本/不自动同步"
+    "note": "首版执行规则迁移自 episode-generator v0.1.47; 当前剧本前规划已改为平台规则书第0至5步独立状态机; 不读取skill/不跟随skill版本/不自动同步"
   },
   "phases": {
     "upstream": [

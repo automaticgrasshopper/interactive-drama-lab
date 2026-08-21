@@ -22,7 +22,16 @@ class EpisodePipelineV047Test(unittest.TestCase):
     def test_backend_runtime_has_required_dependency_phases(self):
         self.assertEqual(
             REQUIRED_BACKEND_REFERENCE_PHASES,
-            {"upstream", "topology", "episode-writing", "dialogue-polish", "episode-quality-review"},
+            {
+                "upstream",
+                "emotional-spine",
+                "causal-graph",
+                "topology",
+                "production-cards",
+                "episode-writing",
+                "dialogue-polish",
+                "episode-quality-review",
+            },
         )
 
     def test_backend_v047_uses_one_compact_postwriting_quality_gate(self):

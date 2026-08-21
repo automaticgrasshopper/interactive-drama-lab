@@ -162,6 +162,51 @@ class QualityReviewCaptureManager(FakeManager):
 
 
 class ProductionWorkerTests(unittest.TestCase):
+    def test_rulebook_envelope_uses_runtime_engine_and_exact_ending_sum(self):
+        valid = {
+            "title": "测试",
+            "logline": "主角必须在代价显现前完成选择。",
+            "synopsis": "完整故事梗概。",
+            "numeric_envelope": {
+                "duration": 20,
+                "engine": "结局树",
+                "endings_total": 3,
+                "major_endings": 2,
+                "hidden_endings": 0,
+                "minor_endings": 1,
+            },
+        }
+        self.assertEqual(ProductionManager._numeric_envelope_errors(valid, 20, 3), [])
+        valid["numeric_envelope"]["engine"] = "情绪弧"
+        self.assertTrue(ProductionManager._numeric_envelope_errors(valid, 20, 3))
+
+    def test_rulebook_spine_requires_four_acts_and_control_flip(self):
+        beats = []
+        for index, (act, v, d) in enumerate((("起", -0.6, -0.7), ("承", 0.4, -0.2), ("转", -0.7, -0.8), ("合", 0.8, 0.8)), 1):
+            point = {"V": v, "A": 0.5, "D": d}
+            beats.append({
+                "id": f"spine-{index:03d}", "act": act, "event": "真实事件", "current": point,
+                "target": {"V": min(1, v + 0.2), "A": 0.6, "D": min(1, d + 0.2)},
+                "reality": point, "fantasy_space": "可实现幻想", "audience_known_risk": "潜在风险",
+                "contrast": "现实与目标产生反差", "next_catalyst": "结果推动下一段",
+            })
+        self.assertEqual(ProductionManager._emotional_spine_errors({"beats": beats}), [])
+        beats[-1]["reality"]["D"] = -0.1
+        self.assertTrue(any("D 从负到正" in item for item in ProductionManager._emotional_spine_errors({"beats": beats})))
+
+    def test_rulebook_topology_rejects_direct_empty_merge(self):
+        data = {"nodes": [
+            {"id": "episode-001", "kind": "choice", "next": [{"to": "episode-002", "label": "A"}, {"to": "episode-002", "label": "B"}]},
+            {"id": "episode-002", "kind": "major", "next": []},
+        ], "self_check": {"deep_merge_ratio": 1.0}}
+        errors = ProductionManager._topology_skeleton_errors(data, 1)
+        self.assertTrue(any("空合流" in item for item in errors))
+
+    def test_content_topology_signature_locks_edges_and_labels(self):
+        original = {"nodes": [{"id": "episode-001", "kind": "choice", "next": [{"to": "episode-002", "label": "承担"}]}]}
+        changed = {"nodes": [{"id": "episode-001", "kind": "choice", "next": [{"to": "episode-002", "label": "逃避"}]}]}
+        self.assertNotEqual(ProductionManager._topology_signature(original), ProductionManager._topology_signature(changed))
+
     def test_written_text_cannot_be_an_action_coordinate(self):
         bad = "沈砚在“明夜”与“三更”下各压一道指痕，随即收起抄页。"
         fixed = (

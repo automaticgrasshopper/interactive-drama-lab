@@ -52,7 +52,10 @@ DIALOGUE_PREPARER = (
 )
 REQUIRED_BACKEND_REFERENCE_PHASES = {
     "upstream",
+    "emotional-spine",
+    "causal-graph",
     "topology",
+    "production-cards",
     "episode-writing",
     "dialogue-polish",
     "episode-quality-review",
@@ -465,10 +468,238 @@ class ProductionManager:
     def _pipeline() -> dict[str, Any]:
         return {
             "overall": {"label": "正在整理上游资料", "state": "active"},
-            "topology": {"pct": 0, "label": "正在生成分集流程图", "state": "active"},
+            "topology": {"pct": 0, "label": "正在按规则书建立数值信封", "state": "active"},
             "scripts": {"pct": 0, "label": "正在组装最终剧本", "state": ""},
             "audit": {"pct": 0, "label": "正在校验人话台词", "state": ""},
         }
+
+    @staticmethod
+    def _rulebook_stage_prompt(stage: str, duration: int, endings: int, context: dict[str, Any] | None = None) -> dict[str, str]:
+        shared = (
+            f"目标单线时长为 {duration} 分钟，总结局数为 {endings}。"
+            "严格遵守《互动影视游戏设计规则书》的生成顺序；用户已有内容优先，只补空白，不改写更细颗粒度输入。"
+            "本轮只完成指定阶段，不得越级写后续阶段。只返回无 Markdown 围栏的合法 JSON。"
+        )
+        prompts = {
+            "envelope": (
+                "第0步：完成题材先验和数值信封。判断视角、题材底色与必要的供能类型、核心幻想、阶段幻想、"
+                "系统规则、受限金手指、核心冲突、情感/事业权重、结构引擎、互动预算和三类结局分配。"
+                "同时整理后续必须沿用的 title、logline、synopsis、outline、characters、scenes、props。"
+                "返回字段：title、logline、synopsis、outline、characters、scenes、props、genre_contract、numeric_envelope。"
+                "numeric_envelope 必须含 duration、engine、interaction_budget、branch_budget_by_act、endings_total、"
+                "major_endings、hidden_endings、minor_endings；三类结局之和必须等于 endings_total。"
+            ),
+            "spine": (
+                "第1步：只建立尚未长出分支的主干情绪脊。沿真实主线给出起承转合关键拍，逐拍记录主角当前状态、"
+                "目标状态、现实落点、幻想空间、观众已知而主角未知的风险、反差和下一催化剂。"
+                "current、target、reality 都必须是含 V、A、D 且每轴位于 -1 到 1 的对象。"
+                "返回字段：engine、beats；每个 beat 含 id、act、event、current、target、reality、fantasy_space、"
+                "audience_known_risk、contrast、next_catalyst。不得出现选项、分支节点或拓扑。"
+            ),
+            "forks": (
+                "第2步：只从已冻结情绪脊的幻想分歧与情绪拐点识别候选岔点。每个候选说明对应拍位、价值岔向、"
+                "每个选项的代价、即时差异和后续携带状态，并明确 keep 或 drop 及理由。岔点不足时回到情绪脊补戏，"
+                "不得为凑数量制造假选择。返回字段：candidates；每项含 id、spine_beat_id、fantasy_divergence、"
+                "emotional_turn、decision、reason、options；每个 option 含 label、value_direction、cost、"
+                "immediate_difference、carry_state。不得生成节点或剧本。"
+            ),
+            "topology": (
+                "第3步：把保留岔点铺成编织带拓扑。只返回冻结结构，不写逐集梗概和剧本。"
+                "节点使用 episode-NNN；选择必须先进入各自不同的即时结果节点，再允许带差异汇合；"
+                "第一层不超过4路，互动2至4项，同一互动不能全是死路，结局无后续，不得有断边、孤儿、循环或空合流。"
+                "返回字段：nodes、self_check。每个 node 只含 id、kind、next、candidate_id、spine_beat_id；"
+                "next 每项只含 to、label。self_check 含 first_interaction_minute、deep_merge_ratio、notes。"
+            ),
+            "content": (
+                "第4步：在冻结拓扑上填分集内容。节点 id、顺序、kind、每条 next 的 to 和 label 必须逐字保持，"
+                "不得新增、删除、改向或合并节点。为每集填写 node_title、episode_title、text、loc、time、cast，"
+                "并输出平台既有完整对象：title、logline、synopsis、outline、characters、scenes、props、nodes。"
+                "每集 text 要让普通人看懂人物目标、阻力、实际结果和下一催化；script 必须留空。"
+                "完成规则书第5步自检后返回唯一 JSON，不得输出情绪脊、PAD、预算或内部验收字段。"
+            ),
+        }
+        payload = "" if context is None else "\n冻结的上游结果如下，必须只读沿用：\n" + json.dumps(context, ensure_ascii=False)
+        return {"role": "user", "content": shared + prompts[stage] + payload}
+
+    @staticmethod
+    def _numeric_envelope_errors(data: dict[str, Any], duration: int, endings: int) -> list[str]:
+        envelope = data.get("numeric_envelope") if isinstance(data.get("numeric_envelope"), dict) else {}
+        expected_engine = "结局树" if duration <= 30 else "情绪弧"
+        errors = []
+        def integer(field: str) -> int | None:
+            value = envelope.get(field)
+            return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+        if integer("duration") != duration:
+            errors.append("数值信封时长与用户输入不一致")
+        if str(envelope.get("engine") or "") != expected_engine:
+            errors.append(f"结构引擎必须为{expected_engine}")
+        if integer("endings_total") != endings:
+            errors.append("数值信封结局总数与用户输入不一致")
+        ending_parts = [integer(key) for key in ("major_endings", "hidden_endings", "minor_endings")]
+        allocated = sum(value for value in ending_parts if value is not None)
+        if any(value is None for value in ending_parts):
+            errors.append("三类结局数量必须是整数")
+        if allocated != endings:
+            errors.append("主结局、隐藏结局和小结局之和不等于总结局数")
+        for key in ("title", "logline", "synopsis"):
+            if not str(data.get(key) or "").strip():
+                errors.append(f"数值信封缺少 {key}")
+        return errors
+
+    @staticmethod
+    def _emotional_spine_errors(data: dict[str, Any]) -> list[str]:
+        beats = data.get("beats") if isinstance(data.get("beats"), list) else []
+        errors = []
+        if len(beats) < 4:
+            return ["主干情绪脊至少需要覆盖起承转合四个关键拍"]
+        acts = {str(item.get("act") or "") for item in beats if isinstance(item, dict)}
+        if not {"起", "承", "转", "合"}.issubset(acts):
+            errors.append("主干情绪脊没有完整覆盖起承转合")
+        actual_points = []
+        for index, beat in enumerate(beats, 1):
+            if not isinstance(beat, dict):
+                errors.append(f"第{index}个情绪拍格式错误")
+                continue
+            for field in ("event", "fantasy_space", "audience_known_risk", "contrast", "next_catalyst"):
+                if not str(beat.get(field) or "").strip():
+                    errors.append(f"第{index}个情绪拍缺少 {field}")
+            for state in ("current", "target", "reality"):
+                point = beat.get(state) if isinstance(beat.get(state), dict) else {}
+                for axis in ("V", "A", "D"):
+                    value = point.get(axis)
+                    if not isinstance(value, (int, float)) or isinstance(value, bool) or not -1 <= float(value) <= 1:
+                        errors.append(f"第{index}个情绪拍 {state}.{axis} 必须位于 -1 到 1")
+            reality = beat.get("reality") if isinstance(beat.get("reality"), dict) else {}
+            if all(isinstance(reality.get(axis), (int, float)) for axis in ("V", "A", "D")):
+                actual_points.append(reality)
+        if actual_points and not any(
+            float(left.get("D", 0)) < 0 <= float(right.get("D", 0))
+            for left, right in zip(actual_points, actual_points[1:])
+        ):
+            errors.append("主干情绪脊缺少 D 从负到正的有效翻盘")
+        if len(actual_points) >= 3 and any(
+            abs(float(actual_points[i]["V"]) - float(actual_points[i - 1]["V"])) < 0.15
+            and abs(float(actual_points[i - 1]["V"]) - float(actual_points[i - 2]["V"])) < 0.15
+            for i in range(2, len(actual_points))
+        ):
+            errors.append("主干情绪脊存在连续两拍以上的平戏漂移")
+        return errors
+
+    @staticmethod
+    def _fork_candidate_errors(data: dict[str, Any], endings: int) -> list[str]:
+        candidates = data.get("candidates") if isinstance(data.get("candidates"), list) else []
+        kept = [item for item in candidates if isinstance(item, dict) and item.get("decision") == "keep"]
+        errors = []
+        if endings > 1 and not kept:
+            errors.append("多结局项目没有保留任何天然岔点")
+        for item in kept:
+            for field in ("spine_beat_id", "fantasy_divergence", "emotional_turn", "reason"):
+                if not str(item.get(field) or "").strip():
+                    errors.append(f"候选岔点 {item.get('id')} 缺少 {field}")
+            options = item.get("options") if isinstance(item.get("options"), list) else []
+            if not 2 <= len(options) <= 4:
+                errors.append(f"候选岔点 {item.get('id')} 必须有2至4个选项")
+            labels = [str(option.get("label") or "") for option in options if isinstance(option, dict)]
+            if len(labels) != len(set(labels)) or any(not label for label in labels):
+                errors.append(f"候选岔点 {item.get('id')} 存在空白或重复选项")
+            for option in options:
+                if not isinstance(option, dict) or any(not str(option.get(field) or "").strip() for field in ("cost", "immediate_difference", "carry_state")):
+                    errors.append(f"候选岔点 {item.get('id')} 的选项缺少代价、即时差异或携带状态")
+                    break
+        return errors
+
+    @staticmethod
+    def _topology_skeleton_errors(data: dict[str, Any], endings: int) -> list[str]:
+        nodes = data.get("nodes") if isinstance(data.get("nodes"), list) else []
+        errors = []
+        ids = [str(node.get("id") or "") for node in nodes if isinstance(node, dict)]
+        if not nodes or len(ids) != len(set(ids)) or any(not re.fullmatch(r"episode-\d{3}", node_id) for node_id in ids):
+            return ["拓扑节点必须是唯一且连续表达的 episode-NNN"]
+        expected_ids = [f"episode-{index:03d}" for index in range(1, len(ids) + 1)]
+        if ids != expected_ids:
+            errors.append("拓扑节点必须按 episode-001 起连续编号")
+        by_id = {str(node.get("id")): node for node in nodes}
+        endings_found = [node for node in nodes if node.get("kind") in ("major", "minor")]
+        if len(endings_found) != endings:
+            errors.append(f"结局总数应为 {endings}，实际 {len(endings_found)}")
+        for node in nodes:
+            next_items = node.get("next") if isinstance(node.get("next"), list) else []
+            if node.get("kind") in ("major", "minor") and next_items:
+                errors.append(f"结局节点 {node.get('id')} 仍有后续")
+            if node.get("kind") in ("choice", "interaction"):
+                if not 2 <= len(next_items) <= 4:
+                    errors.append(f"互动节点 {node.get('id')} 必须有2至4个出口")
+                targets = [str(edge.get("to") or "") for edge in next_items if isinstance(edge, dict)]
+                if len(targets) != len(set(targets)):
+                    errors.append(f"互动节点 {node.get('id')} 存在空合流")
+                if targets and all((by_id.get(target) or {}).get("kind") in ("major", "minor") for target in targets):
+                    errors.append(f"互动节点 {node.get('id')} 的选项不能全部通向死路")
+            for edge in next_items:
+                if not isinstance(edge, dict) or str(edge.get("to") or "") not in by_id:
+                    errors.append(f"拓扑存在断边：{node.get('id')}→{getattr(edge, 'get', lambda *_: '')('to')}")
+                if node.get("kind") in ("choice", "interaction") and not str(edge.get("label") or "").strip():
+                    errors.append(f"互动节点 {node.get('id')} 存在空选项文字")
+        seen, active = set(), set()
+        def visit(node_id: str) -> None:
+            if node_id in active:
+                errors.append("拓扑存在循环")
+                return
+            if node_id in seen:
+                return
+            seen.add(node_id)
+            active.add(node_id)
+            for edge in (by_id.get(node_id) or {}).get("next") or []:
+                if isinstance(edge, dict) and str(edge.get("to") or "") in by_id:
+                    visit(str(edge.get("to")))
+            active.discard(node_id)
+        visit(ids[0])
+        orphan = [node_id for node_id in ids if node_id not in seen]
+        if orphan:
+            errors.append("拓扑存在孤儿节点：" + "、".join(orphan))
+        self_check = data.get("self_check") if isinstance(data.get("self_check"), dict) else {}
+        ratio = self_check.get("deep_merge_ratio")
+        if ratio is not None and (not isinstance(ratio, (int, float)) or float(ratio) < 0.8):
+            errors.append("深层继续分支汇合比例低于80%")
+        return list(dict.fromkeys(errors))
+
+    @staticmethod
+    def _topology_signature(data: dict[str, Any]) -> list[tuple[Any, ...]]:
+        return [
+            (
+                str(node.get("id") or ""),
+                str(node.get("kind") or "normal"),
+                tuple((str(edge.get("to") or ""), str(edge.get("label") or "")) for edge in node.get("next") or [] if isinstance(edge, dict)),
+            )
+            for node in data.get("nodes") or [] if isinstance(node, dict)
+        ]
+
+    def _validated_rulebook_stage(
+        self,
+        project_id: str,
+        run_id: str,
+        messages: list[dict[str, Any]],
+        *,
+        reference_phase: str,
+        validator: Callable[[dict[str, Any]], list[str]],
+        max_tokens: int = 9000,
+    ) -> dict[str, Any]:
+        current = list(messages)
+        for attempt in range(1, 4):
+            result = self._json_chat(
+                project_id,
+                run_id,
+                current,
+                max_tokens=max_tokens,
+                temperature=0.35,
+                reference_phase=reference_phase,
+                reference_profiles=self._reference_profiles(current),
+            )
+            errors = validator(result)
+            if not errors:
+                return result
+            self._log(project_id, run_id, f"  ↳ 规则书阶段第 {attempt} 轮未通过：" + "；".join(errors))
+            current = list(messages) + [{"role": "user", "content": "上一版未通过本阶段硬校验，只重做当前阶段：\n- " + "\n- ".join(errors)}]
+        raise RuntimeError("规则书阶段连续三轮未通过硬校验")
 
     @staticmethod
     def _compact_topology_instruction() -> dict[str, str]:
@@ -483,17 +714,11 @@ class ProductionManager:
 
     @staticmethod
     def _duration_engine_instruction(duration: int) -> dict[str, str]:
-        if duration <= 15:
+        if duration <= 30:
             rule = (
-                "当前单线时长属于短片（T≤15）：必须用结局树。装置先行，前15%完成世界/装置/代价暗示；"
+                "当前单线时长属于短片（T≤30）：必须用结局树。装置先行，前15%完成世界/装置/代价暗示；"
                 "随后一次兑现加一记反转；设置1–3个会改变结局的抉择，形成2–4个价值落点鲜明的结局。"
                 "禁止套长片七拍、四段互动配额或多章情绪弧。"
-            )
-        elif duration <= 30:
-            rule = (
-                "当前单线时长属于中片（15<T≤30）：必须用主干＋关键分支＋可见后果＋带差异汇合的过渡逻辑。"
-                "故事要有完整起承转合；只在关键行动处设分支，每个选项先进入不同结果集，再携带关系/信息/风险/资源差异汇合。"
-                "禁止套短片密集结局树，也禁止强套长片多章和四段满载配额。"
             )
         else:
             rule = (
@@ -541,7 +766,7 @@ class ProductionManager:
         percentages = [int((pipeline.get(k) or {}).get("pct") or 0) for k in ("topology", "scripts", "audit")]
         progress = round(sum(percentages) / 3)
         public_pipeline = json.loads(json.dumps(pipeline, ensure_ascii=False))
-        public_pipeline.setdefault("topology", {})["label"] = "正在生成分集流程图"
+        public_pipeline.setdefault("topology", {}).setdefault("label", "正在按规则书建立结构")
         result_data = changes.get("result_data") if isinstance(changes.get("result_data"), dict) else {}
         nodes = result_data.get("nodes") if isinstance(result_data.get("nodes"), list) else []
         total = len(nodes)
@@ -553,6 +778,11 @@ class ProductionManager:
         )
         public_pipeline.setdefault("audit", {})["label"] = "正在校验人话台词"
         public_pipeline.setdefault("overall", {})["label"] = {
+            "rulebook-envelope": "正在确定题材与数值信封",
+            "rulebook-spine": "正在建立主干情绪脊",
+            "rulebook-forks": "正在从情绪拐点识别岔点",
+            "rulebook-topology": "正在铺设编织带拓扑",
+            "rulebook-content": "正在填充分集内容",
             "topology": "正在生成分集流程图",
             "scripts": public_pipeline["scripts"]["label"],
             "audit": "正在校验人话台词",
@@ -2312,57 +2542,87 @@ class ProductionManager:
             duration, endings = int(payload.get("duration") or 20), int(payload.get("endings") or 3)
             if duration < 1 or duration > 60:
                 raise RuntimeError("单次完整观看路径时长必须在 1–60 分钟内；超过 60 分钟请先裁剪支线、角色或次要弧光")
-            compact_mode = duration > 30 or endings >= 6
-            self._log_input_decisions(project_id, run_id, payload, base_messages, duration, endings, compact_mode)
-            topology_base = list(base_messages) + [self._duration_engine_instruction(duration), self._lightweight_topology_instruction()] + ([self._compact_topology_instruction()] if compact_mode else [])
-            round_no, json_failures, messages = 1, 0, list(topology_base)
-            while True:
-                self._check_stop(project_id, run_id)
-                pipeline["overall"] = {"label": "分集梗概与流程", "state": "active"}
-                pipeline["topology"] = {"pct": min(90, 15 + round_no * 10), "label": f"第 {round_no} 轮结构检查", "state": "active"}
-                self._update_pipeline(project_id, run_id, pipeline, phase="topology")
-                self._log(project_id, run_id, f"▸ 后台拓扑生成与校验｜第 {round_no} 轮")
-                text = self._chat(
-                    project_id,
-                    run_id,
-                    messages,
-                    max_tokens=int(outline.get("max_tokens") or 20000),
-                    temperature=float(outline.get("temperature") or 0.8),
-                    stream_log=True,
-                    reference_phase="topology",
-                    reference_profiles=self._reference_profiles(base_messages),
-                )
-                json_text = text.split("===JSON===", 1)[-1]
-                try:
-                    data = parse_json_text(json_text)
-                    self._normalize_episode_nodes(data)
-                except (ValueError, json.JSONDecodeError) as exc:
-                    json_failures += 1
-                    errors = [f"JSON 无法解析：{exc}"]
-                    if len(json_text) >= 18000 and not compact_mode:
-                        compact_mode = True
-                        json_failures = 0
-                        topology_base = list(base_messages) + [self._duration_engine_instruction(duration), self._lightweight_topology_instruction(), self._compact_topology_instruction()]
-                        self._log(project_id, run_id, f"  ↳ 检测到结构化输出在 {len(json_text)} 字符附近截断，切换长项目分段协议；这不是剧情返工")
-                    elif compact_mode and len(json_text) >= 18000 and json_failures >= 2:
-                        raise RuntimeError("长项目分段协议下 JSON 仍连续两次被截断，已停止以避免重复消耗") from exc
-                    elif json_failures >= 3:
-                        raise RuntimeError("拓扑 JSON 连续三次无法解析，已停止以避免重复消耗") from exc
-                else:
-                    json_failures = 0
-                    errors = self._outline_errors(data, duration, endings)
-                    errors.extend(self._beats_errors(data, duration, endings))
-                if not errors:
-                    self._log(project_id, run_id, f"  ✓ 第 {round_no} 轮拓扑硬校验通过")
-                    self._log_topology_decisions(project_id, run_id, data, duration, endings)
-                    self._log(project_id, run_id, "========== 已验证拓扑 JSON ==========")
-                    self._log_chunk(project_id, run_id, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
-                    break
-                self._log(project_id, run_id, "  ↳ 未通过：" + "；".join(errors))
-                messages = list(topology_base) + [{"role": "user", "content": "上一版未通过硬规则，必须完整重做并修正：\n- " + "\n- ".join(errors)}]
-                round_no += 1
+            self._log_input_decisions(project_id, run_id, payload, base_messages, duration, endings, False)
 
-            data["__compactTopologyCards"] = compact_mode
+            pipeline["topology"] = {"pct": 10, "label": "第0步：题材先验与数值信封", "state": "active"}
+            self._update_pipeline(project_id, run_id, pipeline, phase="rulebook-envelope")
+            self._log(project_id, run_id, "▸ 规则书第0步｜题材先验与数值信封")
+            envelope = self._validated_rulebook_stage(
+                project_id,
+                run_id,
+                list(base_messages) + [self._rulebook_stage_prompt("envelope", duration, endings)],
+                reference_phase="upstream",
+                validator=lambda value: self._numeric_envelope_errors(value, duration, endings),
+                max_tokens=10000,
+            )
+            self._update_pipeline(project_id, run_id, pipeline, phase="rulebook-envelope", result_data={"__rulebook_checkpoint": {"stage": "envelope", "envelope": envelope}})
+
+            pipeline["topology"] = {"pct": 30, "label": "第1步：建立主干情绪脊", "state": "active"}
+            self._update_pipeline(project_id, run_id, pipeline, phase="rulebook-spine")
+            self._log(project_id, run_id, "▸ 规则书第1步｜建立无分支主干情绪脊")
+            spine = self._validated_rulebook_stage(
+                project_id,
+                run_id,
+                list(base_messages) + [self._rulebook_stage_prompt("spine", duration, endings, {"envelope": envelope})],
+                reference_phase="emotional-spine",
+                validator=self._emotional_spine_errors,
+                max_tokens=12000,
+            )
+            self._update_pipeline(project_id, run_id, pipeline, phase="rulebook-spine", result_data={"__rulebook_checkpoint": {"stage": "spine", "envelope": envelope, "spine": spine}})
+
+            pipeline["topology"] = {"pct": 50, "label": "第2步：识别天然岔点", "state": "active"}
+            self._update_pipeline(project_id, run_id, pipeline, phase="rulebook-forks")
+            self._log(project_id, run_id, "▸ 规则书第2步｜从幻想分歧与情绪拐点识别岔点")
+            forks = self._validated_rulebook_stage(
+                project_id,
+                run_id,
+                list(base_messages) + [self._rulebook_stage_prompt("forks", duration, endings, {"envelope": envelope, "spine": spine})],
+                reference_phase="causal-graph",
+                validator=lambda value: self._fork_candidate_errors(value, endings),
+                max_tokens=12000,
+            )
+            checkpoint = {"stage": "forks", "envelope": envelope, "spine": spine, "forks": forks}
+            self._update_pipeline(project_id, run_id, pipeline, phase="rulebook-forks", result_data={"__rulebook_checkpoint": checkpoint})
+
+            pipeline["topology"] = {"pct": 75, "label": "第3步：铺设编织带拓扑", "state": "active"}
+            self._update_pipeline(project_id, run_id, pipeline, phase="rulebook-topology")
+            self._log(project_id, run_id, "▸ 规则书第3步｜铺设带差异合流的编织带拓扑")
+            skeleton = self._validated_rulebook_stage(
+                project_id,
+                run_id,
+                list(base_messages) + [self._rulebook_stage_prompt("topology", duration, endings, checkpoint)],
+                reference_phase="topology",
+                validator=lambda value: self._topology_skeleton_errors(value, endings),
+                max_tokens=16000,
+            )
+            checkpoint["stage"], checkpoint["topology"] = "topology", skeleton
+            self._update_pipeline(project_id, run_id, pipeline, phase="rulebook-topology", result_data={"__rulebook_checkpoint": checkpoint})
+
+            pipeline["topology"] = {"pct": 90, "label": "第4至5步：填分集内容并自检", "state": "active"}
+            self._update_pipeline(project_id, run_id, pipeline, phase="rulebook-content")
+            self._log(project_id, run_id, "▸ 规则书第4至5步｜冻结拓扑后填内容并完成输出前自检")
+            signature = self._topology_signature(skeleton)
+            content_context = {"envelope": envelope, "spine": spine, "forks": forks, "frozen_topology": skeleton}
+            data = self._validated_rulebook_stage(
+                project_id,
+                run_id,
+                list(base_messages) + [self._rulebook_stage_prompt("content", duration, endings, content_context)],
+                reference_phase="production-cards",
+                validator=lambda value: (
+                    (["分集内容擅自改变了已冻结拓扑"] if self._topology_signature(value) != signature else [])
+                    + self._outline_errors(value, duration, endings)
+                ),
+                max_tokens=int(outline.get("max_tokens") or 20000),
+            )
+            self._normalize_episode_nodes(data)
+            if self._topology_signature(data) != signature:
+                raise RuntimeError("分集编号规范化后与冻结拓扑不一致")
+            pipeline["topology"] = {"pct": 100, "label": "规则书结构与分集内容已锁定", "state": "pass"}
+            self._update_pipeline(project_id, run_id, pipeline, phase="topology", result_data=data)
+            self._log_topology_decisions(project_id, run_id, data, duration, endings)
+            self._log(project_id, run_id, "✓ 剧本生成前已完整通过规则书第0至5步；现在进入既有逐集剧本方案。")
+
+            data["__compactTopologyCards"] = duration > 30 or endings >= 6
             data["__planning"] = {"story_spine": data.get("outline") or []}
             data["__stop_after_episode"] = max(0, int(payload.get("stop_after_episode") or 0))
             self._finish_from_checkpoint(project_id, run_id, data, pipeline)
