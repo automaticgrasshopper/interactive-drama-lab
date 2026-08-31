@@ -1,0 +1,10 @@
+{
+  "description": "用于将分集剧本、关联角色、场景、道具和项目文件中的固定视觉风格转化为剧集故事板、分镜视频生成prompt和分镜视频；适用于参考资产已准备好后生成剧集视频，或对既有剧集视频效果不满意时调整故事板、节奏、提示词并重新生成视频。",
+  "id": "1233fbd5-4602-49c1-811a-2dfc53bb2498",
+  "name": "齐夏-故事板和视频生成-0817工程测试",
+  "scope": "business",
+  "slug": "plan-storyboard-andplan-storyboard-and-generate-video----------biz-generate-video-biz",
+  "sourceName": "github:agent-resources/skills/plan-storyboard-and-generate-video-biz",
+  "sourceType": "folder",
+  "updatedAt": "2026-08-26T13:18:43Z"
+}

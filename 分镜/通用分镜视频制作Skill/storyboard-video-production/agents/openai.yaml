@@ -1,0 +1,4 @@
+interface:
+  display_name: "通用分镜与视频制作"
+  short_description: "把剧本转成连续故事板、镜头计划与视频生成提示词"
+  default_prompt: "使用 $storyboard-video-production 将这段剧本规划为可执行的故事板、连续镜头和视频生成提示词。"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "规划故事板及生成视频 Biz"
+  short_description: "生成剧集故事板、分镜视频生成prompt和分镜视频。"
+  default_prompt: "使用 $plan-storyboard-and-generate-video-biz 执行任务；开始前完整读取 `SKILL.md`，并按其中的路由读取对应 Reference 后严格执行。"
